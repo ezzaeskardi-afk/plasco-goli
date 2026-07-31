@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ورود / ثبت‌نام | پلاسکو گلی</title>
+<meta name="description" content="ورود یا ثبت‌نام با شماره موبایل در فروشگاه پلاسکو گلی.">
+<meta name="robots" content="noindex, follow">
+<meta name="theme-color" content="#0B1411">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="preload" href="assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
+<link rel="stylesheet" href="css/style.css?v=40">
+</head>
+<body class="auth-page" data-no-bottom-nav>
+<a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
+
+<!-- پس‌زمینه‌ی زنده: هاله‌های رنگی + وسایل خانه که آرام شناورند -->
+<div class="auth-bg" aria-hidden="true">
+  <div class="ab-blob ab-1"></div>
+  <div class="ab-blob ab-2"></div>
+  <div class="ab-blob ab-3"></div>
+  <svg class="ab-float af-1"><use href="#i-tub"/></svg>
+  <svg class="ab-float af-2"><use href="#i-basket"/></svg>
+  <svg class="ab-float af-3"><use href="#i-bucket"/></svg>
+  <svg class="ab-float af-4"><use href="#i-chair"/></svg>
+  <svg class="ab-float af-5"><use href="#i-dishrack"/></svg>
+  <svg class="ab-float af-6"><use href="#i-hanger"/></svg>
+</div>
+
+<a class="auth-back" href="index.html">
+  <svg><use href="#i-arrow-right"/></svg>
+  بازگشت به فروشگاه
+</a>
+
+<main id="main" class="auth-shell">
+  <div class="auth-layout">
+
+    <!-- ستون معرفی — دسکتاپ نشانش می‌دهد، موبایل پنهانش می‌کند تا فرم بالا بماند -->
+    <aside class="auth-aside">
+      <p class="aa-kicker">فروشگاه پلاسکو گلی</p>
+      <h2 class="aa-title">هر چیزی که خانه لازم دارد،<br><span>یک‌جا و با قیمت درست</span></h2>
+      <p class="aa-lead">
+        با یک شماره موبایل وارد شوید. نه فرم طولانی، نه رمز اجباری —
+        کد می‌آید، وارد می‌کنید، تمام.
+      </p>
+
+      <ul class="aa-points">
+        <li>
+          <span class="aap-ic"><svg><use href="#i-truck"/></svg></span>
+          <span><b>ارسال به سراسر کشور</b><em>سفارش‌های بالای حد مشخص، ارسال رایگان</em></span>
+        </li>
+        <li>
+          <span class="aap-ic"><svg><use href="#i-shield"/></svg></span>
+          <span><b>پرداخت امن زرین‌پال</b><em>اطلاعات کارت شما هرگز به فروشگاه نمی‌رسد</em></span>
+        </li>
+        <li>
+          <span class="aap-ic"><svg><use href="#i-refresh"/></svg></span>
+          <span><b>۷ روز مهلت مرجوعی</b><em>کالا را پسندیدید نگه دارید، نپسندیدید برگردانید</em></span>
+        </li>
+        <li>
+          <span class="aap-ic"><svg><use href="#i-check-circle"/></svg></span>
+          <span><b>پیگیری لحظه‌ای سفارش</b><em>هر تغییر وضعیت، با پیامک به شما خبر داده می‌شود</em></span>
+        </li>
+      </ul>
+
+      <div class="aa-note">
+        <svg><use href="#i-lock"/></svg>
+        <span>شماره‌ی شما فقط برای ورود و اطلاع‌رسانی سفارش استفاده می‌شود.</span>
+      </div>
+    </aside>
+
+    <!-- ستون فرم -->
+    <div class="auth-col">
+      <div class="auth-card">
+        <div class="logo">
+          <span class="logo-badge"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="لوگوی پلاسکو گلی" width="48" height="48" decoding="async"></span>
+          <span>پلاسکو گلی</span>
+        </div>
+
+        <!-- نشانگر مرحله: کاربر می‌داند کجاست و چند قدم مانده -->
+        <ol class="auth-steps" id="authSteps" aria-hidden="true">
+          <li class="is-active" data-step="phone"><i>۱</i><span>شماره</span></li>
+          <li data-step="code"><i>۲</i><span>کد</span></li>
+          <li data-step="profile"><i>۳</i><span>نام</span></li>
+        </ol>
+
+        <div id="stepPhone">
+          <h1>ورود یا ثبت‌نام</h1>
+          <p class="sub">شماره موبایل‌تون رو وارد کنید تا کد ورود براتون ارسال بشه.</p>
+          <div id="alertPhone" role="alert" aria-live="polite"></div>
+          <form id="formPhone" novalidate>
+            <div class="field">
+              <label for="phone">شماره موبایل</label>
+              <input id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel"
+                     dir="ltr" class="input-phone" placeholder="۰۹۱۲۳۴۵۶۷۸۹" required>
+              <p class="field-hint">ارقام فارسی و فرمت‌هایی مثل ‎+۹۸‎ هم پذیرفته می‌شود.</p>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">
+              <svg><use href="#i-lock"/></svg> <span>دریافت کد ورود</span>
+            </button>
+          </form>
+          <div class="auth-switch">
+            قبلاً رمز گذاشتید؟ <button type="button" id="btnGoPass">ورود با رمز عبور</button>
+          </div>
+        </div>
+
+        <div id="stepPass" class="hidden">
+          <h1>ورود با رمز عبور</h1>
+          <p class="sub">شماره موبایل و رمزتون رو وارد کنید.</p>
+          <div id="alertPass" role="alert" aria-live="polite"></div>
+          <form id="formPass" novalidate>
+            <div class="field">
+              <label for="passPhone">شماره موبایل</label>
+              <input id="passPhone" name="phone" type="tel" inputmode="numeric" autocomplete="tel"
+                     dir="ltr" class="input-phone" placeholder="۰۹۱۲۳۴۵۶۷۸۹" required>
+            </div>
+            <div class="field">
+              <label for="passPassword">رمز عبور</label>
+              <input id="passPassword" type="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">
+              <svg><use href="#i-check-circle"/></svg> <span>ورود</span>
+            </button>
+          </form>
+          <div class="auth-switch">
+            رمز ندارید یا فراموشش کردید؟ <button type="button" id="btnGoOtp">ورود با کد پیامکی</button>
+          </div>
+        </div>
+
+        <div id="stepCode" class="hidden">
+          <h1>کد تایید</h1>
+          <p class="sub">
+            کد ۵ رقمی ارسال‌شده به <b id="phoneDisplay" dir="ltr"></b> رو وارد کنید.
+            <button type="button" id="btnChangePhone" class="link-inline">شماره اشتباه است؟</button>
+          </p>
+          <div id="alertCode" role="alert" aria-live="polite"></div>
+          <form id="formCode" novalidate>
+            <div class="field">
+              <label for="code">کد تایید</label>
+              <input id="code" type="tel" inputmode="numeric" autocomplete="one-time-code"
+                     maxlength="5" dir="ltr" class="input-otp" placeholder="۱۲۳۴۵" required>
+              <p class="field-hint" id="codeExpiry" aria-live="polite"></p>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">
+              <svg><use href="#i-check-circle"/></svg> <span>ورود</span>
+            </button>
+          </form>
+          <div class="auth-switch resend-wrap" id="resendWrap">
+            کد نیومد؟ <button type="button" id="btnResend">دوباره ارسال کن</button>
+          </div>
+        </div>
+
+        <div id="stepProfile" class="hidden">
+          <h1>خوش اومدید! 🎉</h1>
+          <p class="sub">ثبت‌نام‌تون کامل شد. اسم‌تون رو بگید تا با اسم خودتون صداتون کنیم.</p>
+          <div id="alertProfile" role="alert" aria-live="polite"></div>
+          <form id="formProfile" novalidate>
+            <div class="field">
+              <label for="fullName">نام و نام خانوادگی</label>
+              <input id="fullName" type="text" maxlength="60" autocomplete="name" placeholder="مثلاً محمد گلی">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">
+              <svg><use href="#i-check"/></svg> <span>ذخیره و ادامه</span>
+            </button>
+          </form>
+          <div class="auth-switch">
+            <button type="button" id="btnSkipProfile">بعداً تکمیل می‌کنم</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- سه قول فروشگاه — حس اطمینان درست زیر فرم ورود -->
+      <div class="auth-trust">
+        <span><svg><use href="#i-shield"/></svg> پرداخت امن زرین‌پال</span>
+        <span><svg><use href="#i-truck"/></svg> ارسال به سراسر کشور</span>
+        <span><svg><use href="#i-check-circle"/></svg> ضمانت جنس اصل</span>
+      </div>
+
+      <!-- درست همان لحظه‌ای که کسی فقط برای دیدن وضعیت سفارش دارد پیامک می‌گیرد.
+           یک پیامکِ پولی کمتر برای ما، سه مرحله کار کمتر برای مشتری. -->
+      <p class="auth-legal">
+        فقط می‌خواهید ببینید سفارشتان کجاست؟
+        <a href="index.html#track">بدون ورود پیگیری کنید</a>
+      </p>
+
+      <p class="auth-legal">
+        با ورود، <a href="terms.html">قوانین و مقررات</a> فروشگاه را می‌پذیرید.
+      </p>
+    </div>
+
+  </div>
+</main>
+
+<script src="js/common.js?v=40" defer></script>
+<script src="js/login.js?v=40" defer></script>
+
+</body>
+</html>

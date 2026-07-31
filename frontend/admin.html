@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پنل مدیریت | پلاسکو گلی</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0B1411">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="preload" href="assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
+<link rel="stylesheet" href="css/style.css?v=40">
+</head>
+<body class="admin-body">
+<a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
+
+<header class="site">
+  <div class="container nav-row">
+    <a href="index.html" class="logo" aria-label="پلاسکو گلی — صفحه اصلی">
+      <span class="logo-badge"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="لوگوی پلاسکو گلی" width="48" height="48" decoding="async"></span>
+      <span>پلاسکو گلی<small>پنل مدیریت فروشگاه</small></span>
+    </a>
+    <div class="header-actions">
+      <a class="icon-btn" href="index.html" aria-label="مشاهده‌ی سایت" title="مشاهده‌ی سایت">
+        <svg><use href="#i-external"/></svg>
+      </a>
+      <button class="icon-btn" id="btnAdminLogout" aria-label="خروج" title="خروج از حساب">
+        <svg><use href="#i-logout"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <!-- گارد دسترسی: تا تایید ادمین بودن، چیزی نشان داده نمی‌شود -->
+  <div id="adminGuard" class="admin-guard">
+    <div class="empty-state">
+      <svg><use href="#i-lock"/></svg>
+      <h3>در حال بررسی دسترسی...</h3>
+    </div>
+  </div>
+
+  <div id="adminApp" class="admin-shell hidden">
+
+    <!-- ================= سایدبار ================= -->
+    <aside class="admin-side">
+      <div class="admin-side-title">مدیریت فروشگاه</div>
+      <nav class="admin-nav" id="adminNav">
+        <button data-view="dash" class="active"><svg><use href="#i-dashboard"/></svg> داشبورد</button>
+        <button data-view="orders"><svg><use href="#i-package"/></svg> سفارش‌ها <span class="nav-count" id="navOrders">—</span></button>
+        <button data-view="stock"><svg><use href="#i-warehouse"/></svg> انبار و کالا <span class="nav-count" id="navStock">—</span></button>
+        <button data-view="people"><svg><use href="#i-users"/></svg> مشتری‌ها <span class="nav-count" id="navPeople">—</span></button>
+        <button data-view="reviews"><svg><use href="#i-quote"/></svg> نظرات <span class="nav-count" id="navReviews">—</span></button>
+        <button data-view="coupons"><svg><use href="#i-tag"/></svg> تخفیف‌ها</button>
+        <button data-view="report"><svg><use href="#i-chart"/></svg> گزارش‌ها</button>
+        <button data-view="config"><svg><use href="#i-settings"/></svg> تنظیمات</button>
+        <button data-view="log"><svg><use href="#i-history"/></svg> رویدادها</button>
+        <button data-view="errors"><svg><use href="#i-alert"/></svg> خطاها <span class="nav-count" id="navErrors">—</span></button>
+      </nav>
+      <div class="admin-side-foot">
+        <button id="btnRefreshAll" title="بارگذاری دوباره‌ی همه‌چیز"><svg><use href="#i-refresh"/></svg> <span>به‌روزرسانی</span></button>
+        <a href="index.html"><svg><use href="#i-external"/></svg> <span>دیدن سایت</span></a>
+      </div>
+    </aside>
+
+    <!-- ================= محتوا ================= -->
+    <div class="admin-content">
+
+      <!-- ---------------- داشبورد ---------------- -->
+      <section class="admin-view" id="viewDash">
+        <div class="ad-head">
+          <div>
+            <h1>داشبورد</h1>
+            <p id="dashHello">یک نگاه کلی به وضعیت فروشگاه.</p>
+          </div>
+          <div class="ad-head-actions">
+            <button class="btn btn-outline btn-sm" id="btnBackup"><svg><use href="#i-database"/></svg> بکاپ دیتابیس</button>
+          </div>
+        </div>
+
+        <div class="ad-kpis" id="dashKpis"></div>
+
+        <div class="ad-grid-2">
+          <div class="ad-card">
+            <div class="ad-card-head">
+              <h3><svg><use href="#i-chart"/></svg> روند فروش</h3>
+              <select class="ad-select" id="chartRange">
+                <option value="7">۷ روز اخیر</option>
+                <option value="14" selected>۱۴ روز اخیر</option>
+                <option value="30">۳۰ روز اخیر</option>
+                <option value="90">۹۰ روز اخیر</option>
+              </select>
+            </div>
+            <div id="chartHost" class="chart-wrap"></div>
+          </div>
+
+          <div class="ad-card">
+            <div class="ad-card-head"><h3><svg><use href="#i-trend-up"/></svg> پرفروش‌ترین‌ها</h3></div>
+            <div id="dashTop"></div>
+          </div>
+        </div>
+
+        <div class="ad-grid-half">
+          <div class="ad-card">
+            <div class="ad-card-head">
+              <h3><svg><use href="#i-alert"/></svg> نیاز به توجه</h3>
+              <span class="ad-hint">موجودی کم یا صفر</span>
+            </div>
+            <div id="dashAlerts"></div>
+          </div>
+          <div class="ad-card">
+            <div class="ad-card-head"><h3><svg><use href="#i-wallet"/></svg> سهم دسته‌بندی‌ها</h3></div>
+            <div id="dashCats"></div>
+          </div>
+        </div>
+
+        <div class="ad-grid-half">
+          <div class="ad-card">
+            <div class="ad-card-head"><h3><svg><use href="#i-users"/></svg> بهترین مشتری‌ها</h3></div>
+            <div id="dashCustomers"></div>
+          </div>
+          <div class="ad-card">
+            <div class="ad-card-head">
+              <h3><svg><use href="#i-heart"/></svg> تقاضای از‌دست‌رفته</h3>
+              <span class="ad-hint">در علاقه‌مندی‌ها ولی ناموجود</span>
+            </div>
+            <div id="dashLost"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------- سفارش‌ها ---------------- -->
+      <section class="admin-view hidden" id="viewOrders">
+        <div class="ad-head">
+          <div>
+            <h1>سفارش‌ها</h1>
+            <p>روی هر سفارش بزنید تا باز شود: اقلام، آدرس، یادداشت داخلی، کد رهگیری و تغییر وضعیت.</p>
+          </div>
+          <div class="ad-head-actions">
+            <button class="btn btn-primary btn-sm" id="btnManualOrder"><svg><use href="#i-plus"/></svg> سفارش دستی</button>
+            <button class="btn btn-outline btn-sm" id="btnExportCsv"><svg><use href="#i-download"/></svg> خروجی اکسل</button>
+          </div>
+        </div>
+
+        <div class="ad-toolbar">
+          <div class="ad-search" id="orderSearchWrap">
+            <svg><use href="#i-search"/></svg>
+            <input type="search" id="orderSearch" placeholder="شماره سفارش، نام، موبایل، آدرس، کالا، کد رهگیری…" autocomplete="off">
+            <button class="clear-x" type="button" id="orderSearchClear" aria-label="پاک کردن">✕</button>
+          </div>
+          <input type="date" class="ad-date" id="orderFrom" aria-label="از تاریخ">
+          <input type="date" class="ad-date" id="orderTo" aria-label="تا تاریخ">
+          <select class="ad-select" id="orderLimit" aria-label="تعداد در صفحه">
+            <option value="20">۲۰ تایی</option>
+            <option value="40" selected>۴۰ تایی</option>
+            <option value="80">۸۰ تایی</option>
+            <option value="200">۲۰۰ تایی</option>
+          </select>
+        </div>
+        <div class="ad-chips" id="orderChips" style="margin-bottom:14px"></div>
+
+        <div class="ad-result-bar" id="orderResultBar"></div>
+        <div id="ordersHost"></div>
+        <div id="ordersPager" style="display:flex;gap:8px;justify-content:center;margin-top:16px"></div>
+      </section>
+
+      <!-- ---------------- انبار ---------------- -->
+      <section class="admin-view hidden" id="viewStock">
+        <div class="ad-head">
+          <div>
+            <h1>انبار و کالا</h1>
+            <p>قیمت و موجودی را همین‌جا عوض کنید؛ با تیک زدن چند کالا، ویرایش گروهی فعال می‌شود.</p>
+          </div>
+          <div class="ad-head-actions">
+            <button class="btn btn-outline btn-sm" id="btnExportStock"><svg><use href="#i-download"/></svg> خروجی اکسل انبار</button>
+            <button class="btn btn-primary btn-sm" id="btnNewProduct"><svg><use href="#i-plus"/></svg> محصول جدید</button>
+          </div>
+        </div>
+
+        <div class="ad-kpis" id="stockKpis"></div>
+
+        <div class="ad-toolbar">
+          <div class="ad-search" id="prodSearchWrap">
+            <svg><use href="#i-search"/></svg>
+            <input type="search" id="prodSearch" placeholder="جستجوی نام یا دسته‌بندی…" autocomplete="off">
+            <button class="clear-x" type="button" id="prodSearchClear" aria-label="پاک کردن">✕</button>
+          </div>
+          <select class="ad-select" id="prodCat" aria-label="دسته‌بندی"><option value="">همه‌ی دسته‌ها</option></select>
+          <select class="ad-select" id="prodStockFilter" aria-label="وضعیت موجودی">
+            <option value="all">هر موجودی</option>
+            <option value="out">ناموجود</option>
+            <option value="low">رو به اتمام</option>
+            <option value="ok">موجود</option>
+          </select>
+        </div>
+
+        <div class="ad-card">
+          <div class="ad-table-wrap">
+            <table class="ad-table" id="prodTable">
+              <thead>
+                <tr>
+                  <th style="width:34px"><input type="checkbox" class="ad-check" id="prodCheckAll" aria-label="انتخاب همه"></th>
+                  <th class="sortable" data-s="title">کالا <span class="arrow"></span></th>
+                  <th class="sortable" data-s="price">قیمت (تومان) <span class="arrow"></span></th>
+                  <th class="sortable" data-s="stock">موجودی <span class="arrow"></span></th>
+                  <th class="sortable" data-s="soldQty">فروش رفته <span class="arrow"></span></th>
+                  <th class="sortable" data-s="revenue">درآمد <span class="arrow"></span></th>
+                  <th class="sortable" data-s="wishers">علاقه‌مند <span class="arrow"></span></th>
+                  <th style="width:110px"></th>
+                </tr>
+              </thead>
+              <tbody id="prodBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- نوار ویرایش گروهی -->
+        <div class="ad-bulk" id="bulkBar">
+          <span class="picked-n" id="bulkCount">۰ کالا</span>
+          <select class="ad-select" id="bulkOp">
+            <option value="add_stock">افزودن به موجودی</option>
+            <option value="set_stock">موجودی همه = </option>
+            <option value="price_pct">تغییر قیمت (درصد)</option>
+            <option value="discount">اجرای تخفیف (٪) — قیمت قبلی خط می‌خورد</option>
+            <option value="discount_end">پایان تخفیف — برگشت به قیمت قبلی</option>
+            <option value="set_category">تغییر دسته‌بندی</option>
+            <option value="set_badge">گذاشتن نشان</option>
+            <option value="clear_badge">برداشتن نشان</option>
+          </select>
+          <input type="text" id="bulkValue" placeholder="مقدار" dir="auto">
+          <button class="btn btn-primary btn-sm" id="bulkApply"><svg><use href="#i-save"/></svg> اعمال</button>
+          <button class="btn btn-ghost btn-sm" id="bulkClear">لغو انتخاب</button>
+        </div>
+
+        <!-- مدیریت دسته‌بندی‌ها -->
+        <div class="ad-card" style="margin-top:18px">
+          <div class="ad-card-head"><h3><svg><use href="#i-menu"/></svg> دسته‌بندی‌ها</h3></div>
+          <p class="muted-sub" style="margin:0 0 12px;font-size:12px;line-height:1.8">
+            منوی سایت، کارت‌های صفحه‌ی اصلی و فیلترها از همین لیست ساخته می‌شوند.
+            تغییر نام دسته روی همه‌ی محصولاتش هم اعمال می‌شود.
+          </p>
+          <div id="catHost"></div>
+          <div class="cat-add-row">
+            <input id="catNewName" type="text" maxlength="40" placeholder="نام دسته‌ی جدید؛ مثلاً «جا ادویه»">
+            <select id="catNewIcon" class="ad-select"></select>
+            <button type="button" class="btn btn-primary btn-sm" id="catAdd"><svg><use href="#i-plus"/></svg> افزودن دسته</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------- مشتری‌ها ---------------- -->
+      <section class="admin-view hidden" id="viewPeople">
+        <div class="ad-head">
+          <div>
+            <h1>مشتری‌ها</h1>
+            <p>هر شماره فقط یک حساب دارد. روی «پرونده» بزنید تا آدرس‌ها، سفارش‌ها و علاقه‌مندی‌های مشتری را ببینید.</p>
+          </div>
+          <div class="ad-head-actions">
+            <button class="btn btn-outline btn-sm" id="btnExportPeople"><svg><use href="#i-download"/></svg> خروجی اکسل مشتری‌ها</button>
+          </div>
+        </div>
+
+        <div class="ad-toolbar">
+          <div class="ad-search" id="userSearchWrap">
+            <svg><use href="#i-search"/></svg>
+            <input type="search" id="userSearch" placeholder="نام یا شماره‌ی موبایل…" autocomplete="off">
+            <button class="clear-x" type="button" id="userSearchClear" aria-label="پاک کردن">✕</button>
+          </div>
+          <select class="ad-select" id="userSort" aria-label="ترتیب">
+            <option value="spent">بیشترین خرید</option>
+            <option value="orders">بیشترین سفارش</option>
+            <option value="new">تازه‌ترین عضو</option>
+            <option value="name">حروف الفبا</option>
+          </select>
+          <select class="ad-select" id="userFilter" aria-label="فیلتر">
+            <option value="all">همه</option>
+            <option value="buyers">فقط خریدارها</option>
+            <option value="idle">بدون خرید</option>
+          </select>
+        </div>
+
+        <div class="ad-result-bar" id="userResultBar"></div>
+        <div class="ad-people" id="usersHost"></div>
+      </section>
+
+      <!-- ---------------- گزارش‌ها ---------------- -->
+      <section class="admin-view hidden" id="viewReport">
+        <div class="ad-head">
+          <div>
+            <h1>گزارش‌ها</h1>
+            <p>تحلیل بازه‌ای فروش، رتبه‌بندی کامل کالاها و مشتری‌ها.</p>
+          </div>
+          <div class="ad-head-actions">
+            <select class="ad-select" id="reportRange">
+              <option value="7">۷ روز</option>
+              <option value="30" selected>۳۰ روز</option>
+              <option value="90">۹۰ روز</option>
+              <option value="365">یک سال</option>
+            </select>
+            <button class="btn btn-outline btn-sm" id="btnPrintReport"><svg><use href="#i-print"/></svg> چاپ</button>
+          </div>
+        </div>
+
+        <div class="ad-kpis" id="reportKpis"></div>
+
+        <div class="ad-card">
+          <div class="ad-card-head">
+            <h3><svg><use href="#i-chart"/></svg> فروش در بازه</h3>
+            <span class="ad-hint" id="reportRangeHint"></span>
+          </div>
+          <div id="reportChart" class="chart-wrap"></div>
+        </div>
+
+        <!-- گزارشِ ماه‌به‌ماه. عمداً select و درخواستِ جدا از نمودارِ بالا دارد:
+             «۳۰ روز اخیر» و «مرداد» دو سؤالِ متفاوت‌اند. -->
+        <div class="ad-card">
+          <div class="ad-card-head">
+            <h3><svg><use href="#i-history"/></svg> ماه‌به‌ماه</h3>
+            <span class="ad-hint" id="monthlyHint"></span>
+            <div class="ad-head-actions">
+              <select class="ad-select" id="monthlyRange" aria-label="بازه‌ی گزارش ماهانه">
+                <option value="6">۶ ماه</option>
+                <option value="12" selected>۱۲ ماه</option>
+                <option value="24">۲۴ ماه</option>
+                <option value="36">۳۶ ماه</option>
+              </select>
+              <button class="btn btn-outline btn-sm" id="btnExportMonthly"><svg><use href="#i-download"/></svg> خروجی اکسل</button>
+            </div>
+          </div>
+          <div id="monthlyBars"></div>
+          <div class="ad-table-wrap">
+            <table class="ad-table" style="min-width:600px">
+              <thead><tr><th>ماه</th><th>فروش (تومان)</th><th>سفارش</th><th>مشتری</th><th>میانگین سبد</th><th>رشد</th></tr></thead>
+              <tbody id="monthlyBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ad-grid-half">
+          <div class="ad-card">
+            <div class="ad-card-head"><h3><svg><use href="#i-trend-up"/></svg> رتبه‌بندی کالاها</h3></div>
+            <div class="ad-table-wrap">
+              <table class="ad-table" style="min-width:420px">
+                <thead><tr><th>#</th><th>کالا</th><th>تعداد</th><th>درآمد</th></tr></thead>
+                <tbody id="reportProducts"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="ad-card">
+            <div class="ad-card-head"><h3><svg><use href="#i-users"/></svg> رتبه‌بندی مشتری‌ها</h3></div>
+            <div class="ad-table-wrap">
+              <table class="ad-table" style="min-width:420px">
+                <thead><tr><th>#</th><th>مشتری</th><th>سفارش</th><th>مبلغ</th></tr></thead>
+                <tbody id="reportCustomers"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="ad-card">
+          <div class="ad-card-head"><h3><svg><use href="#i-wallet"/></svg> سهم دسته‌بندی‌ها از درآمد</h3></div>
+          <div id="reportCats"></div>
+        </div>
+      </section>
+
+      <!-- ---------------- تنظیمات ---------------- -->
+      <!-- ============ کدهای تخفیف ============ -->
+      <section class="admin-view hidden" id="viewCoupons">
+        <div class="ad-head">
+          <div>
+            <h1>کدهای تخفیف</h1>
+            <p>کد بسازید و به مشتری بدهید؛ مشتری موقع پرداخت، کد را در سبد خرید وارد می‌کند.</p>
+          </div>
+        </div>
+
+        <form class="ad-card" id="formCoupon">
+          <div class="ad-card-head"><h3><svg><use href="#i-tag"/></svg> ساخت کد جدید</h3></div>
+          <div id="cpAlert"></div>
+          <div class="ad-form-grid">
+            <div class="ad-field">
+              <label for="cpCode">کد (حروف انگلیسی و رقم)</label>
+              <input id="cpCode" type="text" maxlength="30" dir="ltr" placeholder="SUMMER15" required>
+            </div>
+            <div class="ad-field">
+              <label for="cpType">نوع تخفیف</label>
+              <select id="cpType" class="ad-select">
+                <option value="percent">درصدی (٪)</option>
+                <option value="fixed">مبلغ ثابت (تومان)</option>
+              </select>
+            </div>
+            <div class="ad-field">
+              <label for="cpValue">مقدار <span id="cpValueHint">(درصد، ۱ تا ۹۰)</span></label>
+              <input id="cpValue" type="number" min="1" dir="ltr" required>
+            </div>
+            <div class="ad-field">
+              <label for="cpMin">حداقل خرید (تومان)</label>
+              <input id="cpMin" type="number" min="0" step="10000" dir="ltr" placeholder="0">
+            </div>
+            <div class="ad-field">
+              <label for="cpMax">سقف تخفیف درصدی (تومان)</label>
+              <input id="cpMax" type="number" min="0" step="10000" dir="ltr" placeholder="0 = بدون سقف">
+            </div>
+            <div class="ad-field">
+              <label for="cpExpire">تاریخ انقضا</label>
+              <input id="cpExpire" type="date" dir="ltr">
+              <small>خالی = بدون انقضا</small>
+            </div>
+            <div class="ad-field">
+              <label for="cpLimit">سقف کل استفاده</label>
+              <input id="cpLimit" type="number" min="0" dir="ltr" placeholder="0 = نامحدود">
+            </div>
+            <div class="ad-field">
+              <label for="cpPerUser">سقف هر مشتری</label>
+              <input id="cpPerUser" type="number" min="0" dir="ltr" value="1">
+            </div>
+          </div>
+          <div class="ad-modal-foot">
+            <button type="submit" class="btn btn-primary"><svg><use href="#i-plus"/></svg> ساخت کد تخفیف</button>
+          </div>
+        </form>
+
+        <div id="couponsHost"></div>
+      </section>
+
+      <!-- ============ نظرات محصولات ============ -->
+      <section class="admin-view hidden" id="viewReviews">
+        <div class="ad-head">
+          <div>
+            <h1>نظرات محصولات</h1>
+            <p>نظر مشتری‌ها اول اینجا می‌آید؛ بعد از تأیید شما روی سایت نمایش داده می‌شود.</p>
+          </div>
+        </div>
+        <div class="ad-chips" id="reviewChips"></div>
+        <div id="reviewsHost"></div>
+      </section>
+
+      <section class="admin-view hidden" id="viewConfig">
+        <div class="ad-head">
+          <div>
+            <h1>تنظیمات فروشگاه</h1>
+            <p>این مقادیر در دیتابیس ذخیره می‌شوند و بدون دست زدن به کد قابل تغییرند.</p>
+          </div>
+        </div>
+
+        <form class="ad-card" id="formSettings">
+          <div class="ad-card-head"><h3><svg><use href="#i-settings"/></svg> اطلاعات و قواعد فروش</h3></div>
+          <div id="cfgAlert"></div>
+          <div class="ad-form-grid">
+            <div class="ad-field">
+              <label for="cfgName">نام فروشگاه</label>
+              <input id="cfgName" name="shop_name" type="text" maxlength="60">
+            </div>
+            <div class="ad-field">
+              <label for="cfgPhone">شماره تماس فروشگاه</label>
+              <input id="cfgPhone" name="shop_phone" type="text" maxlength="20" dir="ltr">
+            </div>
+            <div class="ad-field full">
+              <label for="cfgAddr">آدرس فروشگاه</label>
+              <input id="cfgAddr" name="shop_address" type="text" maxlength="200">
+            </div>
+            <div class="ad-field">
+              <label for="cfgShip">هزینه‌ی ارسال (تومان)</label>
+              <input id="cfgShip" name="shipping_cost" type="number" min="0" step="1000" dir="ltr">
+              <small>صفر بگذارید تا «ارسال رایگان» نشان داده شود.</small>
+            </div>
+            <div class="ad-field">
+              <label for="cfgFree">ارسال رایگان از مبلغ (تومان)</label>
+              <input id="cfgFree" name="free_shipping_over" type="number" min="0" step="10000" dir="ltr">
+              <small>صفر = بدون شرط مبلغ.</small>
+            </div>
+            <div class="ad-field">
+              <label for="cfgLow">آستانه‌ی هشدار موجودی</label>
+              <input id="cfgLow" name="low_stock_threshold" type="number" min="0" max="1000" step="1" dir="ltr">
+              <small>کالای کمتر از این عدد در «نیاز به توجه» می‌آید.</small>
+            </div>
+            <div class="ad-field">
+              <label>وضعیت فروشگاه</label>
+              <label class="ad-switch">
+                <input type="checkbox" id="cfgOpen" name="shop_open">
+                <span>فروشگاه باز است<small>اگر بردارید، می‌توانید روی سایت پیام تعطیلی بگذارید.</small></span>
+              </label>
+            </div>
+            <div class="ad-field full">
+              <label for="cfgAnn">پیام اطلاعیه</label>
+              <textarea id="cfgAnn" name="announcement" rows="2" maxlength="300"></textarea>
+              <small>بالای همه‌ی صفحه‌های سایت نمایش داده می‌شود. خالی = بدون نوار اطلاعیه. اگر فروشگاه را ببندید، همین متن به‌عنوان پیام تعطیلی می‌آید.</small>
+            </div>
+            <div class="ad-field full">
+              <label for="cfgPromoText">بنر جشنواره‌ی صفحه‌ی اصلی</label>
+              <input id="cfgPromoText" name="promo_text" type="text" maxlength="120"
+                placeholder="مثلاً: جشنواره‌ی تابستانه — ۱۵٪ تخفیف روی همه‌ی سبدها">
+              <small>خالی بگذارید تا بنر کلاً پنهان شود. ادعای تخفیفی نکنید که کد فعالی برایش نیست!</small>
+            </div>
+            <div class="ad-field">
+              <label for="cfgPromoCode">کد تخفیف روی بنر</label>
+              <input id="cfgPromoCode" name="promo_code" type="text" maxlength="30" dir="ltr" placeholder="SUMMER15">
+              <small>اختیاری — روی بنر با دکمه‌ی کپی نمایش داده می‌شود.</small>
+            </div>
+          </div>
+          <div class="ad-modal-foot">
+            <button type="submit" class="btn btn-primary"><svg><use href="#i-save"/></svg> ذخیره‌ی تنظیمات</button>
+            <button type="button" class="btn btn-outline" id="cfgReload"><svg><use href="#i-refresh"/></svg> بازخوانی</button>
+          </div>
+        </form>
+
+        <div class="ad-card">
+          <div class="ad-card-head"><h3><svg><use href="#i-database"/></svg> نگهداری</h3></div>
+          <p class="muted-sub" style="margin:0 0 14px;font-size:12.5px;line-height:1.8">
+            بکاپ، یک کپی از فایل دیتابیس در پوشه‌ی backups می‌سازد. خروجی اکسل، همه‌ی سفارش‌های فیلترشده را می‌دهد.
+          </p>
+          <div style="display:flex;gap:9px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" id="btnBackup2"><svg><use href="#i-database"/></svg> ساخت بکاپ</button>
+            <button class="btn btn-outline btn-sm" id="btnExportCsv2"><svg><use href="#i-download"/></svg> خروجی اکسل سفارش‌ها</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------- رویدادها ---------------- -->
+      <section class="admin-view hidden" id="viewLog">
+        <div class="ad-head">
+          <div>
+            <h1>دفتر رویدادها</h1>
+            <p>هر تغییری که در پنل انجام می‌شود اینجا ثبت می‌شود: چه کسی، چه کاری، چه زمانی.</p>
+          </div>
+          <div class="ad-head-actions">
+            <select class="ad-select" id="logLimit">
+              <option value="60" selected>۶۰ رویداد آخر</option>
+              <option value="150">۱۵۰ رویداد آخر</option>
+              <option value="300">۳۰۰ رویداد آخر</option>
+            </select>
+          </div>
+        </div>
+        <div class="ad-card"><div id="logHost"></div></div>
+      </section>
+
+      <!-- ================= خطاها ================= -->
+      <!-- لاگ از قبل نوشته می‌شد ولی فقط روی خودِ سرور قابل خواندن بود، یعنی
+           عملاً هیچ‌وقت خوانده نمی‌شد. اینجا گروه‌بندی‌شده نشان داده می‌شود. -->
+      <section class="admin-view hidden" id="viewErrors">
+        <div class="ad-head">
+          <div>
+            <h1>خطاهای سرور</h1>
+            <p>خطاهای مشابه با هم جمع شده‌اند. عددِ «مشتری خطا دید» مهم‌ترینِ این صفحه است.</p>
+          </div>
+          <div class="ad-head-actions">
+            <select class="ad-select" id="errDays">
+              <option value="1">امروز</option>
+              <option value="7" selected>۷ روز گذشته</option>
+              <option value="14">۱۴ روز گذشته</option>
+            </select>
+            <button class="btn btn-ghost" id="errReload"><svg><use href="#i-history"/></svg> تازه‌سازی</button>
+          </div>
+        </div>
+        <div class="ad-kpis" id="errKpis"></div>
+        <div class="ad-card"><div id="errHost"></div></div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<!-- ================= مودال محصول ================= -->
+<!-- مودال سفارش دستی: مشتری تلفنی/حضوری — موجودی و آمار درست می‌ماند -->
+<div class="ad-modal" id="manualModal">
+  <div class="ad-modal-box" role="dialog" aria-modal="true" aria-labelledby="moTitle">
+    <div class="ad-modal-head">
+      <h3 id="moTitle">ثبت سفارش دستی</h3>
+      <button class="x" type="button" id="moClose" aria-label="بستن"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div id="moAlert"></div>
+    <form id="formManual">
+      <div class="ad-form-grid">
+        <div class="ad-field">
+          <label for="moPhone">موبایل مشتری *</label>
+          <input id="moPhone" type="tel" dir="ltr" placeholder="09xxxxxxxxx" required maxlength="15">
+        </div>
+        <div class="ad-field">
+          <label for="moName">نام مشتری (اختیاری)</label>
+          <input id="moName" type="text" maxlength="60">
+        </div>
+      </div>
+
+      <label style="display:block;font-size:12.5px;font-weight:700;margin:14px 0 8px">کالاها *</label>
+      <div id="moRows"></div>
+      <button type="button" class="btn btn-outline btn-sm" id="moAddRow" style="margin-top:4px">
+        <svg><use href="#i-plus"/></svg> افزودن کالا
+      </button>
+
+      <div class="ad-form-grid" style="margin-top:14px">
+        <div class="ad-field">
+          <label for="moShip">هزینه ارسال (تومان)</label>
+          <input id="moShip" type="number" min="0" step="5000" dir="ltr" value="0">
+          <small>توافق تلفنی؛ صفر یعنی بدون هزینه ارسال.</small>
+        </div>
+        <div class="ad-field">
+          <label for="moNote">یادداشت (فقط شما می‌بینید)</label>
+          <input id="moNote" type="text" maxlength="500" placeholder="مثلاً: تحویل حضوری فردا صبح">
+        </div>
+      </div>
+
+      <div class="mo-total" id="moTotal">جمع: ۰ تومان</div>
+
+      <div class="ad-modal-foot">
+        <button type="submit" class="btn btn-primary"><svg><use href="#i-check"/></svg> ثبت سفارش (پرداخت‌شده)</button>
+        <button type="button" class="btn btn-outline" id="moCancel">انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="ad-modal" id="prodModal">
+  <div class="ad-modal-box" role="dialog" aria-modal="true" aria-labelledby="pmTitle">
+    <div class="ad-modal-head">
+      <h3 id="pmTitle">محصول جدید</h3>
+      <button class="x" type="button" id="pmClose" aria-label="بستن"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div id="pmAlert"></div>
+    <form id="formProduct">
+      <input type="hidden" id="pmId">
+      <div class="ad-form-grid">
+        <div class="ad-field full">
+          <label for="pmName">عنوان محصول *</label>
+          <input id="pmName" type="text" maxlength="120" required>
+        </div>
+        <div class="ad-field">
+          <label for="pmCat">دسته‌بندی *</label>
+          <input id="pmCat" type="text" maxlength="60" list="catList" required>
+          <datalist id="catList"></datalist>
+        </div>
+        <div class="ad-field">
+          <label for="pmBadge">نشان (اختیاری)</label>
+          <input id="pmBadge" type="text" maxlength="30" placeholder="مثلاً: تخفیف">
+        </div>
+        <div class="ad-field">
+          <label for="pmPrice">قیمت (تومان) *</label>
+          <input id="pmPrice" type="number" min="0" step="1000" required dir="ltr">
+        </div>
+        <div class="ad-field">
+          <label for="pmStock">موجودی *</label>
+          <input id="pmStock" type="number" min="0" step="1" required dir="ltr">
+        </div>
+        <div class="ad-field">
+          <label for="pmOldPrice">قیمت قبلی (اختیاری)</label>
+          <input id="pmOldPrice" type="number" min="0" step="1000" dir="ltr" placeholder="خالی = بدون تخفیف" aria-describedby="pmOldPriceHint">
+          <small class="ad-hint" id="pmOldPriceHint">اگر پر شود، روی کارت محصول خط‌خورده و درصد تخفیف نمایش داده می‌شود. باید از قیمت فعلی بیشتر باشد.</small>
+        </div>
+        <div class="ad-field full">
+          <label for="pmDesc">توضیحات</label>
+          <textarea id="pmDesc" rows="3" maxlength="500"></textarea>
+        </div>
+        <div class="ad-field full">
+          <label>عکس اصلی (کاور)</label>
+          <div class="ad-img-row">
+            <span class="ad-img-big" id="pmThumb"><svg><use href="#i-package"/></svg></span>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label class="btn btn-outline btn-sm" for="pmFile" style="cursor:pointer"><svg><use href="#i-plus"/></svg> انتخاب عکس</label>
+              <input id="pmFile" type="file" accept="image/jpeg,image/png,image/webp" class="hidden">
+              <button type="button" class="btn btn-ghost btn-sm hidden" id="pmRemoveImg"><svg><use href="#i-trash"/></svg> حذف عکس</button>
+              <small class="muted-sub" style="font-size:11px">JPG / PNG / WebP — حداکثر ۲ مگابایت</small>
+            </div>
+          </div>
+        </div>
+        <div class="ad-field full">
+          <label>عکس‌های بیشتر (گالری — حداکثر ۸ عکس)</label>
+          <div class="pm-gallery" id="pmGallery"></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+            <label class="btn btn-outline btn-sm" for="pmFileMore" style="cursor:pointer"><svg><use href="#i-plus"/></svg> افزودن عکس به گالری</label>
+            <input id="pmFileMore" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
+            <small class="muted-sub" style="font-size:11px">مشتری در صفحه‌ی محصول همه را ورق می‌زند</small>
+          </div>
+        </div>
+        <div class="ad-field full">
+          <label>مشخصات (اختیاری — مثلاً «گنجایش: ۳ لیتر»)</label>
+          <div id="pmSpecs"></div>
+          <button type="button" class="btn btn-outline btn-sm" id="pmAddSpec" style="margin-top:8px"><svg><use href="#i-plus"/></svg> افزودن مشخصه</button>
+        </div>
+        <div class="ad-field full">
+          <label>آیکون (وقتی عکس ندارد نمایش داده می‌شود)</label>
+          <div class="ad-icon-picker" id="pmIcons"></div>
+          <input type="hidden" id="pmIcon" value="i-package">
+        </div>
+      </div>
+      <div class="ad-modal-foot">
+        <button type="submit" class="btn btn-primary"><svg><use href="#i-save"/></svg> ذخیره</button>
+        <button type="button" class="btn btn-outline" id="pmCancel">انصراف</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================= مودال پرونده‌ی مشتری ================= -->
+<div class="ad-modal" id="userModal">
+  <div class="ad-modal-box wide" role="dialog" aria-modal="true" aria-labelledby="umTitle">
+    <div class="ad-modal-head">
+      <h3 id="umTitle">پرونده‌ی مشتری</h3>
+      <button class="x" type="button" id="umClose" aria-label="بستن"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div id="umBody"></div>
+  </div>
+</div>
+
+<!-- ================= مودال لغو سفارش ================= -->
+<div class="ad-modal" id="cancelModal">
+  <div class="ad-modal-box" role="dialog" aria-modal="true" aria-labelledby="cmTitle">
+    <div class="ad-modal-head">
+      <h3 id="cmTitle">لغو سفارش</h3>
+      <button class="x" type="button" id="cmClose" aria-label="بستن"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="alert alert-info" style="margin-bottom:14px">
+      <svg><use href="#i-alert"/></svg>
+      <span>با لغو سفارش، موجودی کالاها به انبار برمی‌گردد. این کار قابل بازگشت نیست.</span>
+    </div>
+    <div class="ad-field">
+      <label for="cmReason">علت لغو (در پرونده‌ی سفارش ذخیره می‌شود)</label>
+      <input id="cmReason" type="text" maxlength="200" placeholder="مثلاً: انصراف مشتری / عدم موجودی">
+    </div>
+    <div class="ad-modal-foot">
+      <button type="button" class="btn btn-primary" id="cmConfirm" style="background:var(--coral);border-color:var(--coral)">
+        <svg><use href="#i-ban"/></svg> لغو سفارش
+      </button>
+      <button type="button" class="btn btn-outline" id="cmDismiss">بی‌خیال</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/common.js?v=40" defer></script>
+<script src="js/admin.js?v=40" defer></script>
+</body>
+</html>

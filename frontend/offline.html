@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>آفلاین هستید | پلاسکو گلی</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0B1411">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<!--
+  این صفحه وقتی نشان داده می‌شود که مشتری اینترنت ندارد. پس *نباید* به هیچ فایل
+  بیرونی وابسته باشد — نه style.css، نه فونت، نه آیکون. اگر وابسته باشد، دقیقاً
+  همان لحظه‌ای که لازم است، خودش هم بارگذاری نمی‌شود.
+  به همین دلیل همه‌چیز درون‌خطی است و فونت هم از فونت‌های خودِ سیستم می‌آید.
+-->
+<style>
+  :root{--bg:#0B1411;--surface:#12201B;--line:rgba(237,246,241,.12);--ink:#EDF6F1;--ink-soft:#9FB3AB;--teal:#25E3C4;--coral:#FF6A4D;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:Vazirmatn,Vazir,"Segoe UI",Tahoma,system-ui,sans-serif;
+    min-height:100vh;min-height:100dvh;
+    display:flex;align-items:center;justify-content:center;padding:40px 20px;
+  }
+  .off{
+    width:100%;max-width:520px;text-align:center;
+    background:var(--surface);border:1px solid var(--line);
+    border-radius:20px;padding:44px 30px;
+    box-shadow:0 30px 60px -30px rgba(0,0,0,.6);
+  }
+  .off-ic{
+    width:78px;height:78px;margin:0 auto 22px;border-radius:50%;
+    display:grid;place-items:center;
+    background:rgba(37,227,196,.10);border:1px solid rgba(37,227,196,.26);
+  }
+  .off-ic svg{width:36px;height:36px;color:var(--teal);}
+  h1{font-size:23px;line-height:1.6;margin-bottom:12px;}
+  p{color:var(--ink-soft);font-size:14.5px;line-height:2.1;}
+  .acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:26px;}
+  .b{
+    display:inline-flex;align-items:center;gap:8px;justify-content:center;
+    padding:12px 22px;border-radius:12px;font-size:14px;font-weight:800;
+    text-decoration:none;border:1px solid transparent;cursor:pointer;
+    font-family:inherit;
+  }
+  .b-main{background:var(--teal);color:#04211B;}
+  .b-out{background:transparent;color:var(--ink);border-color:var(--line);}
+  .b:focus-visible{outline:2px solid var(--teal);outline-offset:3px;}
+  .tip{
+    margin-top:26px;padding-top:20px;border-top:1px solid var(--line);
+    font-size:13px;color:var(--ink-soft);line-height:2.1;text-align:right;
+  }
+  .tip b{color:var(--ink);font-weight:800;}
+  .tip a{color:var(--teal);font-weight:700;}
+  .tip bdo{font-variant-numeric:tabular-nums;}
+  @media (max-width:480px){.off{padding:34px 22px;}h1{font-size:19px;}}
+</style>
+</head>
+<body>
+
+<main class="off" role="alert">
+  <div class="off-ic" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M1 1l22 22"/>
+      <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+      <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+      <path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+      <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+      <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+      <line x1="12" y1="20" x2="12.01" y2="20"/>
+    </svg>
+  </div>
+
+  <h1>فعلاً به اینترنت وصل نیستید</h1>
+  <p>
+    سایت پلاسکو گلی سالم است؛ فقط ارتباط دستگاه شما با اینترنت قطع شده.
+    سبد خرید و سفارش‌های شما روی حساب‌تان محفوظ است و با وصل شدن دوباره،
+    همه‌چیز سر جای خودش خواهد بود.
+  </p>
+
+  <div class="acts">
+    <!-- href خالی یعنی «همین آدرس»؛ پس بدون جاوااسکریپت هم کار می‌کند -->
+    <a href="" class="b b-main">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex:none">
+        <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+      </svg>
+      تلاش دوباره
+    </a>
+    <a href="/index.html" class="b b-out">صفحه‌ی اصلی</a>
+  </div>
+
+  <div class="tip">
+    <b>چند چیز که معمولاً حلش می‌کند:</b><br>
+    حالت پرواز را خاموش کنید، یا وای‌فای را یک بار قطع و وصل کنید.<br>
+    اگر عجله دارید، سفارش‌تان را تلفنی بدهید:
+    <a href="tel:09113567409"><bdo dir="ltr">۰۹۱۱-۳۵۶-۷۴۰۹</bdo></a>
+  </div>
+</main>
+
+</body>
+</html>

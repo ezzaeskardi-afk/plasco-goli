@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!--
+    منبعِ apple-touch-icon. تفاوتش با maskable: iOS خودش گوشه‌ها را گرد می‌کند
+    و فقط ~۱۰٪ از لبه‌ها را می‌گیرد، پس نشانه می‌تواند بزرگ‌تر باشد.
+    نکته‌ی مهم: خروجی باید PNG مات باشد — سافاری شفافیت را سیاه می‌کند و
+    JPEG/JFIF را هم مطمئن نمی‌پذیرد (قبلاً یک فایل .jfif معرفی شده بود).
+  -->
+  <rect width="512" height="512" fill="#0B1411"/>
+  <g transform="translate(256 268) scale(7.6) translate(-24 -21)">
+    <path d="M3 12 L9 34c1.2 5.5 28.8 5.5 30 0 L45 12" fill="none" stroke="#FF6A4D" stroke-width="4.5" stroke-linecap="round"/>
+    <ellipse cx="24" cy="12" rx="21" ry="7" fill="#FF6A4D"/>
+    <ellipse cx="24" cy="12" rx="21" ry="7" fill="none" stroke="#EDF6F1" stroke-width="2.5"/>
+    <ellipse cx="24" cy="11" rx="14" ry="4" fill="#E8503A" opacity=".55"/>
+  </g>
+</svg>

@@ -1,0 +1,35 @@
+{
+  "id": "/",
+  "name": "پلاسکو گلی — فروشگاه لوازم پلاستیکی خانه",
+  "short_name": "پلاسکو گلی",
+  "description": "خرید آنلاین لوازم پلاستیکی خانه؛ جنس اصل، قیمت منصفانه، ارسال سریع.",
+  "start_url": "/?src=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "fa",
+  "categories": ["shopping"],
+  "background_color": "#0B1411",
+  "theme_color": "#0B1411",
+  "icons": [
+    { "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "سبد خرید",
+      "short_name": "سبد",
+      "url": "/cart.html",
+      "icons": [{ "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "سفارش‌های من",
+      "short_name": "سفارش‌ها",
+      "url": "/account.html#orders",
+      "icons": [{ "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}
