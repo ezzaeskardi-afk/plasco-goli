@@ -30,7 +30,9 @@ const shopRoute = require('./routes/shop');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
-const PICTURE_DIR = path.join(__dirname, '..', 'picture'); // لوگو و عکس محصولات
+// لوگو و عکس محصولات. مسیر از lib/paths.js می‌آید تا با مسیری که آپلودِ پنل
+// در آن می‌نویسد یکی بماند (هر دو `PG_PICTURE_DIR` را می‌بینند).
+const { PICTURE_DIR } = require('./lib/paths');
 
 // آماده‌سازی دیتابیس (مهاجرت خودکار از JSONهای قدیمی در اولین اجرا)
 initDb(log);

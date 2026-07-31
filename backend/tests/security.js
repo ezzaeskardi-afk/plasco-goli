@@ -4,14 +4,19 @@ const path = require('path');
 const fs = require('fs');
 
 const {
-  BACKEND_DIR: DIR, PICTURE_PRODUCTS: PICS,
-  makeSandboxData, removeSandboxData, serverEnv
+  BACKEND_DIR: DIR, REAL_PICTURE_PRODUCTS,
+  sandboxPictureProducts, makeSandboxData, removeSandboxData, serverEnv
 } = require('./sandbox');
 const ADMIN_PHONE = '09120000009';
 
 // دیتابیسِ یک‌بارمصرف. این تست عکس آپلود می‌کند و کاربر می‌سازد؛ هیچ‌کدام نباید
 // روی فایل واقعیِ مغازه بنشیند.
 const SANDBOX_DATA = makeSandboxData();
+
+// پوشه‌ی عکسِ سندباکس. عمداً `REAL_PICTURE_PRODUCTS` نیست: آپلودِ این تست باید
+// در کپی بنشیند تا اگر پاک‌سازیِ آخرِ کار شکست خورد، آشغال در پوشه‌ی واقعیِ
+// مغازه جا نماند.
+const PICS = sandboxPictureProducts(SANDBOX_DATA);
 
 let pass = 0, fail = 0;
 const check = (name, ok, extra = '') => {

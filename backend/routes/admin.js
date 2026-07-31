@@ -46,7 +46,9 @@ function fireRestockAlerts(productId) {
 
 const router = express.Router();
 
-const PRODUCTS_PICTURE_DIR = path.join(__dirname, '..', '..', 'picture', 'products');
+// مسیر از lib/paths.js می‌آید تا با مسیری که server.js سرو می‌کند یکی بماند.
+// اگر این دو از هم جدا بیفتند، عکسِ تازه‌آپلودشده بی‌سروصدا ۴۰۴ می‌شود.
+const { PRODUCTS_PICTURE_DIR } = require('../lib/paths');
 
 // ---------- احراز ادمین (سشن + تایید دوباره از دیتابیس + چک پویای .env) ----------
 function requireAdmin(req, res, next) {

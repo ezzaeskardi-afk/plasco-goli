@@ -31,9 +31,20 @@ const fs = require('fs');
 // باید **قبل از** هر require از lib/db بیاید (خودِ lib/db موقع بار شدن دیتابیس را
 // باز می‌کند). سرورِ فرزند هم process.env را ارث می‌برد، پس روی همان کپی بالا
 // می‌آید و تست و سرور یک فایل را می‌بینند.
-const { makeSandboxData, removeSandboxData } = require('./tests/sandbox');
+const {
+  makeSandboxData, removeSandboxData, sandboxPictureDir, sandboxPictureProducts
+} = require('./tests/sandbox');
 const SANDBOX_DATA = makeSandboxData();
 process.env.PG_DATA_DIR = SANDBOX_DATA;
+// همان استدلالِ بالا برای پوشه‌ی عکس: بدونِ این خط، آپلودِ تست در پوشه‌ی
+// عکسِ واقعیِ مغازه می‌نشیند و اگر پاک‌سازی شکست بخورد آنجا جا می‌ماند.
+process.env.PG_PICTURE_DIR = sandboxPictureDir(SANDBOX_DATA);
+
+// پوشه‌ی عکسِ سندباکس — کپیِ کاملِ پوشه‌ی واقعی است، پس تست‌هایی که نسخه‌ی
+// webp و بندانگشتیِ عکس‌های واقعی را می‌سنجند همان چیزی را می‌بینند که سرورِ
+// واقعی می‌بیند، ولی چیزی که می‌نویسند در کپی می‌ماند.
+const PIC_ROOT = sandboxPictureDir(SANDBOX_DATA);
+const PIC_PRODUCTS = sandboxPictureProducts(SANDBOX_DATA);
 
 const PORT = 3999;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -1303,9 +1314,9 @@ function shutdown(code) {
       const upAct = (await api('GET', '/admin/activity?limit=3')).data.activity;
       check('V13 آپلود: در دفتر رویدادها ثبت شد',
         upAct.some(a => a.action === 'image_upload'), upAct[0] ? upAct[0].action : '');
-      try { fs.unlinkSync(path.join(__dirname, '..', 'picture', 'products', path.basename(upOk.data.path))); } catch (e) { /* پاک شده */ }
+      try { fs.unlinkSync(path.join(PIC_PRODUCTS, path.basename(upOk.data.path))); } catch (e) { /* پاک شده */ }
       check('V13 آپلود: فایل آزمایشی پاک شد',
-        !fs.existsSync(path.join(__dirname, '..', 'picture', 'products', path.basename(upOk.data.path))));
+        !fs.existsSync(path.join(PIC_PRODUCTS, path.basename(upOk.data.path))));
     }
     check('V13 آپلود: سقف نرخ جداگانه *قبل از* خواندن بدنه اجرا می‌شود',
       /uploadLimiter,\s*\n\s*express\.raw/.test(adminSrc.join('\n')),
@@ -1677,6 +1688,23 @@ function shutdown(code) {
     check('V17 دیوار: لاگِ تست هم داخل همان کپی می‌نشیند، نه backend/logs',
       require('./lib/logger').LOG_DIR.startsWith(path.resolve(process.env.PG_DATA_DIR)),
       require('./lib/logger').LOG_DIR);
+    /* عکس هم بخشی از همین دیوار است. قبلاً مسیرِ آپلود همیشه پوشه‌ی واقعیِ
+       `picture/products` بود؛ تست آخرِ کار فایل‌هایش را پاک می‌کرد، ولی وقتی
+       پاک‌کردن شکست خورد (پوشه‌ی مانت‌شده اجازه نداد) دو فایلِ `p-….png` در
+       پوشه‌ی عکسِ واقعیِ مغازه جا ماندند. حالا اصلاً به آنجا نمی‌رسد.
+       این سه تست را با برداشتنِ عمدیِ PG_PICTURE_DIR امتحان کردم: قرمز می‌شوند. */
+    check('V17 دیوار: پوشه‌ی عکسِ تست هم کپی است نه پوشه‌ی واقعیِ مغازه',
+      Boolean(process.env.PG_PICTURE_DIR) &&
+      !path.resolve(PIC_ROOT).startsWith(path.resolve(path.join(__dirname, '..', 'picture'))),
+      PIC_ROOT);
+    check('V17 دیوار: سرورِ تست هم روی همان کپیِ عکس بالا آمده',
+      serverOut.includes('PG_PICTURE_DIR is set'));
+    /* مهم‌تر از خودِ متغیر: جایی که سرور عکس را **سرو** می‌کند و جایی که آپلود
+       را **می‌نویسد** باید یکی باشد. اگر از هم جدا بیفتند، عکسِ تازه‌آپلودشده
+       بی‌سروصدا ۴۰۴ می‌شود و هیچ تستی نمی‌گیردش. هر دو از lib/paths.js می‌آیند. */
+    check('V17 دیوار: مسیرِ سرو و مسیرِ آپلودِ عکس یک منبع دارند',
+      /require\('\.\/lib\/paths'\)/.test(fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8')) &&
+      /require\('\.\.\/lib\/paths'\)/.test(fs.readFileSync(path.join(__dirname, 'routes', 'admin.js'), 'utf8')));
 
     const osJs = rd('js/order-success.js');
     // کامنت‌ها برداشته می‌شوند: توضیحِ «چرا این جمله را برداشتیم» خودش همان جمله را
@@ -2255,7 +2283,7 @@ function shutdown(code) {
     //      به‌نظر می‌رسد ولی هیچ‌وقت webp تحویل نمی‌شود.
     {
       const { imageSizeFromFile } = require('./lib/imagesize');
-      const PIC = path.join(__dirname, '..', 'picture');
+      const PIC = PIC_ROOT;
       const htmlFiles = fs.readdirSync(FE).filter(f => f.endsWith('.html'));
 
       const noDim = [];
@@ -2474,7 +2502,7 @@ function shutdown(code) {
          اگر روزی عکسِ خیلی پهنی آپلود شود، ۵۶۰/نسبت زیرِ ۳۸۲ می‌افتد و کارت
          بی‌سروصدا تار می‌شود — این تست همان‌جا قرمز می‌شود. */
       {
-        const picRoot = path.join(__dirname, '..', 'picture');
+        const picRoot = PIC_ROOT;
         const stack = [picRoot], soft = [];
         let seen = 0;
         while (stack.length) {
