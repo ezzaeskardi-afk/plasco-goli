@@ -112,8 +112,6 @@ function staticCompress(rootDir) {
   };
 }
 
-module.exports = { staticCompress, compressJson, sendHtml };
-
 // ---------------------------------------------------------------
 // ارسال HTMLِ ساخته‌شده در حافظه (صفحه‌ی اصلی و صفحه‌ی محصول که متاهای سئو
 // در آن‌ها سمت سرور تزریق می‌شود) — با فشرده‌سازی.
@@ -159,6 +157,87 @@ function sendHtml(req, res, html) {
 }
 
 // ---------------------------------------------------------------
+// کشِ بایتِ فشرده‌شده‌ی پاسخ‌های JSON
+//
+// چرا لازم شد: پاسخِ فهرستِ محصولات برای همه‌ی بازدیدکننده‌ها بایت‌به‌بایت
+// یکسان است، ولی تا امروز برای هر درخواست از نو JSON.stringify و بعد brotli
+// می‌شد. با ۱۰۰ محصول این ۰٫۶۵ میلی‌ثانیه است — و چون موتورِ ما همگام است،
+// آن ۰٫۶۵ میلی‌ثانیه *کلِ سایت* را قفل می‌کند، نه فقط همان درخواست.
+// اندازه‌گیری: stringify ۰٫۰۸ms + brotli q6 ۰٫۶۱ms روی ۵۰ کیلوبایت.
+// با ۵۰۰ محصول می‌شود ~۳ms و با ۱۰۰۰ محصول ~۶٫۵ms در هر درخواست.
+//
+// کلیدِ کش عمداً **ETag** است، نه آدرس. دلیلش این است که ETag را خودِ روت از
+// امضای کاتالوگ می‌سازد؛ پس تا لحظه‌ای که کاتالوگ عوض نشده، این بایت‌ها معتبرند
+// و لحظه‌ای که عوض شد، کلید خودبه‌خود عوض می‌شود. هیچ باطل‌سازیِ دستی لازم نیست.
+//
+// این حرف تا وقتی درست است که امضا **واقعاً** با هر تغییر عوض شود. سرِ همین کش
+// فهمیدم که نمی‌شد: امضا از MAX(updated_at) می‌آمد و دقتش یک ثانیه بود، پس دو
+// ویرایش در یک ثانیه یک امضا می‌دادند و ویرایشِ دوم گم می‌شد. آن باگ از قبل
+// وجود داشت و روی کشِ لیست و ETagِ مرورگر هم اثر داشت؛ با شمارنده‌ی catalog_rev
+// در db.js بسته شد. اگر روزی این کش داده‌ی کهنه داد، اول همان شمارنده را
+// نگاه کن — کش خودش حافظه‌ی مستقلی از امضا ندارد.
+//
+// ---------- دو شرطِ کش‌شدن (هر دو باید برقرار باشند) ----------
+//
+// ۱) پاسخ ETag داشته باشد — یعنی روت آگاهانه گفته «این پاسخ تابعِ کاتالوگ است».
+//
+// ۲) Cache-Control شامل `public` باشد و no-store/private نباشد.
+//
+// **شرطِ ۲ است که امنیت را تضمین می‌کند، نه شرطِ ۱.** این را با تست ثابت کردم،
+// چون یک بار برعکسش را باور کرده بودم: نوشته بودم «هر ETagی که اینجا می‌بینیم
+// لزوماً از etagJson آمده، چون ETagِ خودکارِ Express در res.send ساخته می‌شود که
+// بعد از ما اجرا می‌شود». آن جمله در عمل درست است ولی *تکیه‌کردن* بر آن اشتباه
+// بود: یک جزئیاتِ پیاده‌سازیِ Express است که با نسخه‌ی بعدی یا یک میان‌افزارِ
+// واسط می‌تواند عوض شود. پس شرطِ ۲ را طوری نوشتم که حتی اگر شرطِ ۱ روزی
+// بی‌معنا شد، پاسخِ شخصی باز هم رد شود — و همین را با پاسخِ جعلیِ
+// «no-store + ETag» و «private + ETag» آزمودم: هر دو رد می‌شوند.
+//
+// (اگر پاسخی هم ETag داشته باشد و هم `public` باشد ولی واقعاً شخصی باشد، آن باگ
+// از کشِ من مستقل است — هر پروکسی و CDNی هم همان را کش می‌کرد. یعنی این کش
+// هیچ‌وقت از قواعدِ خودِ HTTP فراتر نمی‌رود؛ همان تضمین، در حافظه.)
+//
+// مسیرهای شخصی (سبد، حساب، پنل) با no-store پاسخ می‌دهند — server.js آن را برای
+// کلِ /api پیش‌فرض گذاشته — پس از شرطِ ۲ رد می‌شوند.
+//
+// نکته‌ی جانبی برای آینده: پاسخِ بزرگ‌ترِ از MIN_SIZE از res.end رد می‌شود نه
+// res.send، پس ETagِ خودکارِ Express را *نمی‌گیرد*. برای مسیرهای عمومی مهم نیست
+// (خودشان با etagJson ETag دارند) و برای no-store هم ETag به‌کار نمی‌آید. رفتارِ
+// قبلیِ همین فایل است و تغییرش ندادم؛ فقط اگر روزی کسی دنبالِ ETagِ گم‌شده گشت،
+// جوابش اینجاست.
+const jsonCache = new Map(); // `${etag}|${encoding}` → Buffer
+let jsonCacheBytes = 0;
+
+// سقف بر مبنای *بایت* است نه تعداد، چون حجمِ هر پاسخ با رشدِ کاتالوگ بالا می‌رود:
+// همین حالا فهرستِ کامل ۶٫۶KB فشرده است، با ۱۰۰۰ محصول ~۶۶KB می‌شود. سقفِ
+// «۱۲۰ ورودی» آن روز بی‌سروصدا تبدیل به ۸ مگابایت می‌شد. دو کدگذاری (br و gzip)
+// هم برای یک محتوا دو ورودی می‌سازند و همین سقف خودش حسابشان را دارد.
+const JSON_CACHE_MAX_BYTES = 4 * 1024 * 1024;
+
+function cacheableJson(res) {
+  if (!res.getHeader('ETag')) return false;
+  const cc = String(res.getHeader('Cache-Control') || '');
+  return cc.includes('public') && !/no-store|private/.test(cc);
+}
+
+function cachedCompress(cacheKey, text, encoding) {
+  if (!cacheKey) return compressBuffer(Buffer.from(text), encoding);
+  const hit = jsonCache.get(cacheKey);
+  if (hit) return hit;
+  const buf = compressBuffer(Buffer.from(text), encoding);
+  // قدیمی‌ترین‌ها می‌روند تا زیر سقف برگردیم. Map ترتیبِ درج را نگه می‌دارد.
+  jsonCache.set(cacheKey, buf);
+  jsonCacheBytes += buf.length;
+  while (jsonCacheBytes > JSON_CACHE_MAX_BYTES && jsonCache.size > 1) {
+    const oldest = jsonCache.keys().next().value;
+    jsonCacheBytes -= jsonCache.get(oldest).length;
+    jsonCache.delete(oldest);
+  }
+  return buf;
+}
+
+// برای تست: می‌خواهیم بشود ثابت کرد که بارِ دوم واقعاً از کش آمده.
+const jsonCacheStats = () => ({ entries: jsonCache.size, bytes: jsonCacheBytes });
+
 // فشرده‌سازی پاسخ‌های JSON (مثل لیست محصولات که با رشد فروشگاه بزرگ می‌شود).
 // روی res.json سوار می‌شود و اگر بدنه به‌قدر کافی بزرگ بود، gzip/br می‌فرستد.
 function compressJson(req, res, next) {
@@ -171,8 +250,12 @@ function compressJson(req, res, next) {
     try { text = JSON.stringify(body); } catch (e) { return originalJson(body); }
     if (!text || Buffer.byteLength(text) < MIN_SIZE) return originalJson(body);
 
+    // ETag و Cache-Control را روت قبل از res.json ست کرده (etagJson).
+    const etag = res.getHeader('ETag');
+    const cacheKey = cacheableJson(res) ? `${etag}|${encoding}` : '';
+
     let buf;
-    try { buf = compressBuffer(Buffer.from(text), encoding); } catch (e) { return originalJson(body); }
+    try { buf = cachedCompress(cacheKey, text, encoding); } catch (e) { return originalJson(body); }
 
     res.setHeader('Vary', 'Accept-Encoding');
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -182,3 +265,5 @@ function compressJson(req, res, next) {
   };
   next();
 }
+
+module.exports = { staticCompress, compressJson, sendHtml, jsonCacheStats };

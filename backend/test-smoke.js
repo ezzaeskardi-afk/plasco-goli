@@ -3160,6 +3160,114 @@ function shutdown(code) {
       await loginAdmin(); // ظرفِ اصلی را در حالتِ معلوم می‌گذاریم
     }
 
+    // ============ V32: امضای کاتالوگ و کشِ بایتِ فشرده ============
+    {
+      console.log('\n--- V32: catalog signature + compressed byte cache ---');
+      const dbv32 = require('./lib/db');
+      const sig = () => dbv32.getCatalogSignature();
+      // فقط ستون‌هایی که stmtAdminUpdateProduct می‌شناسد؛ اسپردِ کلِ سطر
+      // «Unknown named parameter: created_at» می‌دهد.
+      const upd = (o, price) => dbv32.adminUpdateProduct({
+        id: o.id, title: o.title, category: o.category, description: o.description,
+        price, old_price: o.old_price, stock: o.stock, badge: o.badge,
+        icon: o.icon, image: o.image, images: [], specs: []
+      });
+
+      /* ---- ۱) باگی که واقعاً پیش آمد ----
+         امضا از MAX(updated_at) می‌آمد و دقتِ datetime('now') یک ثانیه است. دو
+         ویرایش در یک ثانیه (کاری که «ذخیره‌ی سریعِ جدول» در پنل می‌کند) تعداد و
+         مجموعِ موجودی را هم عوض نمی‌کنند، پس امضا یکسان می‌ماند و ویرایشِ دوم
+         نه ۳۰ ثانیه بلکه تا تغییرِ بعدیِ کاتالوگ نامرئی می‌ماند — هم در کشِ
+         حافظه‌ی سرور و هم در کشِ مرورگر. با شمارنده‌ی catalog_rev بسته شد. */
+      const pub32 = dbv32.getProducts().find(p => p.published === 1 && p.stock > 2);
+      if (pub32) {
+        const s0 = sig(); upd(pub32, pub32.price + 1000); const s1 = sig();
+        upd(pub32, pub32.price + 2000); const s2 = sig();
+        check('V32 امضا: ویرایشِ اول امضا را عوض می‌کند', s0 !== s1);
+        check('V32 امضا: ویرایشِ دوم در همان ثانیه هم عوضش می‌کند',
+          s1 !== s2, `${s1} -> ${s2}`);
+        upd(pub32, pub32.price); // قیمت را برمی‌گردانیم
+
+        /* فروش هم باید باطل کند (ستونِ s امضا) */
+        const q0 = sig();
+        dbv32.reserveStock([{ productId: pub32.id, qty: 1 }]);
+        check('V32 امضا: فروش امضا را عوض می‌کند', sig() !== q0);
+        dbv32.releaseStock([{ productId: pub32.id, qty: 1 }]);
+      } else {
+        check('V32 امضا: محصولِ منتشرشده‌ی موجود پیدا شد', false, 'no published product with stock');
+      }
+
+      /* ---- ۲) پیش‌نویس نباید کشِ مشتری را باطل کند ----
+         مالک ۸۸ پیش‌نویس را برای گذاشتنِ عکس ویرایش می‌کند؛ اگر هر ذخیره‌ی او
+         کشِ همه‌ی بازدیدکننده‌ها را دور بریزد، کلِ بهینه‌سازی در همان روز هدر
+         می‌رود. شرطِ published در تریگرها نگهبانِ همین است. */
+      const dft32 = dbv32.getProducts().find(p => p.published === 0);
+      if (dft32) {
+        const d0 = sig(); upd(dft32, dft32.price + 5000); const d1 = sig();
+        check('V32 امضا: ویرایشِ پیش‌نویس کشِ مشتری را باطل نمی‌کند', d0 === d1, d1);
+        upd(dft32, dft32.price);
+        // ولی انتشار و پنهان‌کردن باید فوراً باطل کند
+        const p0 = sig(); dbv32.setProductPublished(dft32.id, true); const p1 = sig();
+        check('V32 امضا: انتشارِ پیش‌نویس فوراً باطل می‌کند', p0 !== p1);
+        dbv32.setProductPublished(dft32.id, false);
+        check('V32 امضا: پنهان‌کردن هم فوراً باطل می‌کند', sig() !== p1);
+      }
+
+      /* ---- ۳) تریگرها واقعاً در دیتابیس هستند ----
+         اگر کسی روزی اسکیما را دست‌کاری کند و این‌ها بیفتند، باگِ بالا بی‌صدا
+         برمی‌گردد و هیچ تستِ دیگری نمی‌گیردش. */
+      const trg = dbv32.db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_catalog_rev_%'"
+      ).all().map(r => r.name).sort();
+      check('V32 تریگر: هر سه تریگرِ catalog_rev وجود دارند',
+        trg.length === 3, trg.join(','));
+      check('V32 امضا: جزءِ c در امضا هست', /\.c\d+$/.test(sig()), sig());
+
+      /* ---- ۴) کشِ بایتِ فشرده: پاسخِ شخصی هرگز کش نمی‌شود ----
+         خطرِ واقعیِ این کش این است که بایتِ یک کاربر به کاربرِ بعدی برسد. با
+         پاسخِ جعلی مستقیم آزمایش می‌شود، چون هیچ روتِ شخصیِ فعلی به‌قدر کافی
+         بزرگ نیست که وارد این مسیر شود — و «الان بزرگ نیست» تضمینِ فردا نیست. */
+      const { compressJson, jsonCacheStats } = require('./lib/static-compress');
+      const fakeRes = (headers) => {
+        const h = { ...headers }; let ended = null;
+        return {
+          getHeader: k => h[Object.keys(h).find(x => x.toLowerCase() === k.toLowerCase())],
+          setHeader: (k, v) => { h[k] = v; },
+          end: b => { ended = b; }, json: () => { ended = 'via-express'; },
+          get _ended() { return ended; }
+        };
+      };
+      const bigBody = tag => ({ secret: tag, pad: 'x'.repeat(3000) });
+      const drive = (res, body) => { compressJson({ headers: { 'accept-encoding': 'br' } }, res, () => {}); res.json(body); };
+      const n0 = jsonCacheStats().entries;
+
+      const rNoStore = fakeRes({ 'Cache-Control': 'no-store', ETag: 'W/"personal-1"' });
+      drive(rNoStore, bigBody('user-A-phone-09120000000'));
+      check('V32 کش: پاسخِ no-store حتی با ETag کش نمی‌شود',
+        jsonCacheStats().entries === n0, `${n0} -> ${jsonCacheStats().entries}`);
+
+      const rPrivate = fakeRes({ 'Cache-Control': 'private, max-age=60', ETag: 'W/"personal-2"' });
+      drive(rPrivate, bigBody('user-B'));
+      check('V32 کش: پاسخِ private کش نمی‌شود', jsonCacheStats().entries === n0);
+
+      const rNoEtag = fakeRes({ 'Cache-Control': 'public, max-age=30' });
+      drive(rNoEtag, bigBody('no-etag'));
+      check('V32 کش: پاسخِ بی‌ETag کش نمی‌شود', jsonCacheStats().entries === n0);
+
+      /* ---- ۵) و پاسخِ عمومی واقعاً کش می‌شود (وگرنه بهینه‌سازی وجود ندارد) ---- */
+      const hdrPub = { 'Cache-Control': 'public, max-age=30, must-revalidate', ETag: 'W/"pub-v32"' };
+      const rPub1 = fakeRes({ ...hdrPub }); drive(rPub1, bigBody('public-list'));
+      check('V32 کش: پاسخِ عمومیِ ETag دار کش می‌شود', jsonCacheStats().entries === n0 + 1);
+      const rPub2 = fakeRes({ ...hdrPub }); drive(rPub2, bigBody('public-list'));
+      check('V32 کش: بارِ دوم همان بایت‌ها بدون فشرده‌سازیِ دوباره',
+        rPub2._ended === rPub1._ended && jsonCacheStats().entries === n0 + 1);
+      const rPub3 = fakeRes({ ...hdrPub, ETag: 'W/"pub-v32-b"' });
+      drive(rPub3, bigBody('public-list-2'));
+      check('V32 کش: ETagِ تازه ورودیِ تازه می‌سازد', jsonCacheStats().entries === n0 + 2);
+      check('V32 کش: بایتِ فشرده واقعاً از بدنه کوچک‌تر است',
+        Buffer.isBuffer(rPub1._ended) && rPub1._ended.length < 3000, `${rPub1._ended?.length} B`);
+    }
+
   } catch (err) {
     check('Tests ran without an unexpected error', false, err.message);
   } finally {

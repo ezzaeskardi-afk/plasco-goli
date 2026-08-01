@@ -221,6 +221,50 @@ CREATE INDEX IF NOT EXISTS idx_products_price    ON products(price);
 CREATE INDEX IF NOT EXISTS idx_wishlist_product  ON wishlist(product_id);
 -- صفحه‌ی سفارش‌های پنل: فیلتر وضعیت + مرتب‌سازی زمانی، هر دو با یک ایندکس
 CREATE INDEX IF NOT EXISTS idx_orders_status     ON orders(status, created_at DESC);
+
+-- ---------- شمارنده‌ی نسخه‌ی کاتالوگ (catalog_rev) ----------
+-- چرا لازم شد: امضای کاتالوگ از MAX(updated_at) استفاده می‌کند و دقتِ
+-- datetime('now') فقط **یک ثانیه** است. اگر مدیر دو قیمت را در یک ثانیه ذخیره
+-- کند — کاری که «ذخیره‌ی سریعِ جدول» در پنل دقیقاً انجام می‌دهد — تعداد و
+-- مجموعِ موجودی هم عوض نمی‌شوند، پس امضا **یکسان** می‌ماند. نتیجه: ویرایشِ دوم
+-- نه ۳۰ ثانیه، بلکه تا تغییرِ بعدیِ کاتالوگ نامرئی می‌ماند؛ هم در کشِ حافظه‌ی
+-- سرور و هم در کشِ مرورگرِ مشتری (چون ETag هم از همین امضا ساخته می‌شود).
+-- این با تست ثابت شد، حدس نیست: دو adminUpdateProduct پشت‌سرهم، یک امضا.
+--
+-- این شمارنده یکنواخت بالا می‌رود، پس هر نوشتنی امضا را عوض می‌کند — مستقل از
+-- ساعتِ سیستم، دقتِ ثانیه، و اینکه کدام ستون عوض شده باشد.
+--
+-- چرا تریگر و نه بالابردنِ دستی در کد: روی products از جاهای زیادی نوشته می‌شود
+-- (ویرایش، ساخت، حذف، انتشار، رزرو موجودی، برگشت موجودی، ذخیره‌ی گروهی، ایمپورت،
+-- ابزار seed). اگر یک جا فراموش شود، باگ بی‌صدا برمی‌گردد و همین‌جور باگ است که
+-- ماه‌ها کسی نمی‌فهمدش. از تریگر هیچ مسیری فرار نمی‌کند — حتی sqlite3 با دست.
+--
+-- شرطِ published عمدی است و ادامه‌ی همان تصمیمِ امضاست: پیش‌نویس را مشتری
+-- نمی‌بیند، پس ویرایشش نباید کشِ او را باطل کند. (مالک همین حالا ۸۸ پیش‌نویس را
+-- برای گذاشتنِ عکس ویرایش می‌کند؛ بدون این شرط هر ذخیره‌ی او کشِ همه‌ی
+-- بازدیدکننده‌ها را دور می‌ریخت.) ولی *منتشر کردن* و *پنهان کردن* باید فوراً
+-- باطل کند — و چون یکی از دو طرفِ OR برقرار است، می‌کند.
+CREATE TRIGGER IF NOT EXISTS trg_catalog_rev_upd AFTER UPDATE ON products
+WHEN new.published = 1 OR old.published = 1
+BEGIN
+  INSERT INTO settings (key, value) VALUES ('catalog_rev','1')
+  ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT),
+                                 updated_at = datetime('now');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_catalog_rev_ins AFTER INSERT ON products
+WHEN new.published = 1
+BEGIN
+  INSERT INTO settings (key, value) VALUES ('catalog_rev','1')
+  ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT),
+                                 updated_at = datetime('now');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_catalog_rev_del AFTER DELETE ON products
+WHEN old.published = 1
+BEGIN
+  INSERT INTO settings (key, value) VALUES ('catalog_rev','1')
+  ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT),
+                                 updated_at = datetime('now');
+END;
 `);
 
 // ستون‌های جدید سفارش: یادداشت داخلی، کد رهگیری پستی، دلیل لغو، هزینه ارسال، دلیل مرجوعی
@@ -538,10 +582,16 @@ function getPublicProduct(id) { return stmtPublicProductById.get(Number(id)); }
 const stmtCatalogSig = db.prepare(
   "SELECT COUNT(*) AS n, COALESCE(MAX(updated_at),'') AS m, COALESCE(SUM(stock),0) AS s FROM products WHERE published = 1"
 );
+// جزءِ c از تریگرهای trg_catalog_rev_* می‌آید (بالای همین فایل) و تنها جزئی است
+// که *تضمین* می‌کند امضا با هر نوشتنِ دیده‌شدنی عوض می‌شود. n و m و s بدونش
+// می‌توانند هر سه ثابت بمانند و همان باگِ «ویرایشِ دوم در یک ثانیه گم می‌شود» را
+// بدهند. آن سه را نگه داشته‌ام چون ارزان‌اند و امضا را برای آدم خواناتر می‌کنند.
+const stmtCatalogRev = db.prepare("SELECT value FROM settings WHERE key = 'catalog_rev'");
 function getCatalogSignature() {
   const r = stmtCatalogSig.get();
   // نسخه‌ی نظرات هم داخل امضاست تا با تأیید/رد نظر، ETag لیست (و ستاره‌ی کارت‌ها) باطل شود
-  return `${r.n}.${String(r.m).replace(/\D/g, '')}.${r.s}.r${getSetting('reviews_rev') || 0}`;
+  return `${r.n}.${String(r.m).replace(/\D/g, '')}.${r.s}.r${getSetting('reviews_rev') || 0}` +
+    `.c${stmtCatalogRev.get()?.value || 0}`;
 }
 
 // شمارشِ کنارِ هر دسته باید *دقیقاً* همان چیزی باشد که مشتری بعد از کلیک می‌بیند.
