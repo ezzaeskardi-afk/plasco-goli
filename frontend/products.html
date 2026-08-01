@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>محصول | پلاسکو گلی</title>
-<meta name="description" content="مشخصات کامل، قیمت و خرید آنلاین از فروشگاه پلاسکو گلی.">
+<title>همه‌ی محصولات | پلاسکو گلی</title>
+<meta name="description" content="فهرست کامل محصولات پلاسکو گلی؛ ظروف نگهداری، لوازم آشپزخانه، سبد، صندلی، تشت و لوازم نظافت. فیلتر بر اساس دسته، قیمت و موجودی.">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="theme-color" content="#0B1411">
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
@@ -115,113 +115,72 @@
 
 <main id="main">
   <div class="container page-head">
-    <nav class="breadcrumb" id="pdBreadcrumb"><a href="/index.html">خانه</a><span class="sep">/</span><a href="/products.html">محصولات</a><span class="sep">/</span><span id="pdCrumbTitle">محصول</span></nav>
+    <nav class="breadcrumb"><a href="/index.html">خانه</a><span class="sep">/</span><span id="plCrumb">همه‌ی محصولات</span></nav>
+    <h1 class="page-title" id="plTitle">همه‌ی محصولات</h1>
+    <p class="page-sub" id="plSub">در حال بارگذاری…</p>
   </div>
 
-  <!-- محتوای محصول با جاوااسکریپت از /api/products/:id پر می‌شود -->
-  <section style="padding-top:20px">
-    <div class="container">
-      <div id="pdLoading" class="pd-layout" aria-hidden="true">
-        <div class="sk pd-sk-media"></div>
-        <div class="sk-body" style="padding:0">
-          <div class="sk sk-line w60"></div>
-          <div class="sk sk-line w80"></div>
-          <div class="sk sk-line"></div>
-          <div class="sk sk-line w60"></div>
+  <div class="container pl-layout">
+
+    <!-- ستون فیلترها. در موبایل به‌صورت کشوی پایین‌آمدنی باز می‌شود -->
+    <aside class="pl-side" id="plSide" aria-label="فیلترها">
+      <div class="pl-side-head">
+        <b>فیلترها</b>
+        <button class="btn btn-ghost btn-sm" type="button" id="plSideClose" aria-label="بستن فیلترها">بستن</button>
+      </div>
+
+      <div class="pl-fset">
+        <h3>دسته‌بندی</h3>
+        <ul class="pl-cats" id="plCats"><li class="pl-skel-line"></li><li class="pl-skel-line"></li><li class="pl-skel-line"></li></ul>
+      </div>
+
+      <div class="pl-fset">
+        <h3>محدوده‌ی قیمت</h3>
+        <div class="pl-price">
+          <label>از <input type="number" id="plMin" inputmode="numeric" min="0" step="10000" dir="ltr" placeholder="۰"></label>
+          <label>تا <input type="number" id="plMax" inputmode="numeric" min="0" step="10000" dir="ltr" placeholder="—"></label>
         </div>
+        <button class="btn btn-ghost btn-sm pl-price-apply" type="button" id="plPriceApply">اعمال قیمت</button>
+        <p class="pl-price-hint" id="plPriceHint"></p>
       </div>
 
-      <div id="pdNotFound" class="empty-state hidden">
-        <svg><use href="#i-alert"/></svg>
-        <h3>محصول پیدا نشد</h3>
-        <p>ممکن است این محصول حذف شده باشد یا آدرس اشتباه باشد.</p>
-        <a href="/products.html" class="btn btn-primary">مشاهده همه‌ی محصولات</a>
+      <div class="pl-fset">
+        <h3>وضعیت</h3>
+        <label class="pl-check"><input type="checkbox" id="plInStock"> <span>فقط کالاهای موجود</span></label>
       </div>
 
-      <article id="pdLoaded" class="pd-layout hidden">
-        <div class="pd-media-col">
-          <div class="pd-media" id="pdMedia"></div>
-          <div class="pd-thumbs hidden" id="pdThumbs" role="tablist" aria-label="عکس‌های محصول"></div>
-        </div>
-        <div class="pd-body">
-          <span class="pd-cat" id="pdCat"></span>
-          <h1 class="pd-title" id="pdTitle"></h1>
-          <a class="pd-rating hidden" id="pdRatingLink" href="#pdReviews"></a>
-          <p class="pd-desc" id="pdDesc"></p>
-          <span class="qv-stock" id="pdStock" hidden></span>
-          <span class="pd-save" id="pdSave" hidden></span>
+      <button class="btn btn-ghost btn-sm pl-reset" type="button" id="plReset" hidden>پاک کردن همه‌ی فیلترها</button>
+    </aside>
 
-          <div class="pd-buy-row">
-            <span class="pd-price" id="pdPrice"></span>
-            <div class="pd-qty" id="pdQty">
-              <button type="button" id="qtyMinus" aria-label="کم کردن تعداد">−</button>
-              <span id="qtyVal" aria-live="polite">۱</span>
-              <button type="button" id="qtyPlus" aria-label="زیاد کردن تعداد">+</button>
-            </div>
-            <button class="buy-btn" id="pdBuy"><svg><use href="#i-cart"/></svg> <span>افزودن به سبد</span></button>
-          </div>
-
-          <ul class="pd-perks">
-            <li><svg><use href="#i-truck"/></svg> ارسال سریع؛ داخل شهر همان روز</li>
-            <li id="pdFreeShip" hidden><svg><use href="#i-tag"/></svg> <span></span></li>
-            <li><svg><use href="#i-lock"/></svg> پرداخت امن زرین‌پال</li>
-            <li><svg><use href="#i-check-circle"/></svg> ۷ روز مهلت مرجوعی</li>
-            <li><svg><use href="#i-shield"/></svg> ضمانت اصالت کالا</li>
-          </ul>
-
-          <div class="pd-specs hidden" id="pdSpecs">
-            <h3><svg><use href="#i-note"/></svg> مشخصات</h3>
-            <table id="pdSpecsTable"></table>
-          </div>
-        </div>
-      </article>
-    </div>
-  </section>
-
-  <!-- دیدگاه خریداران -->
-  <section id="pdReviews" data-reveal style="padding-top:24px">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow"><span class="dot"></span> دیدگاه خریداران</span>
-        <h2 style="font-size:22px">نظر کسانی که این جنس را خریده‌اند</h2>
+    <section class="pl-main">
+      <div class="pl-bar">
+        <button class="btn btn-ghost btn-sm pl-filter-btn" type="button" id="plFilterBtn">
+          <svg><use href="#i-menu"/></svg> فیلترها <span class="pl-fcount" id="plFCount" hidden>۰</span>
+        </button>
+        <span class="pl-count" id="plCount"></span>
+        <label class="pl-sort">
+          مرتب‌سازی:
+          <select id="plSort" aria-label="مرتب‌سازی">
+            <option value="newest">جدیدترین</option>
+            <option value="price-asc">ارزان‌ترین</option>
+            <option value="price-desc">گران‌ترین</option>
+            <option value="title">بر اساس نام</option>
+            <option value="stock">بیشترین موجودی</option>
+          </select>
+        </label>
       </div>
-      <div class="rv-layout">
-        <aside class="rv-summary" id="rvSummary" aria-live="polite">
-          <div class="rv-big" id="rvAvg">—</div>
-          <div class="rv-stars" id="rvStars" aria-hidden="true"></div>
-          <div class="rv-count" id="rvCount">هنوز دیدگاهی ثبت نشده</div>
-        </aside>
-        <div class="rv-main">
-          <div id="rvFormWrap"></div>
-          <div class="rv-list" id="rvList"></div>
-        </div>
-      </div>
-    </div>
-  </section>
 
-  <!-- محصولات مرتبط -->
-  <section id="pdRelatedWrap" class="hidden" data-reveal style="padding-top:24px">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow"><span class="dot"></span> از همین دسته</span>
-        <h2 style="font-size:22px">محصولات مرتبط</h2>
-      </div>
-      <div class="product-grid" id="pdRelated"></div>
-    </div>
-  </section>
+      <!-- تراشه‌های فیلترِ فعال: مشتری باید ببیند چه چیزی نتیجه را محدود کرده -->
+      <div class="pl-chips" id="plChips" hidden></div>
 
-  <!-- بازدیدهای اخیر — فقط شناسه‌ها در مرورگر می‌ماند و اطلاعات تازه از سرور
-       می‌آید، پس قیمت و موجودیِ نمایش‌داده‌شده هیچ‌وقت کهنه نیست. -->
-  <section id="pdRecentWrap" class="hidden" data-reveal style="padding-top:24px">
-    <div class="container">
-      <div class="section-head">
-        <span class="eyebrow"><span class="dot"></span> ادامه‌ی گشت‌وگذار</span>
-        <h2 style="font-size:22px">اخیراً دیده‌اید</h2>
-      </div>
-      <div class="product-grid" id="pdRecent"></div>
-    </div>
-  </section>
+      <div class="pl-grid" id="plGrid" aria-busy="true"></div>
+
+      <nav class="pl-pager" id="plPager" aria-label="صفحه‌بندی" hidden></nav>
+    </section>
+  </div>
 </main>
+
+<div class="pl-backdrop" id="plBackdrop" hidden></div>
 
 <footer class="site">
   <div class="container footer-grid">
@@ -262,7 +221,7 @@
   <span class="fab-label">تماس با فروشگاه</span>
 </a>
 <script src="/js/common.js?v=41" defer></script>
-<script src="/js/product.js?v=41" defer></script>
+<script src="/js/products.js?v=41" defer></script>
 
 </body>
 </html>

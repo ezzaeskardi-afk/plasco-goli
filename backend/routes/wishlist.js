@@ -1,5 +1,5 @@
 const express = require('express');
-const { getProduct, getWishlist, getWishlistIds, addToWishlist, removeFromWishlist } = require('../lib/db');
+const { getPublicProduct, getWishlist, getWishlistIds, addToWishlist, removeFromWishlist } = require('../lib/db');
 const { requireAuth } = require('../lib/middleware');
 
 const router = express.Router();
@@ -26,7 +26,7 @@ router.get('/ids', (req, res) => {
 // افزودن/حذف با یک درخواست (toggle)
 router.post('/toggle', requireAuth, (req, res) => {
   const { productId } = req.body || {};
-  const product = getProduct(productId);
+  const product = getPublicProduct(productId);
   if (!product) return res.status(404).json({ error: 'محصول پیدا نشد' });
 
   const added = addToWishlist(req.session.userId, product.id);

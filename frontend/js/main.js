@@ -123,15 +123,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // کلیک روی کارت دسته‌بندی → فعال شدن همان فیلتر
-  // (نمایندگی رویداد؛ کارت‌ها ممکن است بعداً از سرور بازسازی شوند)
-  document.addEventListener('click', (e) => {
-    const card = e.target.closest('.cat-card[data-cat]');
-    if (!card) return;
-    const cat = card.dataset.cat;
-    // دسته‌ای که در کاتالوگ نیست → به «همه» برگرد تا ویترین خالی نماند
-    setActiveCat(CATEGORIES.includes(cat) ? cat : 'همه');
-  });
+  // کارت‌های دسته‌بندی دیگر «فیلترِ ویترین» نیستند؛ لینکِ واقعی به صفحه‌ی
+  // فهرستِ همان دسته‌اند و خودِ href کارش را می‌کند.
+  //
+  // چرا عوض شد: تا وقتی کل فروشگاه ۱۲ محصول بود، فیلترکردنِ همین ویترین
+  // یعنی دیدنِ کلِ آن دسته. حالا که دسته‌ها ۱۲ تا ۲۱ کالا دارند و ویترین
+  // ۱۲تایی است، مشتری بخشی از دسته را می‌دید و فکر می‌کرد تمامش همین است.
+  // فرقشان با «قرص»های بالای ویترین هم روشن است: قرص‌ها همین ویترین را
+  // مرتب می‌کنند، کارت‌ها تو را به فهرستِ کامل می‌برند.
 
   // کارت‌های دسته‌بندی صفحه‌ی اصلی از جدول دسته‌ها ساخته می‌شوند (پنل ← انبار و کالا)
   document.addEventListener('pg:cats', (e) => {
@@ -145,7 +144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const grid = document.querySelector('.cat-grid');
     if (!grid) return;
     grid.innerHTML = e.detail.map(c => `
-      <a class="cat-card" href="#products" data-cat="${PG.esc(c.name)}">
+      <a class="cat-card" href="/products.html?cat=${encodeURIComponent(c.name)}" data-cat="${PG.esc(c.name)}">
         <span class="cat-icon"><svg><use href="#${PG.esc(c.icon)}"/></svg></span>
         <span>${PG.esc(c.name)}</span>
       </a>`).join('');
@@ -539,6 +538,12 @@ function flyToCart(fromEl) {
 }
 
 // دکمه‌ی «نمایش محصولات بیشتر» زیر گرید — فقط وقتی محصول دیده‌نشده‌ای مانده باشد
+//
+// از صفحه‌ی سوم به بعد، کنارش لینکِ صفحه‌ی فهرست هم می‌آید. دلیلش ساده است:
+// «نمایش بیشتر» برای چند کالای باقی‌مانده خوب است، ولی وقتی هنوز ده‌ها کالا
+// مانده یعنی مشتری در حال کلیک‌کردنِ پیاپی است بدون اینکه بتواند محدود کند،
+// و اگر صفحه را ببندد همه‌ی آن کلیک‌ها از بین می‌رود. صفحه‌ی فهرست هم فیلترِ
+// درست‌وحسابی دارد، هم آدرسش قابلِ ذخیره و اشتراک است.
 function syncLoadMore() {
   const grid = document.getElementById('productGrid');
   let btn = document.getElementById('loadMoreBtn');
@@ -556,10 +561,26 @@ function syncLoadMore() {
   btn.disabled = false;
   const left = Math.max(0, TOTAL - PAGE_ITEMS.length);
   btn.textContent = `نمایش محصولات بیشتر (${PG.money(left)} محصول دیگر)`;
+
+  let all = document.getElementById('seeAllLink');
+  if (CUR_PAGE >= 2) {
+    if (!all) {
+      all = document.createElement('a');
+      all.id = 'seeAllLink';
+      all.className = 'see-all-link';
+      btn.insertAdjacentElement('afterend', all);
+    }
+    const q = ACTIVE_CAT && ACTIVE_CAT !== 'همه' ? `?cat=${encodeURIComponent(ACTIVE_CAT)}` : '';
+    all.href = `/products.html${q}`;
+    all.textContent = `یا همه‌ی ${PG.money(TOTAL)} کالا را با فیلتر ببین ←`;
+  } else if (all) {
+    all.remove();
+  }
 }
 
 function removeLoadMore() {
   document.getElementById('loadMoreBtn')?.remove();
+  document.getElementById('seeAllLink')?.remove();
 }
 
 function resetFilters() {

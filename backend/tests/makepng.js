@@ -57,4 +57,32 @@ function makePng(w, h) {
   ]);
 }
 
-module.exports = { makePng };
+/**
+ * یک PNG با چانک‌های فرادادهٔ آلوده: tEXt (مسیرِ فایل روی کامپیوترِ کاربر)
+ * و eXIf. برای سنجیدنِ اینکه مسیرِ آپلود این‌ها را قبل از ذخیره پاک می‌کند.
+ * @returns {{ bytes: Buffer, secrets: string[] }}
+ */
+function makePngWithMetadata(w, h) {
+  const png = makePng(w, h);
+  const secretPath = 'C:/Users/goli/Pictures/private/store-front.png';
+  const text = pngChunk('tEXt', Buffer.concat([
+    Buffer.from('Comment\0', 'latin1'), Buffer.from(secretPath, 'latin1')
+  ]));
+  // eXIf با یک TIFF کوچک که Make را دارد؛ همان چیزی که گوشی می‌نویسد
+  const tiff = Buffer.concat([
+    Buffer.from('II', 'ascii'), Buffer.from([0x2A, 0x00, 0x08, 0x00, 0x00, 0x00]),
+    Buffer.from([0x01, 0x00]),                              // ۱ ورودی
+    Buffer.from([0x0F, 0x01, 0x02, 0x00, 0x07, 0x00, 0x00, 0x00, 0x1A, 0x00, 0x00, 0x00]), // Make
+    Buffer.alloc(4),                                        // پایانِ IFD
+    Buffer.from('Xiaomi\0', 'ascii')
+  ]);
+  const exif = pngChunk('eXIf', tiff);
+  // قبل از IDAT تزریق می‌شود (جای معتبرِ چانک‌های کمکی)
+  const at = png.indexOf(Buffer.from('IDAT', 'ascii')) - 4;
+  return {
+    bytes: Buffer.concat([png.subarray(0, at), text, exif, png.subarray(at)]),
+    secrets: [secretPath, 'Xiaomi']
+  };
+}
+
+module.exports = { makePng, makePngWithMetadata };

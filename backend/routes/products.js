@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-  getProducts, getProduct, queryProducts, getCatalogSignature, getCatalogFacets,
+  getPublicProducts, getPublicProduct, queryProducts, getCatalogSignature, getCatalogFacets,
   getRatingsMap, getProductReviews, upsertReview, addStockAlert, getUserPhone
 } = require('../lib/db');
 const { etagJson, validate, V, requireAuth, rateLimit } = require('../lib/middleware');
@@ -8,6 +8,44 @@ const { etagJson, validate, V, requireAuth, rateLimit } = require('../lib/middle
 const router = express.Router();
 
 const SORTS = ['newest', 'oldest', 'price-asc', 'price-desc', 'title', 'stock'];
+
+// ---------- کشِ پاسخِ فهرست (در حافظه) ----------
+// پاسخ فهرست برای همه‌ی بازدیدکننده‌ها *یکسان* است و فقط وقتی عوض می‌شود که
+// کاتالوگ عوض شود — و دقیقاً همین را getCatalogSignature() می‌داند (تعداد، آخرین
+// ویرایش، مجموع موجودی، نسخه‌ی نظرات).
+//
+// پس به‌جای اینکه برای هر بازدید دوباره کوئری بزنیم و JSON بسازیم، نتیجه را نگه
+// می‌داریم و به محض تغییر امضا، *کلِ* کش را دور می‌ریزیم. باطل‌سازیِ کلی عمدی
+// است: تلاش برای اینکه بفهمیم کدام کلید تحت تأثیر است، جایی است که این‌طور
+// کش‌ها معمولاً داده‌ی کهنه نشان می‌دهند.
+//
+// ETag هم از قبل هست، ولی آن فقط به مرورگرِ *برگشته* کمک می‌کند؛ این به همه.
+const listCache = new Map();
+const LIST_CACHE_MAX = 150; // ترکیب‌های رایج فیلتر؛ فراتر از آن قدیمی‌ترین می‌رود
+let listCacheSig = '';
+
+function cachedList(sig, key, build) {
+  if (sig !== listCacheSig) { listCache.clear(); listCacheSig = sig; }
+  let hit = listCache.get(key);
+  if (hit === undefined) {
+    hit = build();
+    if (listCache.size >= LIST_CACHE_MAX) listCache.delete(listCache.keys().next().value);
+    listCache.set(key, hit);
+  }
+  return hit;
+}
+
+// سطلِ جداگانه‌ی جست‌وجو.
+// محدودکننده‌ی عمومیِ ۳۰۰/دقیقه روی کل /api از قبل هست و منطقی است، ولی جست‌وجو
+// تنها مسیرِ عمومی است که می‌تواند به «نتیجه‌ی نزدیک» بیفتد و آنجا تا ۳۰۰۰ سطر
+// را در جاوااسکریپت با فاصله‌ی ویرایشی مقایسه کند. روی موتورِ همگام، این گران‌ترین
+// کاری است که یک غریبه می‌تواند بدون حساب کاربری از سرور بخواهد. دفاعِ لایه‌ای.
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: 'جست‌وجوی زیاد در زمان کوتاه؛ چند لحظه صبر کنید'
+});
+const searchGate = (req, res, next) => (req.query.q ? searchLimiter(req, res, next) : next());
 
 const parseJsonArr = (s) => { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
 
@@ -42,7 +80,18 @@ function serializeProduct(p, ratings = null) {
 //
 // در هر دو حالت ETag گذاشته می‌شود: بازدید دوم به‌جای دانلود دوباره،
 // پاسخ ۳۰۴ خالی می‌گیرد.
+//
+// صفحه‌ی خارج از محدوده: queryProducts آن را به آخرین صفحه می‌چسباند و همین‌طور
+// هم باید بماند — تستِ «Out-of-range page is clamped» نگهبانِ همین تصمیم است و
+// دلیلش این است که مشتری هرگز صفحه‌ی خالی نبیند. یک بار اینجا ۴۰۴ گذاشتم و همان
+// تست جلویش را گرفت؛ درست هم بود.
+//   ▸ خطرِ «اسکنِ عمیق» وجود ندارد: چون page به pages چسبانده می‌شود، OFFSET
+//     هیچ‌وقت از تعدادِ کل بیشتر نمی‌شود.
+//   ▸ نگرانیِ سئو (چند آدرس، یک محتوا) سرِ جایش هست ولی جوابش اینجا نیست:
+//     meta.page همیشه صفحه‌ی *واقعی* را برمی‌گرداند و فرانت با همان، هم آدرس
+//     مرورگر را اصلاح می‌کند هم <link rel="canonical"> را.
 router.get('/',
+  searchGate,
   validate({
     q: V.str({ optional: true, max: 60 }),
     category: V.str({ optional: true, max: 40 }),
@@ -58,21 +107,27 @@ router.get('/',
     const paged = Object.keys(req.query).length > 0;
 
     // امضای کش: با هر تغییر کاتالوگ و نیز با هر ترکیب فیلتر متفاوت، عوض می‌شود
-    const sig = `${getCatalogSignature()}-${paged ? [f.q, f.category, f.sort, f.minPrice, f.maxPrice, f.inStock, f.page, f.limit].join('|') : 'all'}`;
-    if (etagJson(req, res, sig, { maxAge: 30 })) return;
+    const catSig = getCatalogSignature();
+    const filterKey = paged
+      ? [f.q, f.category, f.sort, f.minPrice, f.maxPrice, f.inStock, f.page, f.limit].join('|')
+      : 'all';
+    if (etagJson(req, res, `${catSig}-${filterKey}`, { maxAge: 30 })) return;
 
-    const ratings = getRatingsMap();
-    if (!paged) {
-      return res.json({ products: getProducts().map(p => serializeProduct(p, ratings)) });
-    }
-
-    const { rows, total, page, pages, limit, fuzzy, suggestion } = queryProducts(f);
-    res.json({
-      products: rows.map(p => serializeProduct(p, ratings)),
-      // fuzzy=true یعنی عبارت دقیق پیدا نشد و این‌ها «نزدیک‌ترین» نتایج‌اند —
-      // فرانت با همین پرچم به مشتری می‌گوید «چیزی به این نام نبود، اینها را ببین»
-      meta: { total, page, pages, limit, hasMore: page < pages, fuzzy: Boolean(fuzzy), suggestion: suggestion || '' }
+    const body = cachedList(catSig, filterKey, () => {
+      const ratings = getRatingsMap();
+      if (!paged) {
+        return { products: getPublicProducts().map(p => serializeProduct(p, ratings)) };
+      }
+      const { rows, total, page, pages, limit, fuzzy, suggestion } = queryProducts(f);
+      return {
+        products: rows.map(p => serializeProduct(p, ratings)),
+        // fuzzy=true یعنی عبارت دقیق پیدا نشد و این‌ها «نزدیک‌ترین» نتایج‌اند —
+        // فرانت با همین پرچم به مشتری می‌گوید «چیزی به این نام نبود، اینها را ببین»
+        meta: { total, page, pages, limit, hasMore: page < pages, fuzzy: Boolean(fuzzy), suggestion: suggestion || '' }
+      };
     });
+
+    res.json(body);
   });
 
 // ---------- GET /api/products/facets ----------
@@ -109,7 +164,7 @@ router.get('/by-ids', (req, res) => {
   // ترتیب خروجی همان ترتیب ورودی است (تازه‌ترین بازدید اول). محصول حذف‌شده
   // بی‌صدا کنار می‌رود — نه خطا، چون فهرست «اخیراً دیده‌شده» چیز حیاتی نیست.
   const products = uniq
-    .map((id) => getProduct(id))
+    .map((id) => getPublicProduct(id))
     .filter(Boolean)
     .map((p) => serializeProduct(p, ratings));
 
@@ -120,7 +175,7 @@ router.get('/:id', (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'شناسه‌ی محصول معتبر نیست' });
 
-  const product = getProduct(id);
+  const product = getPublicProduct(id);
   if (!product) return res.status(404).json({ error: 'محصول پیدا نشد' });
 
   const ratings = getRatingsMap();
@@ -137,7 +192,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/reviews', (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'شناسه‌ی محصول معتبر نیست' });
-  if (!getProduct(id)) return res.status(404).json({ error: 'محصول پیدا نشد' });
+  if (!getPublicProduct(id)) return res.status(404).json({ error: 'محصول پیدا نشد' });
   res.json(getProductReviews(id, req.session.userId || null));
 });
 
@@ -147,7 +202,7 @@ router.post('/:id/reviews', requireAuth,
   (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'شناسه‌ی محصول معتبر نیست' });
-    if (!getProduct(id)) return res.status(404).json({ error: 'محصول پیدا نشد' });
+    if (!getPublicProduct(id)) return res.status(404).json({ error: 'محصول پیدا نشد' });
 
     const rating = Number(req.body?.rating);
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
@@ -166,7 +221,7 @@ router.post('/:id/notify-me', requireAuth,
   (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'شناسه‌ی محصول معتبر نیست' });
-    const product = getProduct(id);
+    const product = getPublicProduct(id);
     if (!product) return res.status(404).json({ error: 'محصول پیدا نشد' });
     if (product.stock > 0) return res.status(409).json({ error: 'این محصول موجود است — همین حالا می‌توانید بخرید!' });
 

@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     coupon_create: 'ساخت کد تخفیف', coupon_update: 'ویرایش کد تخفیف', coupon_delete: 'حذف کد تخفیف',
     product_create: 'ساخت محصول', product_update: 'ویرایش محصول',
     product_delete: 'حذف محصول', product_zeroed: 'ناموجود کردن محصول', product_bulk: 'ویرایش گروهی',
+    product_publish: 'انتشار در سایت', product_unpublish: 'برداشتن از سایت',
     settings_update: 'تغییر تنظیمات', backup: 'بکاپ دیتابیس', export_csv: 'خروجی اکسل',
     category_create: 'ساخت دسته‌بندی', category_update: 'ویرایش دسته‌بندی',
     category_delete: 'حذف دسته‌بندی', category_move: 'جابه‌جایی دسته‌بندی',
@@ -29,6 +30,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ACTION_TONE = {
     order_cancel: 'bad', product_delete: 'bad', product_zeroed: 'warn',
     product_bulk: 'warn', settings_update: 'warn',
+    // زرد نه قرمز: برداشتن از سایت برگشت‌پذیر است، ولی محصول از دیدِ مشتری غیب می‌شود
+    product_unpublish: 'warn',
     category_delete: 'bad', staff_grant: 'warn', staff_revoke: 'warn',
     // قرمز چون این تنها سطری است که ممکن است کارِ خودِ مدیر نباشد
     login_failed: 'bad'
@@ -759,7 +762,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ============================================================
   let PRODUCTS = [];
   const PICKED = new Set();
-  const PQ = { q: '', cat: '', stock: 'all', sort: 'title', dir: 1 };
+  const PQ = { q: '', cat: '', stock: 'all', pub: 'all', sort: 'title', dir: 1 };
 
   async function loadStock() {
     $('prodBody').innerHTML = `<tr><td colspan="8">${skel(5)}</td></tr>`;
@@ -774,10 +777,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const out = PRODUCTS.filter(p => p.stock === 0).length;
       const low = PRODUCTS.filter(p => p.stock > 0 && p.stock <= 5).length;
+      const drafts = PRODUCTS.filter(p => p.published === 0).length;
+      const draftNoImg = PRODUCTS.filter(p => p.published === 0 && !p.image).length;
+
+      // بنرِ یادآور. عمداً فقط وقتی پیش‌نویس هست دیده می‌شود؛ نوارِ همیشگی
+      // بعد از دو روز نامرئی می‌شود و کارش را نمی‌کند.
+      $('draftNote').hidden = drafts === 0;
+      if (drafts) {
+        $('draftNoteText').innerHTML = `<b>${money(drafts)} کالا</b> در انبار هست ولی روی سایت نیست.` +
+          (draftNoImg ? ` ${money(draftNoImg)} تای آن‌ها هنوز عکس ندارد.` : '');
+      }
       const invValue = PRODUCTS.reduce((s, p) => s + p.price * p.stock, 0);
       const unitsSold = PRODUCTS.reduce((s, p) => s + p.soldQty, 0);
       $('stockKpis').innerHTML = [
         kpi({ label: 'تعداد کالا', num: money(PRODUCTS.length), unit: 'قلم', icon: 'i-box' }),
+        kpi({ label: 'روی سایت', num: money(PRODUCTS.length - drafts), unit: 'قلم', icon: 'i-eye', tone: drafts ? 'gold' : 'blue' }),
         kpi({ label: 'ارزش انبار', num: money(invValue), unit: 'تومان', icon: 'i-wallet', tone: 'purple' }),
         kpi({ label: 'ناموجود', num: money(out), unit: 'قلم', icon: 'i-alert', tone: out ? 'coral' : '' }),
         kpi({ label: 'رو به اتمام', num: money(low), unit: 'قلم', icon: 'i-warehouse', tone: low ? 'gold' : '' }),
@@ -799,6 +813,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (PQ.stock === 'out' && p.stock !== 0) return false;
       if (PQ.stock === 'low' && !(p.stock > 0 && p.stock <= 5)) return false;
       if (PQ.stock === 'ok' && p.stock <= 5) return false;
+      // published از سرور عدد ۰/۱ است؛ محصولاتِ قدیمیِ قبل از این ستون
+      // مقدارِ پیش‌فرضِ ۱ گرفته‌اند، پس undefined هم یعنی «روی سایت».
+      const isPub = p.published !== 0;
+      if (PQ.pub === 'pub' && !isPub) return false;
+      if (PQ.pub === 'draft' && isPub) return false;
+      if (PQ.pub === 'noimg' && (isPub || p.image)) return false;
       if (nq && !PG.normFa(`${p.title} ${p.category} ${p.badge || ''}`).includes(nq)) return false;
       return true;
     });
@@ -823,15 +843,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     $('prodBody').innerHTML = list.map(p => {
       const cls = p.stock === 0 ? 'zero' : (p.stock <= 5 ? 'low' : '');
+      const isPub = p.published !== 0;
       return `
-      <tr data-id="${p.id}" class="${PICKED.has(p.id) ? 'picked' : ''}">
+      <tr data-id="${p.id}" class="${PICKED.has(p.id) ? 'picked' : ''}${isPub ? '' : ' is-draft'}">
         <td><input type="checkbox" class="ad-check row-pick" ${PICKED.has(p.id) ? 'checked' : ''} aria-label="انتخاب"></td>
         <td>
           <div class="ad-cell-prod">
             <span class="ad-thumb">${p.image ? `<img src="${esc(thumb(p.image))}" alt="" loading="lazy" decoding="async">` : `<svg><use href="#${esc(p.icon || 'i-package')}"/></svg>`}</span>
             <span>
-              <b>${esc(p.title)}</b>
+              <b>${esc(p.title)}${isPub ? '' : ' <span class="ad-draft-tag">پیش‌نویس</span>'}</b>
               <small>${esc(p.category)}${p.badge ? ` · ${esc(p.badge)}` : ''}${
+                isPub || p.image ? '' : ` · <span class="ad-noimg">بدون عکس</span>`}${
                 Number(p.old_price) > Number(p.price)
                   ? ` · <span class="ad-onsale" title="قیمت قبلی ${money(p.old_price)} تومان">${money(Math.round(((p.old_price - p.price) / p.old_price) * 100))}٪ تخفیف</span>`
                   : ''}${
@@ -847,6 +869,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         <td>
           <div class="ad-row-tools">
             <button class="icon-btn act-save" title="ذخیره‌ی قیمت و موجودی"><svg><use href="#i-save"/></svg></button>
+            <button class="icon-btn act-pub${isPub ? '' : ' on'}" title="${isPub ? 'برداشتن از سایت' : 'انتشار در سایت'}" aria-pressed="${isPub}"><svg><use href="#${isPub ? 'i-eye' : 'i-ban'}"/></svg></button>
             <button class="icon-btn act-edit" title="ویرایش کامل"><svg><use href="#i-edit"/></svg></button>
             <button class="icon-btn act-del danger" title="حذف"><svg><use href="#i-trash"/></svg></button>
           </div>
@@ -883,6 +906,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   $('prodCat').addEventListener('change', (e) => { PQ.cat = e.target.value; renderProducts(); });
   $('prodStockFilter').addEventListener('change', (e) => { PQ.stock = e.target.value; renderProducts(); });
+  $('prodPubFilter').addEventListener('change', (e) => { PQ.pub = e.target.value; renderProducts(); });
+  $('draftNoteShow').addEventListener('click', () => {
+    PQ.pub = 'draft'; $('prodPubFilter').value = 'draft';
+    renderProducts();
+    $('prodTable').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 
   // ---------- انتخاب و ویرایش گروهی ----------
   function syncBulkBar() {
@@ -913,7 +942,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     add_stock: ['number', 'مثلاً ۱۰'], set_stock: ['number', 'مثلاً ۲۰'],
     price_pct: ['number', 'مثلاً ۱۰ یا ۱۰-'], set_category: ['text', 'نام دسته'],
     set_badge: ['text', 'مثلاً تخفیف'], clear_badge: ['hidden', ''],
-    discount: ['number', 'درصد تخفیف؛ مثلاً ۱۵'], discount_end: ['hidden', '']
+    discount: ['number', 'درصد تخفیف؛ مثلاً ۱۵'], discount_end: ['hidden', ''],
+    publish: ['hidden', ''], unpublish: ['hidden', '']
   };
   function syncBulkInput() {
     const [type, ph] = BULK_HINT[$('bulkOp').value] || ['text', ''];
@@ -925,25 +955,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   syncBulkInput();
 
   // عملیاتی که به «مقدار» نیاز ندارند؛ قبلاً فقط clear_badge بود
-  const BULK_NO_VALUE = ['clear_badge', 'discount_end'];
+  const BULK_NO_VALUE = ['clear_badge', 'discount_end', 'publish', 'unpublish'];
 
   $('bulkApply').addEventListener('click', async (e) => {
     const op = $('bulkOp').value;
     const raw = $('bulkValue').value.trim();
     if (!BULK_NO_VALUE.includes(op) && !raw) return PG.toast('مقدار را وارد کنید', 'error');
-    const value = ['add_stock', 'set_stock', 'price_pct', 'discount'].includes(op) ? Number(raw) : raw;
+    let value = ['add_stock', 'set_stock', 'price_pct', 'discount'].includes(op) ? Number(raw) : raw;
     const names = PRODUCTS.filter(p => PICKED.has(p.id)).slice(0, 3).map(p => p.title).join('، ');
     // تخفیف روی قیمت واقعی اثر می‌گذارد، پس تأییدش باید صریح‌تر باشد
     const extra = op === 'discount'
       ? `\n\nقیمت فعلی به‌عنوان «قیمت قبلی» ذخیره می‌شود و ${value}٪ کم می‌شود.`
-      : (op === 'discount_end' ? '\n\nقیمت‌ها به همان قیمت قبل از تخفیف برمی‌گردند.' : '');
+      : op === 'discount_end' ? '\n\nقیمت‌ها به همان قیمت قبل از تخفیف برمی‌گردند.'
+      : op === 'publish' ? '\n\nاین کالاها روی سایت می‌آیند و مشتری می‌تواند بخرد.'
+      : op === 'unpublish' ? '\n\nاین کالاها از سایت برداشته می‌شوند؛ مشتری دیگر نمی‌بیندشان.' : '';
     if (!confirm(`این تغییر روی ${PICKED.size} کالا اعمال شود؟\n(${names}${PICKED.size > 3 ? ' و …' : ''})${extra}`)) return;
 
     e.currentTarget.disabled = true;
+    const send = async () => PG.api('/admin/products/bulk', {
+      method: 'POST', body: JSON.stringify({ ids: [...PICKED], op, value })
+    });
     try {
-      const r = await PG.api('/admin/products/bulk', {
-        method: 'POST', body: JSON.stringify({ ids: [...PICKED], op, value })
-      });
+      let r;
+      try { r = await send(); }
+      catch (err) {
+        // ۴۰۹ سرور برای «چندتاشان عکس ندارند» — یک سؤالِ صریح، بعد value='force'
+        if (!err.data?.needsConfirm) throw err;
+        const n = err.data.count || PICKED.size;
+        if (!confirm(`${n} تا از این کالاها عکس ندارند.\nصفحه‌ی محصولِ بی‌عکس معمولاً فروش نمی‌رود و گوگل هم آن را ایندکس می‌کند.\nبا این حال منتشر شوند؟`)) {
+          e.currentTarget.disabled = false; return;
+        }
+        value = 'force';
+        r = await send();
+      }
       PG.toast(`${money(r.changed)} کالا به‌روز شد ✅`, 'success');
       PICKED.clear();
       $('bulkValue').value = '';
@@ -954,6 +998,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) { PG.toast(err.message, 'error'); }
     finally { e.currentTarget.disabled = false; }
   });
+
+  // ---------- انتشار / برداشتن از سایت ----------
+  // سرور برای «انتشارِ محصولِ بدون عکس» عمداً ۴۰۹ می‌دهد و منتظرِ تأییدِ دوم
+  // می‌ماند. آن قانون در سرور است نه اینجا، چون فرانت‌اند قابلِ دورزدن است؛
+  // این تابع فقط ترجمه‌ی همان ۴۰۹ به یک سؤالِ فارسی است.
+  async function setPublished(id, on, force) {
+    try {
+      await PG.api(`/admin/products/${id}/published`, {
+        method: 'POST', body: JSON.stringify({ published: on, force: !!force })
+      });
+      PG.toast(on ? 'روی سایت آمد ✅' : 'از سایت برداشته شد', on ? 'success' : 'info');
+      return true;
+    } catch (err) {
+      if (err.data?.needsConfirm) {
+        if (!confirm('این محصول عکس ندارد.\nمحصولِ بی‌عکس معمولاً فروش نمی‌رود و به اعتبارِ فروشگاه لطمه می‌زند.\nبا این حال منتشر شود؟')) return false;
+        return setPublished(id, on, true);
+      }
+      throw err;
+    }
+  }
 
   // ---------- عملیات تک‌ردیفی ----------
   $('prodBody').addEventListener('click', async (e) => {
@@ -975,6 +1039,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         PG.toast('ذخیره شد ✅', 'success');
         await loadStock();
         if (LOADED.has('dash')) loadDash();
+        if (LOADED.has('log')) loadLog();
+      } catch (err) { PG.toast(err.message, 'error'); btn.disabled = false; }
+      return;
+    }
+
+    if (e.target.closest('.act-pub')) {
+      const btn = e.target.closest('.act-pub');
+      const p = PRODUCTS.find(x => x.id === id);
+      const want = p.published === 0;           // پیش‌نویس بود ⇒ می‌خواهیم منتشر شود
+      // برداشتن از سایت را می‌پرسیم، انتشار را نه: انتشار برگشت‌پذیر و کم‌ضرر است،
+      // ولی پنهان‌کردنِ ناخواسته یعنی محصول از دیدِ مشتری غیب می‌شود بی‌آنکه
+      // کسی متوجه شود — تا وقتی فروشش صفر شود.
+      if (!want && !confirm(`«${p.title}» از سایت برداشته شود؟\nمشتری‌ها دیگر آن را نمی‌بینند و نمی‌توانند بخرند.`)) return;
+      btn.disabled = true;
+      try {
+        await setPublished(id, want, false);
+        await loadStock();
         if (LOADED.has('log')) loadLog();
       } catch (err) { PG.toast(err.message, 'error'); btn.disabled = false; }
       return;
@@ -1717,11 +1798,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         <input type="text" class="cat-name" value="${esc(c.name)}" maxlength="40">
         <select class="cat-icon ad-select">${ICON_CHOICES.map(ic =>
           `<option value="${ic}" ${ic === c.icon ? 'selected' : ''}>${esc(CAT_ICONS_FA[ic] || ic)}</option>`).join('')}</select>
-        <span class="cat-count">${money(c.count)} کالا</span>
+        <span class="cat-count" title="${money(c.count)} کالا روی سایت از ${money(c.countAll ?? c.count)} کالای این دسته">${money(c.count)} کالا${(c.countAll ?? c.count) > c.count ? ` <i class="cat-draft">+${money((c.countAll ?? c.count) - c.count)} پیش‌نویس</i>` : ''}</span>
         <button type="button" class="icon-btn cat-up" title="بالا" ${i === 0 ? 'disabled' : ''}><svg style="transform:rotate(180deg)"><use href="#i-chevron-down"/></svg></button>
         <button type="button" class="icon-btn cat-down" title="پایین" ${i === categories.length - 1 ? 'disabled' : ''}><svg><use href="#i-chevron-down"/></svg></button>
         <button type="button" class="icon-btn cat-save" title="ذخیره"><svg><use href="#i-save"/></svg></button>
-        <button type="button" class="icon-btn danger cat-del" title="حذف" ${c.count > 0 ? 'disabled' : ''}><svg><use href="#i-trash"/></svg></button>
+        <!-- شرطِ حذف عمداً countAll است نه count: دسته‌ای که ۱۸ پیش‌نویس دارد
+             روی سایت «۰ کالا» است، ولی حذفش آن ۱۸ تا را بی‌دسته می‌کند. -->
+        <button type="button" class="icon-btn danger cat-del" title="${(c.countAll ?? c.count) > 0 ? 'اول کالاهای این دسته را جابه‌جا کن' : 'حذف'}" ${(c.countAll ?? c.count) > 0 ? 'disabled' : ''}><svg><use href="#i-trash"/></svg></button>
       </div>`).join('');
   }
 

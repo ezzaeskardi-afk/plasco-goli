@@ -455,18 +455,24 @@ const PG = (function () {
     document.addEventListener('click', (e) => { if (!menu.contains(e.target)) close(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
 
-    // نمایندگی رویداد، تا وقتی لیست از سرور بازسازی شد هم کار کند
+    // نمایندگی رویداد، تا وقتی لیست از سرور بازسازی شد هم کار کند.
+    //
+    // مقصدِ این لینک‌ها دیگر در جاوااسکریپت ساخته نمی‌شود؛ خودِ href درست است
+    // و به /products.html?cat=… می‌رود. چرا عوض شد: قبلاً روی صفحه‌ی اصلی
+    // «فیلترِ زنده» می‌کرد و در بقیه‌ی صفحه‌ها به صفحه‌ی اصلی برمی‌گشت — یعنی
+    // یک دکمه، دو رفتار. با ۱۰۰ محصول، نوارِ صفحه‌ی اصلی هم فقط بخشی از یک
+    // دسته را نشان می‌داد و مشتری فکر می‌کرد کلِ آن دسته همین چندتاست.
+    // حالا همیشه صفحه‌ی فهرستِ کامل باز می‌شود.
+    //
+    // تنها استثنا: اگر همین حالا *روی* صفحه‌ی فهرست هستیم، به‌جای بارگذاریِ
+    // دوباره‌ی کلِ صفحه، همان‌جا فیلتر عوض می‌شود.
     menu.addEventListener('click', (e) => {
       const a = e.target.closest('.cat-dropdown a[data-cat]');
       if (!a) return;
       close();
-      e.preventDefault();
-      if (typeof window.setActiveCat === 'function') {
-        // روی صفحه‌ی اصلی هستیم: فیلتر زنده + اسکرول
-        window.setActiveCat(a.dataset.cat);
-        document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' });
-      } else {
-        location.href = `/index.html?cat=${encodeURIComponent(a.dataset.cat)}#products`;
+      if (typeof window.PL_setCat === 'function') {
+        e.preventDefault();
+        window.PL_setCat(a.dataset.cat === 'همه' ? '' : a.dataset.cat);
       }
     });
   }
@@ -480,11 +486,16 @@ const PG = (function () {
     if (!Array.isArray(cats) || !cats.length) return;
     PG.CATS = cats;
 
+    // مقصد همان چیزی است که در HTML ثابت هم نوشته شده: صفحه‌ی فهرستِ کامل.
+    // اگر این دو با هم فرق کنند، لینک قبل و بعد از رسیدنِ پاسخِ سرور دو جای
+    // متفاوت می‌رود و همان باگی می‌شود که فقط روی اینترنتِ کند دیده می‌شود.
+    const catHref = (name) => `/products.html?cat=${encodeURIComponent(name)}`;
+
     const drop = document.querySelector('#catMenu .cat-dropdown');
     if (drop) {
       drop.innerHTML = cats.map(c =>
-        `<a href="index.html#products" data-cat="${esc(c.name)}" role="menuitem"><svg><use href="#${esc(c.icon)}"/></svg> ${esc(c.name)}</a>`).join('')
-        + `<a href="index.html#products" data-cat="همه" class="cat-all" role="menuitem"><svg><use href="#i-package"/></svg> نمایش همه‌ی محصولات</a>`;
+        `<a href="${catHref(c.name)}" data-cat="${esc(c.name)}" role="menuitem"><svg><use href="#${esc(c.icon)}"/></svg> ${esc(c.name)}</a>`).join('')
+        + `<a href="/products.html" data-cat="همه" class="cat-all" role="menuitem"><svg><use href="#i-package"/></svg> نمایش همه‌ی محصولات</a>`;
     }
 
     // دراور موبایل: لینک‌های بین لیبل «دسته‌بندی‌ها» تا لیبل بعدی عوض می‌شوند
@@ -494,7 +505,7 @@ const PG = (function () {
       let n = label.nextElementSibling;
       while (n && !n.classList.contains('drawer-label')) { const next = n.nextElementSibling; n.remove(); n = next; }
       label.insertAdjacentHTML('afterend', cats.map(c =>
-        `<a href="index.html?cat=${encodeURIComponent(c.name)}#products"><svg><use href="#${esc(c.icon)}"/></svg> ${esc(c.name)}</a>`).join(''));
+        `<a href="${catHref(c.name)}"><svg><use href="#${esc(c.icon)}"/></svg> ${esc(c.name)}</a>`).join(''));
     }
 
     document.dispatchEvent(new CustomEvent('pg:cats', { detail: cats }));

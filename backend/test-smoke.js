@@ -635,6 +635,29 @@ function shutdown(code) {
     const catDelBusy = await api('DELETE', `/admin/categories/${busyCat.id}`);
     check('V8 categories: in-use category is protected (409)', catDelBusy.status === 409);
 
+    // The public categories endpoint feeds the header menu and the homepage
+    // tiles. It must describe the site as a visitor sees it - nothing more.
+    //
+    // Both of these were real leaks: the count included unpublished drafts, so
+    // the menu advertised 21 items in a category that showed 3, and empty
+    // leftover categories were offered to every visitor as dead links.
+    const pubCats = cats0.data.categories;
+    check('V8 categories: public counts hide unpublished drafts',
+      pubCats.every(c => !('countAll' in c)),
+      'countAll must not reach the public endpoint');
+    check('V8 categories: empty categories are not shown publicly',
+      pubCats.every(c => c.count > 0),
+      pubCats.filter(c => !c.count).map(c => c.name).join(', '));
+
+    // Cross-check against the facets endpoint, which the products page uses to
+    // build its sidebar. If these two disagree, the customer sees one number in
+    // the header menu and a different one on the page it links to.
+    const facetsRes = await api('GET', '/products/facets');
+    const facetMap = new Map((facetsRes.data.categories || []).map(c => [c.category, c.n]));
+    const mismatch = pubCats.filter(c => facetMap.get(c.name) !== c.count)
+      .map(c => `${c.name}: menu=${c.count} page=${facetMap.get(c.name)}`);
+    check('V8 categories: menu counts match the products page', mismatch.length === 0, mismatch.join(' | '));
+
     // ---------- address edit ----------
     await loginBuyer();
     const editAddr = await api('PUT', `/addresses/${addr.data.address.id}`, {
@@ -1011,9 +1034,17 @@ function shutdown(code) {
     check('V10 PWA: سرویس‌ورکر صفحه‌ی آفلاین را کش می‌کند', /offline\.html/.test(swSrc));
     check('V10 PWA: سرویس‌ورکر برای ناوبری پشتیبان آفلاین دارد',
       /req\.mode === 'navigate'/.test(swSrc));
-    // اگر نسخه‌ی کش عوض نشود، مرورگرِ مشتریِ قدیمی هیچ‌وقت offline.html را
+    // اگر نسخه‌ی کش عوض نشود، مرورگرِ مشتریِ قدیمی هیچ‌وقت فایل‌های تازه را
     // نمی‌گیرد چون activate فقط کش‌های *غیرِ* CACHE فعلی را پاک می‌کند.
-    check('V10 PWA: نسخه‌ی کش سرویس‌ورکر جلو رفته', /pg-static-v2/.test(swSrc));
+    //
+    // این عدد قبلاً روی «v2» میخکوب بود و هر بامپِ درست، تست را می‌شکست —
+    // یعنی تست به جای محافظت، جلوی کار درست را می‌گرفت. حالا جارَقه است:
+    // نسخه فقط اجازه دارد جلو برود. اگر sw.js را بامپ کردی، این کف را هم
+    // همراهش ببر بالا تا عقب‌گرد گرفته شود.
+    const SW_MIN_VERSION = 3;
+    const swVer = Number((swSrc.match(/pg-static-v(\d+)/) || [])[1] || 0);
+    check(`V10 PWA: نسخه‌ی کش سرویس‌ورکر حداقل v${SW_MIN_VERSION} است`,
+      swVer >= SW_MIN_VERSION, `الان v${swVer}`);
 
     // ============ V11: بازدیدهای اخیر ============
     // در مرورگر فقط «شناسه» ذخیره می‌شود و اطلاعات از این مسیر تازه گرفته
@@ -1574,8 +1605,23 @@ function shutdown(code) {
     check('V14 بکاپ: پوشه‌ی بکاپ وجود دارد و بکاپ روزانه دارد',
       fs.existsSync(bkDir) && fs.readdirSync(bkDir).some(f => f.endsWith('.db')),
       fs.existsSync(bkDir) ? String(fs.readdirSync(bkDir).length) : 'نیست');
-    const bkFiles = fs.readdirSync(bkDir).filter(f => f.endsWith('.db'));
-    check('V14 بکاپ: تعداد بکاپ‌ها از سقف ۱۴ بیشتر نشده', bkFiles.length <= 14, String(bkFiles.length));
+    // شمارش باید *همان* الگویی باشد که چرخش با آن کار می‌کند (`/^polasco-.*\.db$/`).
+    //
+    // قبلاً اینجا هر فایل .db شمرده می‌شد و این یک هم‌ترازیِ غلط بود: عکس‌های دستی
+    // (`manual-*`، `pre-recovery-*`، `pre-restore-*`) عمداً از چرخش بیرون‌اند —
+    // نقطه‌ی نجات‌اند و نباید خودکار پاک شوند. پس تست چیزی را می‌سنجید که کد
+    // هیچ‌وقت قرار نبود تضمینش کند و اولین بکاپ دستی آن را می‌شکست. (و شکست:
+    // با بکاپِ دستیِ رفعِ اشکالِ هزینه‌ی ارسال + بکاپِ روزانه‌ی روز بعد، شد ۱۵.)
+    const bkDaily = fs.readdirSync(bkDir).filter(f => /^polasco-.*\.db$/.test(f));
+    check('V14 بکاپ: تعداد بکاپ‌های روزانه از سقف ۱۴ بیشتر نشده', bkDaily.length <= 14, String(bkDaily.length));
+
+    // و حالا همان چیزی که بیرون از چرخش است، سقفِ خودش را دارد.
+    // چرا: «هیچ‌وقت خودکار پاک نشو» درست است، ولی یعنی هیچ‌کس هم پاکشان نمی‌کند.
+    // هر عکس، هم‌اندازه‌ی کلِ دیتابیس است و این پوشه روی درایو مانت‌شده می‌نشیند.
+    // بیست عدد یعنی «حواست باشد»، نه «خطا».
+    const bkManual = fs.readdirSync(bkDir).filter(f => f.endsWith('.db') && !/^polasco-.*\.db$/.test(f));
+    check('V14 بکاپ: عکس‌های دستی روی هم انبار نشده‌اند (دیسک پر می‌شود)',
+      bkManual.length <= 20, `${bkManual.length} manual`);
 
     // ---------- اسکریپت پاکسازی نباید انبار را باد کند ----------
     // این دو تست ثابت‌اند چون خطاشان بی‌صدا و گران است: اسکریپت پاکسازی روی

@@ -8,9 +8,9 @@ const session = require('express-session');
 
 const log = require('./lib/logger');
 const {
-  initDb, expireStaleOrders, cleanupExpired, backupNow, getProducts, getProduct,
+  initDb, expireStaleOrders, cleanupExpired, backupNow, getPublicProducts, getPublicProduct,
   bumpVisit, cleanupOldVisits, getProductReviews, getSetting, getShippingQuote,
-  closeDb, getDbHealth
+  closeDb, getDbHealth, getCategories
 } = require('./lib/db');
 const { SqliteSessionStore } = require('./lib/session-store');
 const { rateLimit } = require('./lib/middleware');
@@ -376,7 +376,7 @@ const escHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt
 // آدرس پایه‌ی سایت (SITE_URL / siteBase) بالاتر — نزدیک میدل‌ورها — تعریف شده،
 // چون بررسی مبدأ درخواست‌ها هم به همان میزبان رسمی نیاز دارد.
 app.get('/product/:id', (req, res) => {
-  const product = getProduct(Number(req.params.id));
+  const product = getPublicProduct(Number(req.params.id));
   if (!product) {
     return res.status(410).sendFile(path.join(FRONTEND_DIR, 'product-gone.html'));
   }
@@ -570,7 +570,7 @@ Sitemap: ${base}/sitemap.xml
 // نقشه‌ی سایت داینامیک — صفحه‌ی اصلی + همه‌ی محصولات (برای سئو)
 // نکته: باید قبل از express.static باشد تا جای فایل sitemap.xml قدیمی را بگیرد
 app.get('/sitemap.xml', (req, res) => {
-  const products = getProducts();
+  const products = getPublicProducts();
   const base = siteBase(req);
   const today = new Date().toISOString().slice(0, 10);
   // lastmod محصول از updated_at خودش می‌آید نه «امروز». تاریخِ امروز روی همه‌ی
@@ -600,8 +600,23 @@ app.get('/sitemap.xml', (req, res) => {
     ? `<image:image><image:loc>${escHtml(base + encodeURI(p.image))}</image:loc><image:title>${escHtml(p.title)}</image:title></image:image>`
     : '';
 
+  // صفحه‌ی فهرست و صفحه‌های دسته.
+  //
+  // چرا فقط دسته و نه بقیه‌ی فیلترها: ترکیبِ قیمت/موجودی/مرتب‌سازی ده‌ها آدرس
+  // با محتوای تقریباً یکسان می‌سازد. اگر آن‌ها را هم اینجا بیاوریم، گوگل
+  // بودجه‌ی خزشش را روی نسخه‌های تکراری خرج می‌کند و صفحه‌ی خودِ محصول‌ها
+  // دیرتر ایندکس می‌شوند. همان چیزی که فرانت هم با noindex روی همان ترکیب‌ها
+  // اعلام می‌کند — این دو باید یک حرف بزنند.
+  //
+  // دسته‌ی خالی هم نمی‌آید: getCategories فقط دسته‌هایی را برمی‌گرداند که
+  // کالای منتشرشده دارند، پس آدرسِ «صفحه‌ی خالی» به گوگل داده نمی‌شود.
+  const catUrls = getCategories().map(c =>
+    `  <url><loc>${base}/products.html?cat=${encodeURIComponent(c.category)}</loc><lastmod>${homeLastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>`);
+
   const urls = [
     `  <url><loc>${base}/</loc><lastmod>${homeLastmod}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>`,
+    `  <url><loc>${base}/products.html</loc><lastmod>${homeLastmod}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>`,
+    ...catUrls,
     `  <url><loc>${base}/terms.html</loc><lastmod>${termsLastmod}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>`,
     ...products.map(p =>
       `  <url><loc>${base}/product/${p.id}</loc><lastmod>${lastmodOf(p)}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority>${imageTag(p)}</url>`)

@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const {
   stmtUserById, getAllOrders, adminSetOrderStatus, getAdminStats, getAllUsers,
   getProducts, getProduct, adminUpdateProduct, adminCreateProduct, adminDeleteProductTx, ensureAdmin, setStaff,
+  setProductPublished, getDraftSummary,
   getAdminOverview, getSalesSeries, getMonthlySales, getTopProducts, getTopCustomers, getCategoryShare,
   getLowStock, getWishedOutOfStock, queryOrders, getOrderStatusCounts, getOrderForAdmin,
   adminCancelOrderTx, adminAcceptReturnTx, setOrderNote, setOrderTracking, adminBulkProductsTx,
@@ -29,6 +30,7 @@ const { rateLimit, asyncHandler } = require('../lib/middleware');
 const { isAdminPhone, normalizePhone, isValidIranPhone } = require('../lib/phone');
 const { notifyCustomerOrderStatus, notifyStockAvailable } = require('../lib/sms');
 const { imageSizeFromBuffer } = require('../lib/imagesize');
+const { stripImageMetadata } = require('../lib/image-clean');
 const { errorDigest } = require('../lib/error-digest');
 
 const log = require('../lib/logger');
@@ -681,7 +683,36 @@ router.get('/export/inventory.csv', (req, res) => {
 
 // ---------- محصولات / انبار ----------
 router.get('/products', (req, res) => {
-  res.json({ products: getProducts() });
+  // پنل *همه‌چیز* را می‌بیند، از جمله پیش‌نویس‌ها. خلاصه‌ی پیش‌نویس‌ها همراهش
+  // می‌رود تا پنل بتواند نوار «۸۸ پیش‌نویس منتشرنشده داری» را نشان بدهد —
+  // وگرنه محصولی که وارد شده ولی منتشر نشده، سال‌ها همان‌جا می‌ماند و کسی
+  // نمی‌فهمد چرا در سایت نیست.
+  res.json({ products: getProducts(), ...getDraftSummary() });
+});
+
+// ---------- انتشار / برداشتن یک محصول ----------
+// مسیرِ جدا از PUT /products/:id — دلیلش در lib/db.js کنار setProductPublished
+// نوشته شده: تا «ذخیره‌ی سریع» نتواند ناخواسته محصولی را از سایت بردارد.
+router.post('/products/:id/published', (req, res) => {
+  const id = Number(req.params.id);
+  const existing = getProduct(id);
+  if (!existing) return res.status(404).json({ error: 'محصول پیدا نشد' });
+
+  const on = req.body?.published === true || req.body?.published === 1 || req.body?.published === '1';
+
+  // نگهبانِ اشتباهِ رایج: محصولی که عکس ندارد، در فهرست با جانشینِ آیکونی نمایش
+  // داده می‌شود — که برای یکی دو قلم قابل قبول است ولی مدیر باید آگاهانه انتخابش
+  // کند، نه اینکه بعداً در سایت ببیند. با force=true رد می‌شود.
+  if (on && !existing.image && req.body?.force !== true) {
+    return res.status(409).json({
+      error: 'این محصول عکس ندارد؛ اگر مطمئنی، دوباره با تأیید بفرست',
+      needsConfirm: true, reason: 'no_image'
+    });
+  }
+
+  setProductPublished(id, on);
+  note(req, on ? 'product_publish' : 'product_unpublish', `#${id}`, existing.title);
+  res.json({ ok: true, published: on ? 1 : 0, product: getProduct(id) });
 });
 
 // نمای انبار: محصولات + تعداد فروش + درآمد + تعداد علاقه‌مندی
@@ -846,11 +877,12 @@ router.delete('/products/:id', (req, res) => {
 });
 
 // ---------- ویرایش گروهی محصولات ----------
-const BULK_OPS = ['set_stock', 'add_stock', 'price_pct', 'set_category', 'set_badge', 'clear_badge', 'discount', 'discount_end'];
+const BULK_OPS = ['set_stock', 'add_stock', 'price_pct', 'set_category', 'set_badge', 'clear_badge', 'discount', 'discount_end', 'publish', 'unpublish'];
 const BULK_LABEL = {
   set_stock: 'موجودی ثابت', add_stock: 'افزودن به موجودی', price_pct: 'تغییر درصدی قیمت',
   set_category: 'تغییر دسته', set_badge: 'گذاشتن نشان', clear_badge: 'برداشتن نشان',
-  discount: 'اجرای تخفیف', discount_end: 'پایان تخفیف'
+  discount: 'اجرای تخفیف', discount_end: 'پایان تخفیف',
+  publish: 'انتشار در سایت', unpublish: 'برداشتن از سایت'
 };
 router.post('/products/bulk', (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.slice(0, 500) : [];
@@ -874,6 +906,20 @@ router.post('/products/bulk', (req, res) => {
     const pct = Number(value);
     if (!Number.isInteger(pct) || pct < 1 || pct > 90) {
       return res.status(400).json({ error: 'درصد تخفیف باید عددی درست بین ۱ تا ۹۰ باشد' });
+    }
+  }
+
+  // انتشارِ گروهیِ محصولِ بی‌عکس: همان نگهبانِ مسیرِ تکی، اینجا هم لازم است.
+  // بدون این، «انتخابِ همه ← انتشار» در یک کلیک ده‌ها صفحه‌ی خالی روی سایت
+  // می‌آورد و گوگل همه را ایندکس می‌کند — پاک‌کردنشان از نتایج ماه‌ها طول
+  // می‌کشد. سمتِ سرور است نه فقط فرانت، چون فرانت قابلِ دورزدن است.
+  if (op === 'publish' && value !== 'force') {
+    const noImage = ids.filter(id => { const p = getProduct(Number(id)); return p && !p.image; });
+    if (noImage.length) {
+      return res.status(409).json({
+        error: `${noImage.length} تا از این کالاها عکس ندارند؛ اگر مطمئنی، دوباره با تأیید بفرست`,
+        needsConfirm: true, reason: 'no_image', count: noImage.length
+      });
     }
   }
 
@@ -995,12 +1041,26 @@ router.post('/upload-image',
       });
     }
 
+    // فرادادهٔ پنهان را قبل از رسیدن به دیسک پاک کن.
+    //
+    // چرا لازم است: عکسی که با گوشی از کالا گرفته می‌شود، مختصات GPS محلِ
+    // عکس‌برداری را داخل خودش دارد. یعنی از دلِ عکسِ یک سطلِ پلاستیکی
+    // می‌شود آدرسِ مغازه را درآورد. این هیچ‌وقت عمداً منتشر نشده.
+    //
+    // چرا اینجا و نه موقعِ نمایش: فایلِ روی دیسک از چند راه سرو می‌شود
+    // (استاتیک، نسخه‌ی WebP، پشتیبان). تنها جایی که همه از آن رد می‌شوند
+    // همین‌جاست. پاک‌کردن در لحظه‌ی نمایش یعنی نسخه‌ی خامِ فایل همچنان
+    // روی سرور مانده است.
+    const cleaned = stripImageMetadata(req.body, ext);
+
     fs.mkdirSync(PRODUCTS_PICTURE_DIR, { recursive: true });
     const name = `p-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
-    fs.writeFileSync(path.join(PRODUCTS_PICTURE_DIR, name), req.body);
+    fs.writeFileSync(path.join(PRODUCTS_PICTURE_DIR, name), cleaned.buf);
     // نوشتن روی دیسک باید ردپا داشته باشد؛ اگر روزی فایل ناخواسته‌ای پیدا شد
     // باید بشود فهمید چه کسی و کِی آن را گذاشته.
-    note(req, 'image_upload', name, `${Math.round(req.body.length / 1024)}KB — ${dim.width}×${dim.height}`);
+    note(req, 'image_upload', name,
+      `${Math.round(cleaned.buf.length / 1024)}KB — ${dim.width}×${dim.height}` +
+      (cleaned.removed ? ` — ${cleaned.removed} بایت فراداده پاک شد` : ''));
     // ابعاد برگردانده می‌شود تا فرانت بتواند width/height بنویسد و صفحه بعدِ
     // لودِ عکس نپرد (همان چیزی که گوگل با نامِ CLS اندازه می‌گیرد).
     res.json({

@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-  getProduct, createOrderTx, getOrder, getUserOrders,
+  getPublicProduct, createOrderTx, getOrder, getUserOrders,
   markOrderPaid, markOrderFailedTx, stmtSetAuthority, getAddress,
   getShippingQuote, userCancelOrderTx, userRequestReturn, getSetting, quoteCoupon, getUserPhone,
   getOrderForGuest
@@ -17,7 +17,7 @@ const router = express.Router();
 function buildOrderItemsFromCart(cart) {
   const items = (cart || [])
     .map(entry => {
-      const product = getProduct(entry.productId);
+      const product = getPublicProduct(entry.productId);
       if (!product) return null;
       const qty = Math.max(1, parseInt(entry.qty, 10) || 1);
       return { productId: product.id, title: product.title, price: product.price, qty };
@@ -211,7 +211,7 @@ router.post('/:id/reorder', requireAuth,
     for (const item of (order.items || []).slice(0, MAX_DISTINCT_ITEMS)) {
       // قیمت و موجودی از دیتابیسِ امروز خوانده می‌شود، نه از عکسِ داخل سفارش:
       // ممکن است کالا حذف شده، ناموجود شده یا قیمتش عوض شده باشد.
-      const product = getProduct(item.productId);
+      const product = getPublicProduct(item.productId);
       if (!product) { skipped.push({ title: item.title, reason: 'حذف شده' }); continue; }
       if (product.stock <= 0) { skipped.push({ title: product.title, reason: 'ناموجود' }); continue; }
       const qty = Math.min(

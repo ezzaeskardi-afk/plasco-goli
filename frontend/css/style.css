@@ -1226,6 +1226,32 @@ a.cart-row-title:hover{color:var(--teal);}
 .ad-waiting{color:var(--gold);font-weight:800;}
 .ad-onsale{color:var(--pink);font-weight:800;}
 
+/* ---- پیش‌نویس: محصولی که در انبار هست ولی روی سایت نیست ----
+   ردیفِ پیش‌نویس عمداً کم‌رنگ *نمی‌شود*. کم‌رنگ‌کردن یعنی «غیرفعال، کاری
+   با من نداشته باش»، در حالی که این ردیف‌ها دقیقاً همان‌هایی‌اند که مدیر
+   باید سراغشان برود. به‌جایش یک نوارِ زردِ کناری می‌گیرند: در فهرستِ صد
+   ردیفی از گوشه‌ی چشم پیدا می‌شوند، ولی متن‌شان کامل خوانا می‌ماند. */
+.ad-table tr.is-draft td:first-child{box-shadow:inset 3px 0 0 var(--gold);}
+.ad-draft-tag{
+  font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:999px;
+  background:var(--gold-tint);color:var(--gold);vertical-align:middle;
+  margin-inline-start:6px;white-space:nowrap;
+}
+.ad-noimg{color:var(--coral);font-weight:700;}
+.icon-btn.act-pub.on{color:var(--gold);}
+
+/* بنرِ یادآورِ پیش‌نویس‌ها */
+.ad-draft-note{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin:0 0 14px;padding:11px 14px;border-radius:14px;
+  background:var(--gold-tint);border:1.5px solid var(--gold);
+  font-size:13px;color:var(--ink);
+}
+.ad-draft-note svg{width:18px;height:18px;color:var(--gold);flex:none;}
+.ad-draft-note span{flex:1;min-width:180px;}
+.ad-draft-note b{color:var(--gold);}
+
+
 /* «موجود شد خبرم کن» روی صفحه‌ی محصول ناموجود */
 .notify-me-wrap{margin-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .notify-me-wrap small{font-size:11.5px;color:var(--ink-soft);}
@@ -3201,3 +3227,185 @@ table.ad-table tbody tr:last-child td{border-bottom:0;}
 }
 .invoice-sheet .inv-foot p{margin:0 0 4px;}
 .invoice-sheet .inv-thanks{margin-top:10px;font-size:11pt;color:#111;font-weight:700;}
+
+/* ============================================================
+   صفحه‌ی «همه‌ی محصولات» (products.html)
+   ------------------------------------------------------------
+   چیدمان: ستونِ فیلتر در کنار، شبکه‌ی کالاها در وسط. زیر ۹۶۰px
+   ستونِ فیلتر از جریانِ صفحه بیرون می‌رود و به کشوی کناری تبدیل
+   می‌شود — نه اینکه بالای فهرست بنشیند و مشتری مجبور شود از روی
+   شش تا فیلتر رد شود تا به اولین کالا برسد.
+   ============================================================ */
+.pl-layout{
+  display:grid;grid-template-columns:250px 1fr;gap:28px;
+  align-items:start;padding-bottom:64px;
+}
+
+/* ---- ستون فیلترها ---- */
+.pl-side{
+  position:sticky;top:96px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--radius-md);
+  padding:18px;box-shadow:var(--shadow-sm);
+}
+.pl-side-head{display:none;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.pl-side-head b{font-size:15px;}
+.pl-fset{padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--line);}
+.pl-fset:last-of-type{border-bottom:none;padding-bottom:4px;margin-bottom:4px;}
+.pl-fset h3{font-size:13px;font-weight:800;margin:0 0 10px;color:var(--ink-soft);letter-spacing:.2px;}
+
+.pl-cats{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;}
+.pl-cat{
+  width:100%;display:flex;align-items:center;gap:9px;
+  padding:9px 10px;border-radius:11px;border:none;cursor:pointer;
+  background:transparent;color:var(--ink);font-family:inherit;font-size:13px;
+  text-align:start;transition:background .18s ease, color .18s ease;
+}
+.pl-cat svg{width:17px;height:17px;flex:none;color:var(--ink-soft);transition:color .18s ease;}
+.pl-cat span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pl-cat b{font-size:11.5px;font-weight:700;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+.pl-cat:hover{background:rgba(237,246,241,.06);}
+.pl-cat.on{background:var(--teal);color:var(--ink-on-warm);font-weight:800;}
+.pl-cat.on svg,.pl-cat.on b{color:var(--ink-on-warm);}
+
+.pl-price{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.pl-price label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--ink-soft);}
+.pl-price input{
+  width:100%;padding:9px 10px;border-radius:10px;
+  border:1.5px solid var(--line-control);background:var(--surface-2);
+  color:var(--ink);font-family:inherit;font-size:13px;
+}
+.pl-price input:focus{outline:none;border-color:var(--teal);}
+.pl-price-apply{width:100%;margin-top:9px;justify-content:center;}
+.pl-price-hint{font-size:11px;color:var(--ink-soft);margin:8px 0 0;line-height:1.7;}
+
+.pl-check{display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer;}
+.pl-check input{width:17px;height:17px;accent-color:var(--teal);cursor:pointer;}
+.pl-reset{width:100%;margin-top:14px;justify-content:center;}
+
+/* ---- نوار بالای فهرست ---- */
+.pl-bar{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  margin-bottom:16px;scroll-margin-top:90px;
+}
+.pl-count{flex:1;min-width:150px;font-size:13px;color:var(--ink-soft);}
+.pl-count b{color:var(--ink);font-weight:800;}
+.pl-sort{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
+.pl-sort select{
+  padding:8px 11px;border-radius:10px;border:1.5px solid var(--line-control);
+  background:var(--surface-2);color:var(--ink);font-family:inherit;font-size:12.5px;cursor:pointer;
+}
+.pl-sort select:focus{outline:none;border-color:var(--teal);}
+.pl-filter-btn{display:none;align-items:center;gap:7px;}
+.pl-filter-btn svg{width:16px;height:16px;}
+.pl-fcount{
+  min-width:19px;height:19px;padding:0 5px;border-radius:999px;
+  background:var(--teal);color:var(--ink-on-warm);
+  font-size:11px;font-weight:800;display:inline-grid;place-items:center;
+}
+
+/* ---- تراشه‌های فیلترِ فعال ---- */
+.pl-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
+.pl-chip{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:6px 12px;border-radius:999px;cursor:pointer;
+  background:rgba(28,201,173,.12);border:1px solid rgba(28,201,173,.4);
+  color:var(--ink);font-family:inherit;font-size:12px;font-weight:700;
+  transition:background .18s ease;
+}
+.pl-chip:hover{background:rgba(28,201,173,.22);}
+.pl-chip span[aria-hidden]{opacity:.65;font-size:11px;}
+
+/* ---- شبکه‌ی کالاها ----
+   سه ستون (نه چهارتای صفحه‌ی اصلی) چون ستونِ فیلتر عرض می‌گیرد. */
+.pl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;}
+.pl-media{cursor:pointer;}
+/* لینکِ پهن‌شده روی عکس: کلِ کادر قابلِ کلیک می‌شود ولی دکمه‌ی
+   علاقه‌مندی رویش می‌ماند. تودرتوکردنِ <button> در <a> اینجا HTML
+   نامعتبر می‌ساخت و در بعضی مرورگرها قلب اصلاً کلیک نمی‌شد. */
+.pl-media-link{position:absolute;inset:0;z-index:2;}
+.pl-media .wish-btn{z-index:3;}
+
+/* ---- اسکلتِ بارگذاری ---- */
+.pl-skel{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-md);overflow:hidden;padding-bottom:16px;
+}
+.pl-skel-media{aspect-ratio:1/1;background:rgba(237,246,241,.05);}
+.pl-skel-line{
+  height:12px;margin:14px 16px 0;border-radius:6px;
+  background:linear-gradient(90deg, rgba(237,246,241,.05) 25%, rgba(237,246,241,.11) 50%, rgba(237,246,241,.05) 75%);
+  background-size:200% 100%;animation:plShimmer 1.4s linear infinite;
+}
+.pl-skel-line.short{width:52%;}
+@keyframes plShimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.pl-skel-line{animation:none;}}
+
+/* ---- حالت خالی / خطا ---- */
+.pl-empty{
+  grid-column:1/-1;text-align:center;padding:56px 24px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);
+}
+.pl-empty svg{width:44px;height:44px;color:var(--ink-soft);opacity:.6;margin-bottom:14px;}
+.pl-empty b{display:block;font-size:16px;margin-bottom:7px;}
+.pl-empty p{font-size:13.5px;color:var(--ink-soft);margin:0 0 18px;}
+
+/* ---- صفحه‌بندی ---- */
+.pl-pager{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;margin-top:34px;}
+.pl-page{
+  min-width:40px;height:40px;padding:0 12px;border-radius:11px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line);color:var(--ink);
+  font-family:inherit;font-size:13.5px;font-weight:700;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  font-variant-numeric:tabular-nums;
+  transition:background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.pl-page svg{width:15px;height:15px;}
+.pl-page:hover:not(:disabled):not(.on){background:rgba(237,246,241,.07);border-color:var(--line-strong);}
+.pl-page.on{background:var(--teal);border-color:var(--teal);color:var(--ink-on-warm);cursor:default;}
+.pl-page:disabled{opacity:.34;cursor:not-allowed;}
+.pl-gap{color:var(--ink-soft);padding:0 3px;}
+
+.pl-backdrop{position:fixed;inset:0;z-index:70;background:rgba(4,9,7,.62);backdrop-filter:blur(3px);}
+
+.sr-only{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;
+}
+
+@media (max-width:1180px){
+  .pl-layout{grid-template-columns:225px 1fr;gap:22px;}
+  .pl-grid{gap:18px;}
+}
+@media (max-width:960px){
+  /* زیر این عرض، ستونِ فیلتر کشوی کناری می‌شود */
+  .pl-layout{grid-template-columns:1fr;}
+  .pl-side{
+    position:fixed;z-index:71;inset-block:0;inset-inline-end:0;
+    width:min(320px,86vw);border-radius:0;overflow-y:auto;
+    transform:translateX(105%);transition:transform .28s cubic-bezier(.22,.8,.3,1);
+  }
+  html[dir="rtl"] .pl-side{transform:translateX(-105%);}
+  .pl-side.open,html[dir="rtl"] .pl-side.open{transform:none;}
+  .pl-side-head{display:flex;}
+  .pl-filter-btn{display:inline-flex;}
+  .pl-grid{grid-template-columns:repeat(3,1fr);}
+}
+@media (prefers-reduced-motion:reduce){.pl-side{transition:none;}}
+@media (max-width:760px){.pl-grid{grid-template-columns:repeat(2,1fr);gap:14px;}}
+@media (max-width:420px){
+  .pl-grid{grid-template-columns:1fr;}
+  .pl-sort{width:100%;}
+  .pl-sort select{flex:1;}
+}
+
+/* لینکِ «همه را ببین» زیر دکمه‌ی نمایش بیشتر (از صفحه‌ی دوم به بعد) */
+.see-all-link{
+  display:block;width:max-content;margin:12px auto 0;
+  color:var(--teal);font-size:13.5px;font-weight:700;
+  text-decoration:none;border-bottom:1px solid transparent;
+  transition:border-color .18s ease;
+}
+.see-all-link:hover{border-bottom-color:var(--teal);}
+
+/* شمارنده‌ی پیش‌نویسِ دسته در پنل — طلایی، هم‌رنگِ بقیه‌ی نشانه‌های پیش‌نویس */
+.cat-count .cat-draft{color:var(--gold);font-style:normal;font-weight:700;font-size:11.5px;}

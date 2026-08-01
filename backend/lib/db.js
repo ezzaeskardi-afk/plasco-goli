@@ -317,6 +317,21 @@ if (!productCols.includes('title_fold')) db.exec(`ALTER TABLE products ADD COLUM
 // عدد واقعیِ قبلی را ببیند؛ درصد از روی همین دو عدد حساب می‌شود و قابل جعل نیست.
 if (!productCols.includes('old_price')) db.exec('ALTER TABLE products ADD COLUMN old_price INTEGER NOT NULL DEFAULT 0');
 
+// «منتشر شده» — پیش‌نویس در برابر عمومی.
+//
+// چرا لازم شد: وقتی می‌خواهی ده‌ها محصول را یک‌جا وارد کنی، تا قبل از آماده شدن
+// عکس و قیمتِ واقعی نباید جلوی چشم مشتری باشند. بدون این ستون تنها راه، «موجودی
+// صفر» بود که یعنی سایت پر از کارتِ «ناموجود» — ظاهرِ فروشگاهِ خالی.
+//
+// پیش‌فرض ۱ است، پس هم محصولات فعلی و هم هر محصولی که پنل ادمین بسازد مثل قبل
+// عمومی‌اند و هیچ رفتاری عوض نمی‌شود. فقط واردکردنِ دسته‌جمعی عمداً ۰ می‌گذارد.
+if (!productCols.includes('published')) db.exec('ALTER TABLE products ADD COLUMN published INTEGER NOT NULL DEFAULT 1');
+// «دسته‌ی واردات» — نشانه‌ای که می‌گوید این سطر از کدام اجرای اسکریپتِ واردات آمده.
+// خالی یعنی دستی ساخته شده. با همین یک ستون، یک وارداتِ اشتباه با یک کوئری
+// (DELETE FROM products WHERE import_batch = '...') کامل برمی‌گردد.
+if (!productCols.includes('import_batch')) db.exec("ALTER TABLE products ADD COLUMN import_batch TEXT NOT NULL DEFAULT ''");
+db.exec('CREATE INDEX IF NOT EXISTS idx_products_published ON products(published, id DESC)');
+
 // نرمال‌سازی متن فارسی برای جستجو — «ي» عربی، «ك» عربی، نیم‌فاصله و... یکدست می‌شوند
 // تا مشتری با هر صفحه‌کلیدی که تایپ کند، جنس را پیدا کند.
 function normFaText(s) {
@@ -495,8 +510,21 @@ function initDb(log = console) {
 const stmtAllProducts = db.prepare('SELECT * FROM products ORDER BY id');
 const stmtProductById = db.prepare('SELECT * FROM products WHERE id = ?');
 
+// دو خانواده‌ی جدا و عمداً هم‌نام‌نبودنشان مهم است:
+//
+//   getProducts / getProduct        → *همه‌چیز*، برای پنل ادمین
+//   getPublicProducts / getPublicProduct → فقط منتشرشده‌ها، برای مشتری
+//
+// اگر یکی بودند، اولین جایی که یادمان می‌رفت شرط را بگذاریم، پیش‌نویس‌ها را
+// لو می‌داد. با دو نام جدا، هر بار که در یک روتِ عمومی نام بدونِ Public دیده
+// شود، خودش یک پرچم قرمز در بازبینی کد است.
+const stmtPublicProducts = db.prepare('SELECT * FROM products WHERE published = 1 ORDER BY id');
+const stmtPublicProductById = db.prepare('SELECT * FROM products WHERE id = ? AND published = 1');
+
 function getProducts() { return stmtAllProducts.all(); }
 function getProduct(id) { return stmtProductById.get(Number(id)); }
+function getPublicProducts() { return stmtPublicProducts.all(); }
+function getPublicProduct(id) { return stmtPublicProductById.get(Number(id)); }
 
 // ---------- امضای کاتالوگ (برای ETag) ----------
 // یک رشته‌ی کوتاه که با هر تغییر واقعیِ کاتالوگ عوض می‌شود:
@@ -504,8 +532,11 @@ function getProduct(id) { return stmtProductById.get(Number(id)); }
 //  s = مجموع موجودی (فروش یا برگشت موجودی).
 // هزینه‌اش یک کوئری تجمیعیِ ناچیز است، ولی باعث می‌شود مرورگرها به‌جای دانلود
 // دوباره‌ی کل لیست، پاسخ ۳۰۴ بگیرند.
+// فقط روی سطرهای منتشرشده حساب می‌شود: چیزی که مشتری نمی‌بیند نباید کش مرورگرِ
+// او را باطل کند، ولی *منتشر کردن* یا *پنهان کردن* یک محصول باید فوراً باطلش کند
+// — و چون COUNT(*) عوض می‌شود، می‌کند.
 const stmtCatalogSig = db.prepare(
-  "SELECT COUNT(*) AS n, COALESCE(MAX(updated_at),'') AS m, COALESCE(SUM(stock),0) AS s FROM products"
+  "SELECT COUNT(*) AS n, COALESCE(MAX(updated_at),'') AS m, COALESCE(SUM(stock),0) AS s FROM products WHERE published = 1"
 );
 function getCatalogSignature() {
   const r = stmtCatalogSig.get();
@@ -513,8 +544,23 @@ function getCatalogSignature() {
   return `${r.n}.${String(r.m).replace(/\D/g, '')}.${r.s}.r${getSetting('reviews_rev') || 0}`;
 }
 
+// شمارشِ کنارِ هر دسته باید *دقیقاً* همان چیزی باشد که مشتری بعد از کلیک می‌بیند.
+// اگر پیش‌نویس‌ها را بشمارد، روی فیلتر می‌نویسد «سبد (۱۸)» و بعد ۶ تا نشان می‌دهد.
+// دسته‌های *دیده‌شدنی* با شمارش. LEFT JOIN به جدولِ categories عمدی است:
+// آیکون از آنجا می‌آید، ولی اگر دسته‌ای در جدول نبود (محصولی با دسته‌ی
+// تایپ‌شده) هم از فهرست نمی‌افتد — فقط آیکونِ پیش‌فرض می‌گیرد. ترتیب هم از
+// sortِ خودِ جدول است تا فهرستِ فیلترِ سایت با ترتیبی که مدیر در پنل چیده
+// یکی باشد؛ ترتیبِ «پرتعدادترین اول» با هر انتشار جابه‌جا می‌شد و مشتری
+// هر بار دسته را جای دیگری پیدا می‌کرد.
 function getCategories() {
-  return db.prepare('SELECT category, COUNT(*) AS n FROM products GROUP BY category ORDER BY n DESC').all();
+  return db.prepare(`
+    SELECT p.category AS category, COUNT(*) AS n,
+           COALESCE(c.icon, 'i-package') AS icon
+    FROM products p LEFT JOIN categories c ON c.name = p.category
+    WHERE p.published = 1
+    GROUP BY p.category
+    ORDER BY COALESCE(c.sort, 9999), n DESC`
+  ).all();
 }
 
 // ---------- جستجو/فیلتر/مرتب‌سازی سمت سرور ----------
@@ -584,7 +630,9 @@ function fuzzyProductIds(q, cap = MAX_PAGE_SIZE) {
   const fq = foldFaText(q).slice(0, 60);
   if (fq.length < 2) return [];
   const qTokens = fq.split(' ').filter(t => t.length >= 2);
-  const rows = db.prepare(`SELECT id, title, title_fold, stock FROM products LIMIT ${FUZZY_SCAN_CAP}`).all();
+  const rows = db.prepare(
+    `SELECT id, title, title_fold, stock FROM products WHERE published = 1 LIMIT ${FUZZY_SCAN_CAP}`
+  ).all();
 
   const scored = [];
   for (const p of rows) {
@@ -633,6 +681,12 @@ function queryProducts(opts = {}) {
   // باید دوباره و بدون شرط متن اعمال شوند (دسته و قیمت هنوز باید محترم باشند).
   const base = [];
   const baseArgs = [];
+
+  // پیش‌نویس‌ها هرگز در نتیجه‌ی عمومی نمی‌آیند. این شرط عمداً *اول* همه و داخل
+  // `base` است، نه `where`: مسیر «نتیجه‌ی نزدیک» فقط `base` را دوباره اعمال
+  // می‌کند، پس اگر اینجا نبود، جست‌وجوی فازی از کنارش رد می‌شد و پیش‌نویس‌ها را
+  // لو می‌داد — دقیقاً همان‌جایی که کسی فکرش را نمی‌کند.
+  if (!opts.includeUnpublished) base.push('published = 1');
 
   if (opts.category && opts.category !== 'all') {
     base.push('category = ?');
@@ -698,7 +752,9 @@ function queryProducts(opts = {}) {
 
 // بازه‌ی قیمت و دسته‌بندی‌ها برای ساختن فیلترها بدون دانلود کل کاتالوگ
 function getCatalogFacets() {
-  const r = db.prepare('SELECT COALESCE(MIN(price),0) AS min, COALESCE(MAX(price),0) AS max FROM products').get();
+  const r = db.prepare(
+    'SELECT COALESCE(MIN(price),0) AS min, COALESCE(MAX(price),0) AS max FROM products WHERE published = 1'
+  ).get();
   return { minPrice: r.min, maxPrice: r.max, categories: getCategories() };
 }
 
@@ -987,11 +1043,33 @@ const PAID_SET = "('paid','shipped','delivered','return_requested')";
 // باشد و طرف دیگر نه، سفارش‌های بین ۰۰:۰۰ تا ۰۳:۳۰ بامداد از «فروش امروز»
 // می‌افتند بیرون در حالی که نمودار فروش (که localtime دارد) نشانشان می‌دهد —
 // یعنی عدد کارت و ستون نمودار با هم نمی‌خواندند. هر دو طرف باید localtime باشد.
+// ---------- مرزهای روز، به وقتِ محلی، ولی در قالبِ UTC ----------
+// created_at با datetime('now') ذخیره می‌شود، یعنی UTC. «امروز» اما برای فروشنده
+// یعنی امروزِ تهران. این تابع نیمه‌شبِ *محلی* را می‌سازد و همان لحظه را به رشته‌ی
+// UTC برمی‌گرداند — دقیقاً همان قالبی که در ستون است.
+//
+// چرا این کار جای date(created_at,'localtime') را گرفت — مهم‌ترین نکته‌ی این فایل:
+// وقتی ستون داخل تابع پیچیده شود، SQLite دیگر نمی‌تواند از ایندکس استفاده کند و
+// مجبور است تابع را برای *تک‌تک* سطرها صدا بزند. با EXPLAIN QUERY PLAN اندازه
+// گرفته شد:
+//     date(created_at,'localtime')=date('now','localtime')
+//       → SEARCH orders USING COVERING INDEX idx_orders_status (status=?)   ۳٫۸۳ms
+//     created_at >= ? AND created_at < ?
+//       → SEARCH ... (status=? AND created_at>? AND created_at<?)           ۰٫۰۱ms
+// یعنی ۳۸۰ برابر. و چون node:sqlite همگام است، این میلی‌ثانیه‌ها فقط داشبورد را
+// کند نمی‌کنند — کل سرور را برای همان مدت قفل می‌کنند و مشتری‌ای که همان لحظه
+// سبد خریدش را باز کرده، پشت آن صف می‌ایستد.
+function localDayStartUtc(offsetDays = 0) {
+  const n = new Date();
+  const d = new Date(n.getFullYear(), n.getMonth(), n.getDate() + offsetDays, 0, 0, 0, 0);
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 const stmtStats = db.prepare(`SELECT
-  (SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ${PAID_SET} AND date(created_at,'localtime')=date('now','localtime')) AS today_sales,
-  (SELECT COUNT(*)               FROM orders WHERE status IN ${PAID_SET} AND date(created_at,'localtime')=date('now','localtime')) AS today_orders,
-  (SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ${PAID_SET} AND date(created_at,'localtime')>=date('now','localtime','-6 days')) AS week_sales,
-  (SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ${PAID_SET} AND date(created_at,'localtime')>=date('now','localtime','-29 days')) AS month_sales,
+  (SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ${PAID_SET} AND created_at >= $dayStart AND created_at < $dayEnd) AS today_sales,
+  (SELECT COUNT(*)               FROM orders WHERE status IN ${PAID_SET} AND created_at >= $dayStart AND created_at < $dayEnd) AS today_orders,
+  (SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ${PAID_SET} AND created_at >= $weekStart) AS week_sales,
+  (SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ${PAID_SET} AND created_at >= $monthStart) AS month_sales,
   (SELECT COALESCE(SUM(total),0) FROM orders WHERE status IN ${PAID_SET}) AS total_sales,
   (SELECT COUNT(*)               FROM orders WHERE status IN ${PAID_SET}) AS total_orders,
   (SELECT COUNT(*)               FROM orders WHERE status = 'paid') AS awaiting_shipment,
@@ -1001,25 +1079,41 @@ const stmtStats = db.prepare(`SELECT
   (SELECT COUNT(*)               FROM orders WHERE status = 'canceled') AS canceled_orders,
   (SELECT COUNT(*)               FROM orders WHERE status = 'return_requested') AS return_requests,
   (SELECT COUNT(*)               FROM reviews WHERE status = 'pending') AS pending_reviews,
-  (SELECT COALESCE(SUM(n),0)     FROM visits WHERE day = date('now','localtime')) AS today_visits,
+  (SELECT COALESCE(SUM(n),0)     FROM visits WHERE day = $today) AS today_visits,
   (SELECT COUNT(*)               FROM users) AS total_users,
-  (SELECT COUNT(*)               FROM users WHERE date(created_at,'localtime')>=date('now','localtime','-6 days')) AS new_users_week,
+  (SELECT COUNT(*)               FROM users WHERE created_at >= $weekStart) AS new_users_week,
   (SELECT COUNT(*)               FROM products) AS total_products,
+  (SELECT COUNT(*)               FROM products WHERE published = 0) AS draft_products,
   (SELECT COUNT(*)               FROM products WHERE stock <= 5 AND stock > 0) AS low_stock,
   (SELECT COUNT(*)               FROM products WHERE stock = 0) AS out_of_stock,
   (SELECT COALESCE(SUM(price*stock),0) FROM products) AS inventory_value,
   (SELECT COUNT(*)               FROM wishlist) AS wish_count`);
-function getAdminStats() { return stmtStats.get(); }
+
+function getAdminStats() {
+  // مرزها در هر فراخوانی دوباره حساب می‌شوند، وگرنه سروری که چند روز بالا مانده
+  // تا ابد «امروز»ِ روزِ راه‌اندازی را گزارش می‌کند.
+  const n = new Date();
+  return stmtStats.get({
+    dayStart: localDayStartUtc(0),
+    dayEnd: localDayStartUtc(1),
+    weekStart: localDayStartUtc(-6),
+    monthStart: localDayStartUtc(-29),
+    // ستون visits.day خودش تاریخِ محلی است، پس اینجا رشته‌ی محلی می‌خواهد نه UTC
+    today: `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+  });
+}
 
 // ---------- آمار پیشرفته‌ی داشبورد ----------
 
 // فروش روزانه‌ی N روز اخیر — روزهای بدون فروش هم با صفر پر می‌شوند تا نمودار شکاف نداشته باشد
 const stmtSalesByDay = db.prepare(`
   SELECT date(created_at,'localtime') AS day, COUNT(*) AS orders, COALESCE(SUM(total),0) AS sales
-  FROM orders WHERE status IN ${PAID_SET} AND date(created_at,'localtime') >= date('now','localtime', ?)
+  FROM orders WHERE status IN ${PAID_SET} AND created_at >= ?
   GROUP BY day ORDER BY day`);
+// همان درسِ بالا: در WHERE ستون باید لخت باشد تا ایندکس کار کند. در GROUP BY
+// اما date() اشکالی ندارد، چون آنجا فقط روی سطرهای *فیلترشده* اجرا می‌شود.
 function getSalesSeries(days = 14) {
-  const rows = stmtSalesByDay.all(`-${days - 1} days`);
+  const rows = stmtSalesByDay.all(localDayStartUtc(-(days - 1)));
   const byDay = new Map(rows.map(r => [r.day, r]));
   const out = [];
   const today = new Date();
@@ -1107,17 +1201,23 @@ function getMonthlySales(months = 12) {
 
 // پرفروش‌ترین محصولات — اقلام داخل JSON سفارش‌ها را باز می‌کند (json_each در SQLite موجود است).
 // نام مستعار pid است نه id، چون خود جدول orders هم ستون id دارد و SQLite در GROUP BY گیر می‌دهد.
+//
+// پنجره‌ی زمانی عمدی: بدون آن، این کوئری JSONِ *هر* سفارشِ تاریخِ فروشگاه را باز
+// می‌کند و هزینه‌اش با عمرِ مغازه بالا می‌رود، نه با چیزی که کاربر می‌بیند. روی
+// ۳۰۳۳۳ سفارش ۵٫۲۶ میلی‌ثانیه اندازه گرفته شد. «پرفروش‌ها» هم ذاتاً یعنی
+// «اخیراً پرفروش» — پرفروشِ دو سال پیش تصمیمِ امروزِ فروشنده را عوض نمی‌کند.
+const TOP_PRODUCTS_WINDOW_DAYS = 90;
 const stmtTopProducts = db.prepare(`
   SELECT json_extract(it.value,'$.productId') AS pid,
          json_extract(it.value,'$.title')     AS title,
          SUM(json_extract(it.value,'$.qty'))  AS qty,
          SUM(json_extract(it.value,'$.qty') * json_extract(it.value,'$.price')) AS revenue
   FROM orders o, json_each(o.items) it
-  WHERE o.status IN ${PAID_SET}
-  GROUP BY pid ORDER BY qty DESC LIMIT ?`);
-function getTopProducts(limit = 8) {
+  WHERE o.status IN ${PAID_SET} AND o.created_at >= $since
+  GROUP BY pid ORDER BY qty DESC LIMIT $lim`);
+function getTopProducts(limit = 8, days = TOP_PRODUCTS_WINDOW_DAYS) {
   try {
-    return stmtTopProducts.all(limit).map(r => ({
+    return stmtTopProducts.all({ since: localDayStartUtc(-(days - 1)), lim: limit }).map(r => ({
       id: r.pid, title: r.title, qty: r.qty, revenue: r.revenue
     }));
   } catch (e) { return []; }
@@ -1331,10 +1431,32 @@ function adminSetReviewStatus(id, status) {
 }
 
 // ---------- دسته‌بندی‌ها ----------
+//
+// دو شمارنده برمی‌گردد و این عمدی است:
+//   count      → فقط کالای منتشرشده. چیزی که *سایت* نشان می‌دهد.
+//   countAll   → همه، شاملِ پیش‌نویس. چیزی که *مدیر* باید ببیند.
+//
+// چرا جدا شدند: این تابع هم به پنل می‌رود و هم به /api/shop/categories که
+// عمومی است. با یک شمارنده‌ی مشترک، منوی هدرِ سایت می‌گفت «ظروف نگهداری ۲۱»
+// در حالی که فقط ۳ تا روی سایت بود — مشتری کلیک می‌کرد و ۳ تا می‌دید.
+// بدتر از عددِ غلط این بود که خودِ عدد، وجودِ ۱۸ محصولِ منتشرنشده را لو
+// می‌داد؛ کاتالوگی که هنوز عکس ندارد و قیمت‌هایش نهایی نیست.
 function getCategoriesFull() {
-  return db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.category = c.name) AS n
+  return db.prepare(`SELECT c.*,
+      (SELECT COUNT(*) FROM products p WHERE p.category = c.name AND p.published = 1) AS n,
+      (SELECT COUNT(*) FROM products p WHERE p.category = c.name) AS n_all
     FROM categories c ORDER BY c.sort, c.id`).all()
-    .map(c => ({ id: c.id, name: c.name, icon: c.icon, sort: c.sort, count: c.n }));
+    .map(c => ({ id: c.id, name: c.name, icon: c.icon, sort: c.sort, count: c.n, countAll: c.n_all }));
+}
+
+// نسخه‌ی عمومی: دسته‌های بی‌کالا اصلاً نمی‌آیند و countAll بیرون نمی‌رود.
+//
+// حذفِ دسته‌ی خالی فقط زیبایی نیست: منوی سایت دو دسته‌ی آشغالِ «Test» و «تست»
+// را به همه‌ی بازدیدکننده‌ها نشان می‌داد که کلیک‌کردنشان به صفحه‌ی خالی می‌رسید.
+function getPublicCategories() {
+  return getCategoriesFull()
+    .filter(c => c.count > 0)
+    .map(({ id, name, icon, sort, count }) => ({ id, name, icon, sort, count }));
 }
 // اگر دسته‌ای که روی محصول تایپ شده در جدول نبود، خودکار ثبت می‌شود (با آیکون پیش‌فرض)
 function ensureCategory(name) {
@@ -1565,17 +1687,73 @@ function adminUpdateProduct(p) {
 
 const stmtNextProductId = db.prepare('SELECT COALESCE(MAX(id),0)+1 AS next FROM products');
 const stmtAdminInsertProduct = db.prepare(`INSERT INTO products
-  (id, category, icon, image, images, specs, title, title_norm, title_fold, description, price, old_price, badge, stock)
-  VALUES (@id, @category, @icon, @image, @images, @specs, @title, @title_norm, @title_fold, @description, @price, @old_price, @badge, @stock)`);
+  (id, category, icon, image, images, specs, title, title_norm, title_fold, description, price, old_price, badge, stock, published, import_batch)
+  VALUES (@id, @category, @icon, @image, @images, @specs, @title, @title_norm, @title_fold, @description, @price, @old_price, @badge, @stock, @published, @import_batch)`);
 function adminCreateProduct(p) {
   const id = stmtNextProductId.get().next;
   stmtAdminInsertProduct.run({
     ...p, id, icon: p.icon || 'i-package', old_price: Number(p.old_price) || 0,
     title_norm: normFaText(p.title), title_fold: foldFaText(p.title),
-    images: JSON.stringify(p.images || []), specs: JSON.stringify(p.specs || [])
+    images: JSON.stringify(p.images || []), specs: JSON.stringify(p.specs || []),
+    // پیش‌فرضِ ۱ عمدی است: محصولی که مدیر با دست در پنل می‌سازد، مثل همیشه فوراً
+    // روی سایت می‌آید. فقط جایی که آگاهانه `published:0` بفرستد پیش‌نویس می‌شود.
+    published: p.published === 0 || p.published === false ? 0 : 1,
+    import_batch: String(p.import_batch || '')
   });
   return getProduct(id);
 }
+
+// ---------- انتشار / پنهان‌کردن ----------
+// عمداً یک عملیاتِ *جداگانه* است و در stmtAdminUpdateProduct دست نمی‌برد.
+//
+// چرا این تفکیک مهم است: فرمِ ویرایشِ محصول و «ذخیره‌ی سریعِ جدول» هر دو به همان
+// UPDATE می‌رسند، ولی ذخیره‌ی سریع فقط قیمت و موجودی را می‌فرستد. اگر published
+// هم در آن کوئری بود، هر ذخیره‌ی سریعی که مقدارش را همراه نداشت، محصول را بی‌صدا
+// از سایت برمی‌داشت — خرابیِ ساکتی که ممکن بود هفته‌ها کسی نفهمد و فقط فروش
+// بیفتد. حالا پنهان‌کردن فقط با درخواستِ صریحِ همین مسیر ممکن است.
+const stmtSetPublished = db.prepare("UPDATE products SET published = ?, updated_at=datetime('now') WHERE id = ?");
+function setProductPublished(id, on) {
+  return stmtSetPublished.run(on ? 1 : 0, Number(id)).changes > 0;
+}
+
+// شمارشِ پیش‌نویس‌ها و دسته‌های واردات — برای اینکه پنل بتواند بگوید
+// «۸۸ پیش‌نویس داری» و مدیر یادش نرود منتشرشان کند.
+function getDraftSummary() {
+  const total = db.prepare('SELECT COUNT(*) AS n FROM products WHERE published = 0').get().n;
+  const batches = db.prepare(`SELECT import_batch AS batch, COUNT(*) AS n FROM products
+    WHERE import_batch <> '' GROUP BY import_batch ORDER BY batch DESC`).all();
+  return { drafts: total, batches };
+}
+
+// ---------- برگشت‌پذیریِ واردات ----------
+// هر واردات با import_batch مهر می‌خورد تا با *یک* دستور کامل برگردد.
+// بدون این، پس‌گرفتنِ یک واردات یعنی تشخیصِ دستیِ ۸۸ ردیف از بینِ
+// محصولاتِ واقعی — کاری که قطعاً یک جا اشتباه می‌شود و محصولِ فروخته‌شده
+// را پاک می‌کند.
+//
+// دو نگهبان اینجا هست و هیچ‌کدام تزئینی نیست:
+//   ۱) اگر حتی یکی از ردیف‌های دسته در سفارشی ثبت شده باشد، *کلِ* حذف
+//      رد می‌شود. چون snapshotِ سفارش فقط productId دارد؛ با حذفِ محصول،
+//      صفحه‌ی «سفارش‌های من» به محصولِ ناموجود لینک می‌دهد.
+//   ۲) حذف در تراکنش است: یا همه‌ی ردیف‌ها می‌روند یا هیچ‌کدام. نصفه‌کاره
+//      ماندنش بدترین حالت است — نه واردات داری نه رول‌بک.
+const stmtBatchIds = db.prepare('SELECT id FROM products WHERE import_batch = ?');
+function batchHasOrders(batch) {
+  let n = 0;
+  for (const { id } of stmtBatchIds.all(String(batch))) {
+    if (stmtProductEverOrdered.get(id, id).n > 0) n++;
+  }
+  return n;
+}
+const deleteBatch = transaction((batch) => {
+  const ids = stmtBatchIds.all(String(batch)).map(r => r.id);
+  for (const id of ids) {
+    stmtProductInWish.run(id);
+    db.prepare('DELETE FROM reviews WHERE product_id = ?').run(id);
+    stmtDeleteProduct.run(id);
+  }
+  return ids.length;
+});
 
 // حذف محصول — اگر در سفارشی ثبت شده باشد حذف نمی‌کنیم (تاریخچه‌ی مشتری‌ها حفظ شود)؛
 // به‌جایش «ناموجود» می‌شود. عملاً products در orders به‌صورت JSON snapshot است،
@@ -1631,21 +1809,37 @@ const adminBulkProductsTx = transaction(({ ids, op, value }) => {
       case 'set_category': n += stmtBulkCategory.run(String(value || '').trim().slice(0, 60), id).changes; break;
       case 'set_badge':    n += stmtBulkBadge.run(String(value || '').trim().slice(0, 30), id).changes; break;
       case 'clear_badge':  n += stmtBulkBadge.run('', id).changes; break;
+      // انتشار گروهی — بدون این، منتشرکردنِ ۸۸ پیش‌نویس یعنی ۸۸ بار باز و بسته
+      // کردن فرم. کاری که دستی طاقت‌فرسا باشد، عملاً انجام نمی‌شود.
+      case 'publish':      n += stmtSetPublished.run(1, id).changes; break;
+      case 'unpublish':    n += stmtSetPublished.run(0, id).changes; break;
       default: throw new Error('عملیات گروهی ناشناخته');
     }
   }
   return n;
 });
 
-// چند بار هر محصول فروخته شده — برای ستون «فروش» در جدول محصولات
+// چند بار هر محصول فروخته شده — برای ستون «فروش» در جدول محصولات.
+//
+// اینجا عمداً پنجره‌ی ۹۰ روزه‌ی getTopProducts اعمال *نمی‌شود*. آن پنجره برای
+// کارت «پرفروش‌های داشبورد» است که معنایش «اخیراً» است. ستون «فروش» در نمای
+// انبار اما یعنی «از اول تا حالا چند تا رفته» و کوتاه‌کردنش یعنی گزارشِ غلط به
+// فروشنده. پس بازه‌ی خیلی بلند می‌دهیم تا رفتار قبلی مو‌به‌مو حفظ شود.
+const ALL_TIME_DAYS = 365 * 50;
 function getProductSalesMap() {
   const map = new Map();
-  for (const r of getTopProducts(2000)) map.set(r.id, { qty: r.qty, revenue: r.revenue });
+  for (const r of getTopProducts(5000, ALL_TIME_DAYS)) map.set(r.id, { qty: r.qty, revenue: r.revenue });
   return map;
 }
 
-// محصولات + آمار فروش هرکدام (نمای انبار در پنل)
-function getProductsWithSales() {
+// محصولات + آمار فروش هرکدام (نمای انبار در پنل).
+//
+// دو حالت، و شکلِ خروجیِ حالتِ اول عمداً *دقیقاً* مثل قبل است:
+//   getProductsWithSales()            → آرایه، همان رفتار قدیمی (پنل فعلی)
+//   getProductsWithSales({limit,page}) → { rows, total, page, pages }
+// چرا این‌طور: عوض‌کردن شکلِ خروجی یعنی شکستنِ پنل ادمین و تست‌ها برای مقیاسی که
+// این مغازه امسال به آن نمی‌رسد. ظرفیتش باشد، اجبارش نه.
+function getProductsWithSales(opts = null) {
   const sales = getProductSalesMap();
   const wishes = new Map(
     db.prepare('SELECT product_id, COUNT(*) AS n FROM wishlist GROUP BY product_id').all()
@@ -1655,19 +1849,32 @@ function getProductsWithSales() {
     db.prepare('SELECT product_id, COUNT(*) AS n FROM stock_alerts WHERE notified_at IS NULL GROUP BY product_id').all()
       .map(r => [r.product_id, r.n])
   );
-  return stmtAllProducts.all().map(p => ({
+  const decorate = (p) => ({
     ...p,
     soldQty: sales.get(p.id)?.qty || 0,
     revenue: sales.get(p.id)?.revenue || 0,
     wishers: wishes.get(p.id) || 0,
     waiting: waiting.get(p.id) || 0
-  }));
+  });
+
+  if (!opts || !opts.limit) return stmtAllProducts.all().map(decorate);
+
+  const limit = Math.min(Math.max(parseInt(opts.limit, 10) || 50, 1), 500);
+  const total = db.prepare('SELECT COUNT(*) AS n FROM products').get().n;
+  const pages = Math.max(1, Math.ceil(total / limit));
+  const page = Math.min(Math.max(parseInt(opts.page, 10) || 1, 1), pages);
+  const rows = db.prepare('SELECT * FROM products ORDER BY id LIMIT ? OFFSET ?')
+    .all(limit, (page - 1) * limit).map(decorate);
+  return { rows, total, page, pages, limit };
 }
 
 // ---------- علاقه‌مندی‌ها ----------
+// published = 1 عمداً فقط در *نمایش* است، نه در stmtWishIds و نه DELETE:
+// اگر مدیر محصولی را موقتاً از سایت بردارد، ردیفِ علاقه‌مندی کاربر پاک نمی‌شود
+// و با انتشار مجدد خودش برمی‌گردد. فقط تا آن موقع در لیست دیده نمی‌شود.
 const stmtWishByUser = db.prepare(`
   SELECT p.* FROM wishlist w JOIN products p ON p.id = w.product_id
-  WHERE w.user_id = ? ORDER BY w.created_at DESC`);
+  WHERE w.user_id = ? AND p.published = 1 ORDER BY w.created_at DESC`);
 const stmtWishIds = db.prepare('SELECT product_id FROM wishlist WHERE user_id = ?');
 const stmtWishAdd = db.prepare('INSERT OR IGNORE INTO wishlist (user_id, product_id) VALUES (?, ?)');
 const stmtWishDel = db.prepare('DELETE FROM wishlist WHERE user_id = ? AND product_id = ?');
@@ -1983,6 +2190,8 @@ function closeDb(log = console) {
 module.exports = {
   db, DATA_DIR, initDb, closeDb, getDbHealth, checkIntegrity,
   getProducts, getProduct, upsertProductsTx,
+  // نسخه‌های عمومی — پیش‌نویس‌ها را نشان نمی‌دهند (ستون published)
+  getPublicProducts, getPublicProduct, setProductPublished, getDraftSummary, batchHasOrders, deleteBatch,
   queryProducts, getCatalogSignature, getCatalogFacets, getCategories,
   reserveStock, releaseStock,
   findOrCreateUser, stmtUserById, updateUserName,
@@ -2003,7 +2212,7 @@ module.exports = {
   bumpSmsCounter, getSmsCount, getUserPhone, createManualOrderTx,
   addStockAlert, getPendingStockAlerts, markStockAlertsNotified,
   bumpVisit, cleanupOldVisits, getTopPages,
-  getCategoriesFull, ensureCategory, adminCreateCategory, adminUpdateCategoryTx, adminDeleteCategory, adminMoveCategoryTx,
+  getCategoriesFull, getPublicCategories, ensureCategory, adminCreateCategory, adminUpdateCategoryTx, adminDeleteCategory, adminMoveCategoryTx,
   upsertReview, getProductReviews, getRatingsMap, getRecentReviews, adminListReviews, adminSetReviewStatus, hasUserBought,
   getWishlist, getWishlistIds, addToWishlist, removeFromWishlist,
   getAddresses, getAddress, createAddress, updateAddress, deleteAddress,

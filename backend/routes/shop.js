@@ -1,14 +1,17 @@
 // روت‌های عمومی «فروشگاه» — چیزهایی که همه‌ی صفحه‌ها بدون ورود لازم دارند:
 // اطلاعیه‌ی بالای سایت، وضعیت باز/بسته بودن، بنر تخفیف، دسته‌بندی‌ها و نظرات تازه.
 const express = require('express');
-const { getSettings, getCategoriesFull, getRecentReviews } = require('../lib/db');
+const { getSettings, getPublicCategories, getRecentReviews } = require('../lib/db');
 const { etagJson } = require('../lib/middleware');
 
 const router = express.Router();
 
 // GET /api/shop/categories — منوها و کارت‌های دسته‌بندی سایت از همین ساخته می‌شوند
 router.get('/categories', (req, res) => {
-  const categories = getCategoriesFull();
+  // getPublicCategories و نه getCategoriesFull: نسخه‌ی کامل، کالای منتشرنشده
+  // را هم می‌شمارد و دسته‌ی خالی را هم برمی‌گرداند — هیچ‌کدام نباید از این
+  // مسیرِ عمومی بیرون برود.
+  const categories = getPublicCategories();
   const sig = 'c' + JSON.stringify(categories.map(c => [c.name, c.icon, c.sort, c.count]));
   if (etagJson(req, res, sig, { maxAge: 120 })) return;
   res.json({ categories });

@@ -1,5 +1,5 @@
 const express = require('express');
-const { getProduct, getShippingQuote, quoteCoupon } = require('../lib/db');
+const { getPublicProduct, getShippingQuote, quoteCoupon } = require('../lib/db');
 
 const router = express.Router();
 
@@ -14,7 +14,7 @@ function buildCartResponse(req) {
   const vanished = [];
   const items = cartItems
     .map(entry => {
-      const product = getProduct(entry.productId);
+      const product = getPublicProduct(entry.productId);
       if (!product) { vanished.push(entry.productId); return null; }
       // «قیمت قبلی» تنها وقتی به فرانت می‌رود که واقعاً بیشتر از قیمت فعلی باشد —
       // همان قاعده‌ای که serializeProduct در routes/products.js دارد، تا سبد و
@@ -113,7 +113,7 @@ router.post('/add', (req, res) => {
   const { productId, qty } = req.body || {};
   if (!productId) return res.status(400).json({ error: 'شناسه‌ی محصول لازم است' });
 
-  const product = getProduct(productId);
+  const product = getPublicProduct(productId);
   if (!product) return res.status(404).json({ error: 'محصول پیدا نشد' });
   if (product.stock <= 0) return res.status(409).json({ error: 'این محصول فعلاً ناموجود است' });
 
@@ -152,7 +152,7 @@ router.post('/update', (req, res) => {
 
   const existing = req.session.cart.find(i => String(i.productId) === String(productId));
   if (existing) {
-    const product = getProduct(productId);
+    const product = getPublicProduct(productId);
     if (!product) {
       // buildCartResponse خودش این قلم را پاک و پیامش را اضافه می‌کند
       return res.json(buildCartResponse(req));

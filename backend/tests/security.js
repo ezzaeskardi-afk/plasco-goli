@@ -165,7 +165,7 @@ const kill = (srv) => { try { srv.child.kill(); } catch (e) {} };
   // پیش‌تر اینجا یک PNG ثابتِ ۱×۱ بود. مسیرِ آپلود حالا ابعاد را هم می‌سنجد و
   // ۱×۱ رد می‌شود، پس عکسی در اندازه‌ی قابل‌قبول می‌سازیم؛ وگرنه این تست به‌جای
   // «تشخیصِ نوعِ فایل از بایت‌ها» داشت نگهبانِ ابعاد را می‌سنجید.
-  const { makePng } = require('./makepng');
+  const { makePng, makePngWithMetadata } = require('./makepng');
   const pngBytes = makePng(120, 90);
   const upload = (type, body) => fetch(BASE + '/api/admin/upload-image', {
     method: 'POST',
@@ -193,6 +193,30 @@ const kill = (srv) => { try { srv.child.kill(); } catch (e) {} };
     body: pngBytes
   });
   check('آپلود از مبدأ بیگانه هم رد می‌شود', uploadNoOrigin.status === 403, String(uploadNoOrigin.status));
+
+  // ---------- فرادادهٔ پنهانِ عکس ----------
+  // عکسی که با گوشی از کالا گرفته می‌شود مختصات GPS محلِ عکس‌برداری را داخل
+  // خودش دارد؛ یعنی از دلِ عکسِ یک سطلِ پلاستیکی می‌شود آدرسِ مغازه را درآورد.
+  // بعضی نرم‌افزارها هم مسیرِ کاملِ فایل روی کامپیوتر را داخل عکس می‌نویسند.
+  // این تست فایلِ *روی دیسک* را می‌خواند، نه پاسخ سرور را: تنها چیزی که
+  // اهمیت دارد این است که آنچه ذخیره شده تمیز باشد.
+  const meta = makePngWithMetadata(200, 150);
+  const upMeta = await upload('image/png', meta.bytes);
+  const upMetaJson = await upMeta.json().catch(() => ({}));
+  check('عکسِ دارای فراداده پذیرفته می‌شود', upMeta.status === 200, String(upMeta.status));
+  if (upMeta.status === 200) {
+    const saved = fs.readFileSync(path.join(PICS, path.basename(upMetaJson.path)));
+    const leaked = meta.secrets.filter(s => saved.includes(Buffer.from(s, 'latin1')));
+    check('فرادادهٔ پنهانِ عکس قبل از ذخیره پاک می‌شود', leaked.length === 0, leaked.join(' | '));
+    check('عکس بعد از پاکسازی هنوز سالم است',
+      saved.length > 8 && saved.subarray(1, 4).toString('ascii') === 'PNG'
+      && saved.includes(Buffer.from('IEND', 'ascii')));
+    // ابعادِ اعلام‌شده باید همان بماند؛ اگر پاکسازی IHDR را خراب کند، فرانت
+    // width/height غلط می‌نویسد و صفحه موقعِ لودِ عکس می‌پرد.
+    check('ابعادِ عکس بعد از پاکسازی عوض نشده',
+      upMetaJson.width === 200 && upMetaJson.height === 150,
+      `${upMetaJson.width}×${upMetaJson.height}`);
+  }
 
   let removed = 0;
   for (const f of (fs.existsSync(PICS) ? fs.readdirSync(PICS) : [])) {
