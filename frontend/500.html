@@ -8,7 +8,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0B1411">
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-<link rel="stylesheet" href="/css/style.css?v=41">
+<link rel="stylesheet" href="/css/style.css?v=42">
 <!--
   این صفحه عمداً به هیچ اسکریپت مشترک و هیچ اسپرایت آیکونی وابسته نیست.
   منطق: وقتی سرور به خطا خورده، صفحه‌ی خطا نباید خودش به چیزی وابسته باشد که
@@ -16,51 +16,6 @@
   جاوااسکریپت صفحه، یک ثانیه‌شمارِ کوچکِ «تلاش دوباره» است که اگر هم اجرا نشود
   دکمه‌ها همچنان کار می‌کنند.
 -->
-<style>
-  .err-wrap{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:40px 20px;}
-  .err-card{
-    width:100%;max-width:560px;text-align:center;
-    background:var(--surface);border:1px solid var(--line);
-    border-radius:var(--radius-lg);box-shadow:var(--shadow);
-    padding:44px 32px;
-  }
-  .err-ic{
-    width:74px;height:74px;margin:0 auto 20px;border-radius:50%;
-    display:grid;place-items:center;
-    background:rgba(245,185,90,.12);border:1px solid rgba(245,185,90,.28);
-    animation:errPulse 2.4s ease-in-out infinite;
-  }
-  .err-ic svg{width:34px;height:34px;color:var(--gold);}
-  @keyframes errPulse{
-    0%,100%{box-shadow:0 0 0 0 rgba(245,185,90,.22);}
-    50%{box-shadow:0 0 0 14px rgba(245,185,90,0);}
-  }
-  .err-code{
-    display:inline-block;font-size:11.5px;font-weight:800;letter-spacing:.08em;
-    color:var(--ink-soft);background:rgba(237,246,241,.06);
-    border-radius:999px;padding:4px 12px;margin-bottom:14px;
-  }
-  .err-card h1{font-size:24px;line-height:1.5;margin-bottom:12px;}
-  .err-card p{color:var(--ink-soft);font-size:14.5px;line-height:2;margin-bottom:8px;}
-  .err-acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:26px 0 0;}
-  .err-acts .btn{flex:1 1 auto;min-width:0;}
-  /* حالت «در حال شمارش» دکمه‌ی تلاش دوباره. pointer-events را نمی‌بندیم تا
-     المان همچنان قابل فوکوس بماند؛ کلیک را خودِ جاوااسکریپت خنثی می‌کند. */
-  #btnRetry[aria-disabled="true"]{opacity:.62;cursor:default;}
-  .err-help{
-    margin-top:26px;padding-top:20px;border-top:1px solid var(--line);
-    font-size:13px;color:var(--ink-soft);line-height:2;
-  }
-  .err-help a{color:var(--teal);font-weight:700;}
-  .err-help bdo{font-variant-numeric:tabular-nums;}
-  @media (max-width:480px){
-    .err-card{padding:34px 22px;}
-    .err-card h1{font-size:20px;}
-  }
-  @media (prefers-reduced-motion:reduce){
-    .err-ic{animation:none;}
-  }
-</style>
 </head>
 <body>
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -87,13 +42,13 @@
       <!-- لینک با href خالی یعنی «همین آدرس» — پس «تلاش دوباره» بدون هیچ
            جاوااسکریپتی کار می‌کند. ثانیه‌شمار فقط یک لایه‌ی اضافه است. -->
       <a href="" class="btn btn-primary" id="btnRetry">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px;flex:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-19">
           <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
         </svg>
         <span id="retryLabel">تلاش دوباره</span>
       </a>
       <a href="/index.html" class="btn btn-outline">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px;flex:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ic-19">
           <path d="M3 9.5 12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7H10v7H4a1 1 0 0 1-1-1z"/>
         </svg>
         صفحه‌ی اصلی
@@ -112,7 +67,7 @@
 
 <!-- ثانیه‌شمار «تلاش دوباره». درون‌خطی نیست چون CSP سایت اسکریپت درون‌خطی را
      بلاک می‌کند؛ صفحه بدون این فایل هم کاملاً کار می‌کند. -->
-<script src="/js/err-500.js?v=41" defer></script>
+<script src="/js/err-500.js?v=42" defer></script>
 
 </body>
 </html>

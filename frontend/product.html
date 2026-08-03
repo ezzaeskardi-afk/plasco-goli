@@ -13,7 +13,7 @@
 <link rel="preload" href="/assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
-<link rel="stylesheet" href="/css/style.css?v=41">
+<link rel="stylesheet" href="/css/style.css?v=42">
 </head>
 <body>
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -27,7 +27,7 @@
 
     <div class="search-box" id="searchBox">
       <svg class="search-ic"><use href="#i-search"/></svg>
-      <input type="search" id="siteSearch" placeholder="جستجو در محصولات؛ مثلاً «سطل» یا «ادویه»..." autocomplete="off" aria-label="جستجو در محصولات">
+      <input type="search" id="siteSearch" maxlength="60" placeholder="جستجو در محصولات؛ مثلاً «سطل» یا «ادویه»..." autocomplete="off" aria-label="جستجو در محصولات">
     </div>
 
     <div class="header-actions">
@@ -79,8 +79,8 @@
 <div class="mobile-drawer" id="drawer">
   <div class="drawer-panel">
     <div class="drawer-head">
-      <span class="logo" style="font-size:17px">
-        <span class="logo-badge" style="width:40px;height:40px"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="" width="48" height="48" decoding="async"></span>
+      <span class="logo logo-sm">
+        <span class="logo-badge logo-badge-sm"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="" width="48" height="48" decoding="async"></span>
         پلاسکو گلی
       </span>
       <button class="icon-btn drawer-close" id="menuClose" aria-label="بستن منو"><svg><use href="#i-close"/></svg></button>
@@ -88,7 +88,7 @@
 
     <div class="drawer-search">
       <svg><use href="#i-search"/></svg>
-      <input type="search" id="drawerSearch" placeholder="جستجوی محصول..." autocomplete="off" aria-label="جستجو در محصولات">
+      <input type="search" id="drawerSearch" maxlength="60" placeholder="جستجوی محصول..." autocomplete="off" aria-label="جستجو در محصولات">
     </div>
 
     <span class="drawer-label">صفحات</span>
@@ -119,11 +119,11 @@
   </div>
 
   <!-- محتوای محصول با جاوااسکریپت از /api/products/:id پر می‌شود -->
-  <section style="padding-top:20px">
+  <section class="sec-pt20">
     <div class="container">
       <div id="pdLoading" class="pd-layout" aria-hidden="true">
         <div class="sk pd-sk-media"></div>
-        <div class="sk-body" style="padding:0">
+        <div class="sk-body p0">
           <div class="sk sk-line w60"></div>
           <div class="sk sk-line w80"></div>
           <div class="sk sk-line"></div>
@@ -179,11 +179,11 @@
   </section>
 
   <!-- دیدگاه خریداران -->
-  <section id="pdReviews" data-reveal style="padding-top:24px">
+  <section id="pdReviews" class="sec-pt24" data-reveal>
     <div class="container">
       <div class="section-head">
         <span class="eyebrow"><span class="dot"></span> دیدگاه خریداران</span>
-        <h2 style="font-size:22px">نظر کسانی که این جنس را خریده‌اند</h2>
+        <h2 class="h-22">نظر کسانی که این جنس را خریده‌اند</h2>
       </div>
       <div class="rv-layout">
         <aside class="rv-summary" id="rvSummary" aria-live="polite">
@@ -200,11 +200,11 @@
   </section>
 
   <!-- محصولات مرتبط -->
-  <section id="pdRelatedWrap" class="hidden" data-reveal style="padding-top:24px">
+  <section id="pdRelatedWrap" class="hidden sec-pt24" data-reveal>
     <div class="container">
       <div class="section-head">
         <span class="eyebrow"><span class="dot"></span> از همین دسته</span>
-        <h2 style="font-size:22px">محصولات مرتبط</h2>
+        <h2 class="h-22">محصولات مرتبط</h2>
       </div>
       <div class="product-grid" id="pdRelated"></div>
     </div>
@@ -212,11 +212,11 @@
 
   <!-- بازدیدهای اخیر — فقط شناسه‌ها در مرورگر می‌ماند و اطلاعات تازه از سرور
        می‌آید، پس قیمت و موجودیِ نمایش‌داده‌شده هیچ‌وقت کهنه نیست. -->
-  <section id="pdRecentWrap" class="hidden" data-reveal style="padding-top:24px">
+  <section id="pdRecentWrap" class="hidden sec-pt24" data-reveal>
     <div class="container">
       <div class="section-head">
         <span class="eyebrow"><span class="dot"></span> ادامه‌ی گشت‌وگذار</span>
-        <h2 style="font-size:22px">اخیراً دیده‌اید</h2>
+        <h2 class="h-22">اخیراً دیده‌اید</h2>
       </div>
       <div class="product-grid" id="pdRecent"></div>
     </div>
@@ -228,7 +228,7 @@
     <div class="footer-about">
       <div class="logo">
         <span class="logo-badge"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="لوگوی پلاسکو گلی" width="48" height="48" decoding="async"></span>
-        <span style="color:#fff">پلاسکو گلی</span>
+        <span class="txt-white">پلاسکو گلی</span>
       </div>
       <p>فروشگاه محله‌ای لوازم پلاستیکی خانه؛ جنس اصل، قیمت منصفانه، مشاوره‌ی صادقانه.</p>
       <div class="footer-social">
@@ -261,8 +261,8 @@
   <svg><use href="#i-phone"/></svg>
   <span class="fab-label">تماس با فروشگاه</span>
 </a>
-<script src="/js/common.js?v=41" defer></script>
-<script src="/js/product.js?v=41" defer></script>
+<script src="/js/common.js?v=42" defer></script>
+<script src="/js/product.js?v=42" defer></script>
 
 </body>
 </html>

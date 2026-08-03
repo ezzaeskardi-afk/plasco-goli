@@ -10,7 +10,7 @@
 <link rel="preload" href="assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=41">
+<link rel="stylesheet" href="css/style.css?v=42">
 </head>
 <body class="admin-body">
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -158,11 +158,11 @@
             <option value="200">۲۰۰ تایی</option>
           </select>
         </div>
-        <div class="ad-chips" id="orderChips" style="margin-bottom:14px"></div>
+        <div class="ad-chips mb-14" id="orderChips"></div>
 
         <div class="ad-result-bar" id="orderResultBar"></div>
         <div id="ordersHost"></div>
-        <div id="ordersPager" style="display:flex;gap:8px;justify-content:center;margin-top:16px"></div>
+        <div id="ordersPager" class="pager-row"></div>
       </section>
 
       <!-- ---------------- انبار ---------------- -->
@@ -214,14 +214,14 @@
             <table class="ad-table" id="prodTable">
               <thead>
                 <tr>
-                  <th style="width:34px"><input type="checkbox" class="ad-check" id="prodCheckAll" aria-label="انتخاب همه"></th>
+                  <th class="th-w34"><input type="checkbox" class="ad-check" id="prodCheckAll" aria-label="انتخاب همه"></th>
                   <th class="sortable" data-s="title">کالا <span class="arrow"></span></th>
                   <th class="sortable" data-s="price">قیمت (تومان) <span class="arrow"></span></th>
                   <th class="sortable" data-s="stock">موجودی <span class="arrow"></span></th>
                   <th class="sortable" data-s="soldQty">فروش رفته <span class="arrow"></span></th>
                   <th class="sortable" data-s="revenue">درآمد <span class="arrow"></span></th>
                   <th class="sortable" data-s="wishers">علاقه‌مند <span class="arrow"></span></th>
-                  <th style="width:110px"></th>
+                  <th class="th-w110"></th>
                 </tr>
               </thead>
               <tbody id="prodBody"></tbody>
@@ -250,9 +250,9 @@
         </div>
 
         <!-- مدیریت دسته‌بندی‌ها -->
-        <div class="ad-card" style="margin-top:18px">
+        <div class="ad-card mt-18">
           <div class="ad-card-head"><h3><svg><use href="#i-menu"/></svg> دسته‌بندی‌ها</h3></div>
-          <p class="muted-sub" style="margin:0 0 12px;font-size:12px;line-height:1.8">
+          <p class="muted-sub note-p-sm">
             منوی سایت، کارت‌های صفحه‌ی اصلی و فیلترها از همین لیست ساخته می‌شوند.
             تغییر نام دسته روی همه‌ی محصولاتش هم اعمال می‌شود.
           </p>
@@ -346,7 +346,7 @@
           </div>
           <div id="monthlyBars"></div>
           <div class="ad-table-wrap">
-            <table class="ad-table" style="min-width:600px">
+            <table class="ad-table tbl-w600">
               <thead><tr><th>ماه</th><th>فروش (تومان)</th><th>سفارش</th><th>مشتری</th><th>میانگین سبد</th><th>رشد</th></tr></thead>
               <tbody id="monthlyBody"></tbody>
             </table>
@@ -357,7 +357,7 @@
           <div class="ad-card">
             <div class="ad-card-head"><h3><svg><use href="#i-trend-up"/></svg> رتبه‌بندی کالاها</h3></div>
             <div class="ad-table-wrap">
-              <table class="ad-table" style="min-width:420px">
+              <table class="ad-table tbl-w420">
                 <thead><tr><th>#</th><th>کالا</th><th>تعداد</th><th>درآمد</th></tr></thead>
                 <tbody id="reportProducts"></tbody>
               </table>
@@ -366,7 +366,7 @@
           <div class="ad-card">
             <div class="ad-card-head"><h3><svg><use href="#i-users"/></svg> رتبه‌بندی مشتری‌ها</h3></div>
             <div class="ad-table-wrap">
-              <table class="ad-table" style="min-width:420px">
+              <table class="ad-table tbl-w420">
                 <thead><tr><th>#</th><th>مشتری</th><th>سفارش</th><th>مبلغ</th></tr></thead>
                 <tbody id="reportCustomers"></tbody>
               </table>
@@ -522,10 +522,10 @@
 
         <div class="ad-card">
           <div class="ad-card-head"><h3><svg><use href="#i-database"/></svg> نگهداری</h3></div>
-          <p class="muted-sub" style="margin:0 0 14px;font-size:12.5px;line-height:1.8">
+          <p class="muted-sub note-p">
             بکاپ، یک کپی از فایل دیتابیس در پوشه‌ی backups می‌سازد. خروجی اکسل، همه‌ی سفارش‌های فیلترشده را می‌دهد.
           </p>
-          <div style="display:flex;gap:9px;flex-wrap:wrap">
+          <div class="row-9">
             <button class="btn btn-outline btn-sm" id="btnBackup2"><svg><use href="#i-database"/></svg> ساخت بکاپ</button>
             <button class="btn btn-outline btn-sm" id="btnExportCsv2"><svg><use href="#i-download"/></svg> خروجی اکسل سفارش‌ها</button>
           </div>
@@ -597,13 +597,13 @@
         </div>
       </div>
 
-      <label style="display:block;font-size:12.5px;font-weight:700;margin:14px 0 8px">کالاها *</label>
+      <label class="field-label">کالاها *</label>
       <div id="moRows"></div>
-      <button type="button" class="btn btn-outline btn-sm" id="moAddRow" style="margin-top:4px">
+      <button type="button" class="btn btn-outline btn-sm" id="moAddRow" class="mt-4">
         <svg><use href="#i-plus"/></svg> افزودن کالا
       </button>
 
-      <div class="ad-form-grid" style="margin-top:14px">
+      <div class="ad-form-grid mt-14">
         <div class="ad-field">
           <label for="moShip">هزینه ارسال (تومان)</label>
           <input id="moShip" type="number" min="0" step="5000" dir="ltr" value="0">
@@ -669,27 +669,27 @@
           <label>عکس اصلی (کاور)</label>
           <div class="ad-img-row">
             <span class="ad-img-big" id="pmThumb"><svg><use href="#i-package"/></svg></span>
-            <div style="display:flex;flex-direction:column;gap:8px">
-              <label class="btn btn-outline btn-sm" for="pmFile" style="cursor:pointer"><svg><use href="#i-plus"/></svg> انتخاب عکس</label>
+            <div class="stack-8">
+              <label class="btn btn-outline btn-sm" for="pmFile" class="cur-pointer"><svg><use href="#i-plus"/></svg> انتخاب عکس</label>
               <input id="pmFile" type="file" accept="image/jpeg,image/png,image/webp" class="hidden">
               <button type="button" class="btn btn-ghost btn-sm hidden" id="pmRemoveImg"><svg><use href="#i-trash"/></svg> حذف عکس</button>
-              <small class="muted-sub" style="font-size:11px">JPG / PNG / WebP — حداکثر ۲ مگابایت</small>
+              <small class="muted-sub fs-11">JPG / PNG / WebP — حداکثر ۲ مگابایت</small>
             </div>
           </div>
         </div>
         <div class="ad-field full">
           <label>عکس‌های بیشتر (گالری — حداکثر ۸ عکس)</label>
           <div class="pm-gallery" id="pmGallery"></div>
-          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
-            <label class="btn btn-outline btn-sm" for="pmFileMore" style="cursor:pointer"><svg><use href="#i-plus"/></svg> افزودن عکس به گالری</label>
+          <div class="row-10-center mt-8">
+            <label class="btn btn-outline btn-sm" for="pmFileMore" class="cur-pointer"><svg><use href="#i-plus"/></svg> افزودن عکس به گالری</label>
             <input id="pmFileMore" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
-            <small class="muted-sub" style="font-size:11px">مشتری در صفحه‌ی محصول همه را ورق می‌زند</small>
+            <small class="muted-sub fs-11">مشتری در صفحه‌ی محصول همه را ورق می‌زند</small>
           </div>
         </div>
         <div class="ad-field full">
           <label>مشخصات (اختیاری — مثلاً «گنجایش: ۳ لیتر»)</label>
           <div id="pmSpecs"></div>
-          <button type="button" class="btn btn-outline btn-sm" id="pmAddSpec" style="margin-top:8px"><svg><use href="#i-plus"/></svg> افزودن مشخصه</button>
+          <button type="button" class="btn btn-outline btn-sm" id="pmAddSpec" class="mt-8"><svg><use href="#i-plus"/></svg> افزودن مشخصه</button>
         </div>
         <div class="ad-field full">
           <label>آیکون (وقتی عکس ندارد نمایش داده می‌شود)</label>
@@ -723,7 +723,7 @@
       <h3 id="cmTitle">لغو سفارش</h3>
       <button class="x" type="button" id="cmClose" aria-label="بستن"><svg><use href="#i-close"/></svg></button>
     </div>
-    <div class="alert alert-info" style="margin-bottom:14px">
+    <div class="alert alert-info mb-14">
       <svg><use href="#i-alert"/></svg>
       <span>با لغو سفارش، موجودی کالاها به انبار برمی‌گردد. این کار قابل بازگشت نیست.</span>
     </div>
@@ -732,7 +732,7 @@
       <input id="cmReason" type="text" maxlength="200" placeholder="مثلاً: انصراف مشتری / عدم موجودی">
     </div>
     <div class="ad-modal-foot">
-      <button type="button" class="btn btn-primary" id="cmConfirm" style="background:var(--coral);border-color:var(--coral)">
+      <button type="button" class="btn btn-primary" id="cmConfirm" class="btn-coral">
         <svg><use href="#i-ban"/></svg> لغو سفارش
       </button>
       <button type="button" class="btn btn-outline" id="cmDismiss">بی‌خیال</button>
@@ -740,7 +740,7 @@
   </div>
 </div>
 
-<script src="js/common.js?v=41" defer></script>
-<script src="js/admin.js?v=41" defer></script>
+<script src="js/common.js?v=42" defer></script>
+<script src="js/admin.js?v=42" defer></script>
 </body>
 </html>

@@ -66,8 +66,8 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
       ${canReorder ? `<button type="button" class="btn btn-primary" data-reorder="${order.id}">
         <svg><use href="#i-cart"/></svg> دوباره سفارش بده
       </button>` : ''}
-      <a href="account.html" class="btn btn-outline" style="margin-inline-start:10px">سفارش‌های من</a>
-      <a href="index.html#products" class="btn ${canReorder ? 'btn-outline' : 'btn-primary'}" style="margin-inline-start:10px">ادامه‌ی خرید</a>
+      <a href="account.html" class="btn btn-outline ms-10">سفارش‌های من</a>
+      <a href="index.html#products" class="btn ${canReorder ? 'btn-outline' : 'btn-primary'} ms-10">ادامه‌ی خرید</a>
     `;
 
     const reorderBtn = actionsEl.querySelector('[data-reorder]');
@@ -114,14 +114,14 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
       descEl.textContent = 'این شماره سفارش برای حساب شما نیست. اگر پرداخت کرده‌اید، سفارش‌های من را ببینید.';
       actionsEl.innerHTML = `
         <a href="account.html" class="btn btn-primary">سفارش‌های من</a>
-        <a href="index.html" class="btn btn-outline" style="margin-inline-start:10px">بازگشت به فروشگاه</a>`;
+        <a href="index.html" class="btn btn-outline ms-10">بازگشت به فروشگاه</a>`;
       return;
     }
     titleEl.textContent = 'وضعیت سفارش را نتوانستیم بگیریم';
     descEl.textContent = `${err.message} سفارش شما سر جایش است؛ فقط این صفحه نتوانست وضعیتش را بخواند.`;
     actionsEl.innerHTML = `
       <button type="button" class="btn btn-primary" onclick="location.reload()">تلاش دوباره</button>
-      <a href="account.html" class="btn btn-outline" style="margin-inline-start:10px">سفارش‌های من</a>`;
+      <a href="account.html" class="btn btn-outline ms-10">سفارش‌های من</a>`;
   }
 }));
 

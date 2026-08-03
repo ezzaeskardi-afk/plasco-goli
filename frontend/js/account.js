@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
       empty.classList.add('hidden');
       grid.innerHTML = `
         <div class="grid-empty">
-          <svg style="width:40px;height:40px;color:var(--coral)"><use href="#i-alert"/></svg>
+          <svg class="ic-40 txt-coral"><use href="#i-alert"/></svg>
           <p>${PG.esc(e.message)}</p>
           <button type="button" class="btn btn-outline" data-retry-wish>تلاش دوباره</button>
         </div>`;
@@ -253,11 +253,11 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
     const outOfStock = typeof p.stock === 'number' && p.stock <= 0;
     const title = PG.esc(p.title);
     const media = p.image
-      ? `<img src="${PG.esc(PG.cardImg(p.image))}" alt="${title}" loading="lazy" decoding="async">`
+      ? `<img src="${PG.esc(PG.cardImg(p.image))}"${PG.imgSizing(p.image)} alt="${title}" loading="lazy" decoding="async">`
       : `<svg role="img" aria-label="${title}"><use href="#${PG.esc(p.icon)}"/></svg>`;
     return `
       <article class="product-card" data-id="${p.id}">
-        <a href="/product/${p.id}" class="product-media${p.image ? ' has-image' : ''}" style="display:flex" aria-label="${title}">
+        <a href="/product/${p.id}" class="product-media${p.image ? ' has-image' : ''} d-flex" aria-label="${title}">
           ${p.badge ? `<span class="product-badge">${PG.esc(p.badge)}</span>` : ''}
           ${PG.wishBtnHtml(p.id)}
           ${media}
@@ -353,12 +353,12 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
         return;
       }
       addrList.innerHTML = addresses.map(a => `
-        <div style="display:flex;align-items:flex-start;gap:12px;padding:14px;border:1.5px solid var(--line);border-radius:12px;font-size:13.5px">
-          <svg style="width:18px;height:18px;flex:none;color:var(--gold);margin-top:2px"><use href="#i-pin"/></svg>
-          <div style="flex:1;min-width:0">
+        <div class="addr-row">
+          <svg class="addr-pin"><use href="#i-pin"/></svg>
+          <div class="flex-1">
             <b>${escT(a.fullName)}</b> — <bdo dir="ltr">${escT(a.phone)}</bdo><br>
-            <span style="color:var(--ink-soft)">${escT(a.province ? a.province + '، ' : '')}${escT(a.city)}، ${escT(a.addressLine)}</span>
-            ${a.postalCode ? `<br><span style="color:var(--ink-soft)">کد پستی: <bdo dir="ltr">${escT(a.postalCode)}</bdo></span>` : ''}
+            <span class="txt-soft">${escT(a.province ? a.province + '، ' : '')}${escT(a.city)}، ${escT(a.addressLine)}</span>
+            ${a.postalCode ? `<br><span class="txt-soft">کد پستی: <bdo dir="ltr">${escT(a.postalCode)}</bdo></span>` : ''}
           </div>
           <button type="button" class="icon-btn addr-edit-btn" data-edit="${a.id}" title="ویرایش آدرس" aria-label="ویرایش آدرس">
             <svg><use href="#i-edit"/></svg>

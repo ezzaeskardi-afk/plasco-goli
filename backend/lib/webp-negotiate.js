@@ -41,6 +41,7 @@ const path = require('path');
 // نتیجه‌ی «آیا فایلِ webp هست؟» را کش می‌کنیم. بدون کش، هر درخواستِ عکس یک
 // stat روی دیسک است. با TTL کوتاه تا عکسِ تازه‌آپلودشده هم زود دیده شود.
 const CACHE_TTL_MS = 30 * 1000;
+const WEBP_CACHE_MAX = 2000;
 const cache = new Map();   // absolutePath → { exists, at }
 
 // عرض‌های مجاز برای ?w — فهرستِ بسته، نه هر عددی که کاربر بفرستد.
@@ -57,7 +58,14 @@ function webpExists(absPath) {
   try { exists = fs.statSync(absPath).isFile(); } catch (e) { exists = false; }
   // سقفِ ساده روی حجمِ کش: پوشه‌ی عکس بی‌نهایت بزرگ نمی‌شود ولی
   // نگذاریم یک درخواستِ ساختگی با مسیرهای عجیب حافظه را باد کند.
-  if (cache.size > 2000) cache.clear();
+  // (با clear()ِ کلِ کش، مهاجم می‌توانست با هزار مسیرِ ساختگی، کشِ *گرمِ*
+  // عکس‌های واقعی را صفر کند و همه را وادار به statSync دوباره کند — یعنی
+  // همان «پاک‌کردنِ کشِ سی‌پی‌یو» با یک ثانیه کار. فقط قدیمی‌ترین‌ها بروند.)
+  if (cache.size >= WEBP_CACHE_MAX) {
+    const drop = Math.max(1, Math.ceil(WEBP_CACHE_MAX / 10));
+    let i = 0;
+    for (const k of cache.keys()) { cache.delete(k); if (++i >= drop) break; }
+  }
   cache.set(absPath, { exists, at: now });
   return exists;
 }

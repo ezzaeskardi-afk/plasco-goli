@@ -160,7 +160,18 @@ p{margin:0;}
   padding:6px 14px;border-radius:999px;
   margin-bottom:14px;
 }
-.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px var(--gold);}
+/* نقطه‌ی طلایی کنارِ عنوانِ بخش‌ها. هاله دارد یعنی ظاهرش «چراغِ روشن» است،
+   پس یک تپشِ خیلی آرام (۲.۴ ثانیه) طبیعی‌ترش می‌کند. عمداً کند و کم‌دامنه:
+   این نقطه در چند بخش تکرار می‌شود و تپشِ تند، صفحه را بی‌قرار می‌کند. */
+.eyebrow .dot{
+  width:6px;height:6px;border-radius:50%;background:var(--gold);
+  box-shadow:0 0 10px var(--gold);
+  animation:dotPulse 2.4s ease-in-out infinite;
+}
+@keyframes dotPulse{
+  0%,100%{opacity:1;box-shadow:0 0 10px var(--gold);}
+  50%{opacity:.62;box-shadow:0 0 4px var(--gold);}
+}
 
 /* ---------- دکمه‌ها ---------- */
 .btn{
@@ -363,8 +374,17 @@ nav.main-links a:hover::after{width:100%;}
 .trust-chip{
   display:flex;align-items:center;gap:8px;
   font-size:13.5px;font-weight:700;color:var(--ink-soft);
+  transition:color .22s ease;
 }
-.trust-chip svg{width:16px;height:16px;color:var(--gold);flex:none;}
+.trust-chip svg{
+  width:16px;height:16px;color:var(--gold);flex:none;
+  transition:transform .32s cubic-bezier(.34,1.5,.64,1), filter .32s ease;
+}
+/* این سه نشان (ارسال، ضمانت، پشتیبانی) تا امروز کاملاً بی‌حرکت بودند در حالی
+   که دور و برشان همه‌چیز واکنش داشت — چشم آن‌ها را «تصویر» می‌دید نه بخشی از
+   رابط. حرکتِ کوچک روی hover همان‌قدر کافی است که زنده به‌نظر برسند. */
+.trust-chip:hover{color:var(--ink);}
+.trust-chip:hover svg{transform:translateY(-2px) scale(1.14);filter:drop-shadow(0 0 8px rgba(245,185,90,.55));}
 
 /* امضای بصری: گالری شناور محصولات واقعی — ویترین شب */
 .basin-stack{position:relative;height:440px;}
@@ -450,6 +470,7 @@ section + section{padding-top:calc(var(--sp-section) * .45);}
   cursor:pointer;
 }
 .cat-card:hover{transform:translateY(-6px);box-shadow:var(--shadow);border-color:rgba(28,201,173,.4);}
+.cat-card:active{transform:translateY(-2px) scale(.98);}
 .cat-card:hover .cat-icon{border-color:var(--gold);box-shadow:0 0 24px -6px rgba(245,185,90,.5);}
 .cat-icon{
   width:60px;height:60px;border-radius:50%;margin:0 auto 16px;
@@ -457,8 +478,16 @@ section + section{padding-top:calc(var(--sp-section) * .45);}
   background:var(--surface-2);
   border:2px solid rgba(28,201,173,.28);transition:border-color .22s ease, box-shadow .22s ease;
 }
-.cat-icon svg{width:26px;height:26px;}
-.cat-card span{display:block;font-weight:700;font-size:14px;}
+/* کارتِ دسته بالا می‌آمد ولی آیکونِ داخلش بی‌حرکت می‌ماند و کارت «کاغذی» حس
+   می‌شد. حالا آیکون کمی جلو می‌آید و می‌چرخد — همان حسِ عمقی که کارتِ محصول
+   با بزرگ‌شدنِ عکسش دارد. */
+.cat-icon svg{
+  width:26px;height:26px;
+  transition:transform .34s cubic-bezier(.34,1.5,.64,1);
+}
+.cat-card:hover .cat-icon svg{transform:translateY(-3px) rotate(-6deg) scale(1.1);}
+.cat-card span{display:block;font-weight:700;font-size:14px;transition:color .22s ease;}
+.cat-card:hover span{color:#2BD9BC;}
 
 /* ---------- فیلتر محصولات ---------- */
 .filter-pills{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:18px;}
@@ -469,10 +498,21 @@ section + section{padding-top:calc(var(--sp-section) * .45);}
   transition:border-color .2s ease, color .2s ease, background .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 .pill:hover{border-color:var(--teal);color:var(--ink);transform:translateY(-1px);}
+/* بازخوردِ فشار: بدون این، روی موبایل معلوم نیست ضربه گرفته شد یا نه و
+   کاربر دوباره می‌زند. */
+.pill:active{transform:scale(.96);}
 .pill.active{
   background:linear-gradient(135deg,#25E3C4, var(--teal-dark));
   color:#04211B;border-color:transparent;
   box-shadow:0 12px 28px -10px rgba(28,201,173,.55);
+  animation:pillOn .32s cubic-bezier(.34,1.56,.64,1);
+}
+/* لحظه‌ی فعال‌شدنِ دسته یک تکانِ کوتاه می‌خورد تا چشم بفهمد کدام قرص عوض شد —
+   مخصوصاً وقتی قرص‌ها زیادند و انتخابِ قبلی جای دیگری بود. */
+@keyframes pillOn{
+  0%{transform:scale(.92);}
+  60%{transform:scale(1.05);}
+  100%{transform:scale(1);}
 }
 
 /* ---------- محصولات ---------- */
@@ -633,6 +673,35 @@ section + section{padding-top:calc(var(--sp-section) * .45);}
 .buy-btn[disabled]{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none;}
 .buy-btn svg{width:15px;height:15px;}
 
+/* «موجود شد خبرم کن» — جانشینِ دکمه‌ی خاموشِ «ناموجود» روی کارت.
+   عمداً هم‌اندازه‌ی .buy-btn است تا ارتفاعِ کارت‌های ناموجود با بقیه یکی بماند
+   و شبکه نپرد، ولی رنگِ اصلیِ سایت را نمی‌گیرد: این کالا خریدنی نیست و نباید
+   به‌اندازه‌ی «افزودن به سبد» چشم را ببرد. */
+.notify-btn{
+  display:flex;align-items:center;gap:6px;
+  padding:9px 15px;border-radius:999px;font-size:12.5px;font-weight:800;
+  color:var(--ink-soft);background:var(--surface-2);
+  border:1px solid var(--line);
+  transition:color .2s ease, border-color .2s ease, background .2s ease,
+             transform .2s ease, box-shadow .2s ease;
+}
+.notify-btn svg{width:15px;height:15px;transition:transform .35s cubic-bezier(.34,1.5,.64,1);}
+.notify-btn:not([disabled]):hover{
+  color:var(--teal-dark);border-color:rgba(28,201,173,.45);background:var(--teal-tint);
+  transform:translateY(-1px);box-shadow:0 10px 22px -12px rgba(28,201,173,.55);
+}
+/* عقربه‌ی ساعت کمی می‌چرخد: اشاره‌ی کوچکی به «بعداً خبرت می‌کنیم» */
+.notify-btn:not([disabled]):hover svg{transform:rotate(-25deg) scale(1.1);}
+.notify-btn:not([disabled]):active{transform:scale(.95);}
+.notify-btn[disabled]{cursor:default;}
+.notify-btn.is-done{
+  color:var(--teal-dark);background:var(--teal-tint);
+  border-color:rgba(28,201,173,.4);
+  animation:badgePop .4s cubic-bezier(.34,1.56,.64,1);
+}
+/* در صفحه‌ی جزئیات همان دکمه بزرگ‌تر می‌نشیند تا کنارِ .pd-buy-row کم نیاورد */
+.notify-me-wrap .notify-btn{padding:12px 22px;font-size:13.5px;}
+
 /* برچسب «نمای سریع» روی عکس — جایگزین تولتیپ خام مرورگر */
 .qv-hint{
   position:absolute;left:50%;bottom:12px;transform:translateX(-50%) translateY(10px);
@@ -659,7 +728,25 @@ section + section{padding-top:calc(var(--sp-section) * .45);}
   transition:transform .68s cubic-bezier(.55,-0.05,.35,1), opacity .68s ease;
 }
 
-.products-footer{display:flex;justify-content:center;margin-top:44px;}
+/* پایانِ بخشِ محصولات: راهِ رسیدن به فهرستِ کامل.
+   (قاعده‌ی .products-footer که قبلاً اینجا بود هیچ مصرف‌کننده‌ای در پروژه
+   نداشت و حذف شد.) */
+.products-cta{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  margin-top:40px;
+}
+.products-cta-btn{position:relative;overflow:hidden;min-width:min(300px,100%);}
+/* پیکان کمی به سمتِ حرکت می‌لغزد — اشاره‌ی «ادامه‌اش این‌طرف است» */
+.products-cta-btn .pc-arrow{
+  width:16px;height:16px;
+  transition:transform .28s cubic-bezier(.34,1.5,.64,1);
+}
+.products-cta-btn:hover .pc-arrow{transform:translateX(-4px);}
+.products-cta-note{font-size:12.5px;color:var(--ink-dim);margin:0;text-align:center;}
+@media (max-width:560px){
+  .products-cta{margin-top:30px;}
+  .products-cta-btn{width:100%;}
+}
 /* دکمه‌ی «نمایش محصولات بیشتر» — با JS بعد از گرید تزریق می‌شود */
 .load-more-btn{
   display:flex;align-items:center;justify-content:center;gap:8px;
@@ -924,7 +1011,10 @@ footer.site::before{
 .to-top svg{width:20px;height:20px;color:var(--gold);}
 
 /* ---------- سربرگ صفحات داخلی ---------- */
-.page-head{padding:56px 0 8px;}
+/* فاصله‌ی بالای سربرگ عمداً کم است: هدر sticky است و خودش ۱۱۸px ارتفاع دارد،
+   پس ۵۶px فاصله‌ی اضافه یعنی مشتری روی موبایل باید اسکرول کند تا اولین کالا را
+   ببیند. ۱۷px همان «نفس کشیدنِ» لازم را می‌دهد بدون هدردادنِ صفحه‌ی اول. */
+.page-head{padding:17px 0 8px;}
 .page-head h1{font-size:clamp(26px,3.4vw,36px);}
 .breadcrumb{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-soft);margin-bottom:14px;}
 .breadcrumb a:hover{color:#2BD9BC;}
@@ -1959,6 +2049,22 @@ a.cart-row-title:hover{color:var(--teal);}
      روشن می‌ماند چون تنها نشانه‌ی وضعیت دکمه است و حرکتش هم ناچیز است. */
   .auth-aside{animation:none;}
   .aap-ic,.auth-steps li i{transition:none;}
+  /* ریزحرکت‌های این دور: نشانِ اعتماد، قرصِ دسته، نقطه‌ی طلایی، آیکونِ دسته،
+     دکمه‌ی «خبرم کن» و پیکانِ «همه‌ی محصولات». همه تزئینی‌اند و خاموش‌شدنشان
+     هیچ اطلاعاتی را از کاربر نمی‌گیرد. */
+  .trust-chip,.trust-chip svg{transition:none;}
+  .trust-chip:hover svg{transform:none;filter:none;}
+  .pill:active,.cat-card:active{transform:none;}
+  .pill.active{animation:none;}
+  .eyebrow .dot{animation:none;}
+  .cat-icon svg{transition:none;}
+  .cat-card:hover .cat-icon svg{transform:none;}
+  .notify-btn,.notify-btn svg{transition:none;}
+  .notify-btn:not([disabled]):hover{transform:none;}
+  .notify-btn:not([disabled]):hover svg{transform:none;}
+  .notify-btn.is-done{animation:none;}
+  .products-cta-btn .pc-arrow{transition:none;}
+  .products-cta-btn:hover .pc-arrow{transform:none;}
   .aa-points li:hover .aap-ic{transform:none;}
   .auth-steps li.is-active i{transform:none;}
   .resend-wrap::after{transition:none;}
@@ -3398,14 +3504,174 @@ table.ad-table tbody tr:last-child td{border-bottom:0;}
   .pl-sort select{flex:1;}
 }
 
-/* لینکِ «همه را ببین» زیر دکمه‌ی نمایش بیشتر (از صفحه‌ی دوم به بعد) */
-.see-all-link{
-  display:block;width:max-content;margin:12px auto 0;
-  color:var(--teal);font-size:13.5px;font-weight:700;
-  text-decoration:none;border-bottom:1px solid transparent;
-  transition:border-color .18s ease;
-}
-.see-all-link:hover{border-bottom-color:var(--teal);}
-
 /* شمارنده‌ی پیش‌نویسِ دسته در پنل — طلایی، هم‌رنگِ بقیه‌ی نشانه‌های پیش‌نویس */
 .cat-count .cat-draft{color:var(--gold);font-style:normal;font-weight:700;font-size:11.5px;}
+
+/* ============================================================
+   کلاس‌های جایگزینِ استایلِ درون‌خطی
+   ------------------------------------------------------------
+   چرا این بخش وجود دارد: تا دیروز هدرِ CSP مجبور بود
+   style-src 'self' 'unsafe-inline' بدهد، چون ۱۴۴ جای صفحه‌ها و
+   اسکریپت‌ها صفتِ style="…" داشتند. مشکلِ 'unsafe-inline' این است
+   که مرورگر نمی‌تواند بینِ استایلی که ما نوشته‌ایم و استایلی که یک
+   مهاجم تزریق کرده فرق بگذارد؛ و استایل به‌تنهایی هم می‌تواند
+   صفحه را دستکاری کند (دکمه‌ی «تأیید سفارش» را نامرئی کند، یا با
+   یک پس‌زمینه‌ی جعلی فرمِ ورود بسازد). پس همه‌ی آن‌ها به همین‌جا
+   منتقل شدند و آن مجوز برداشته شد.
+
+   قاعده‌ی نام‌گذاری: کلاس‌های کوتاهِ زیر «ابزارِ فاصله و اندازه‌اند»
+   (mt-20 یعنی margin-top:20px) و کلاس‌های بلندتر معنایی‌اند
+   (.addr-row، .field-label). هر چیزی که واقعاً متغیر است — مثل عرضِ
+   نوارِ نمودار در پنل — با JS و از راه CSSOM ست می‌شود، نه با صفت.
+   ============================================================ */
+
+/* --- فاصله‌ی بالای بخش‌ها --- */
+.sec-pt0{padding-top:0;}
+.sec-pt20{padding-top:20px;}
+.sec-pt24{padding-top:24px;}
+.sec-pt28{padding-top:28px;}
+.sec-pt32{padding-top:32px;}
+.sec-pt56{padding-top:56px;}
+.sec-pt70{padding-top:70px;}
+
+/* --- حاشیه‌ها --- */
+.mt-4{margin-top:4px;}
+.mt-8{margin-top:8px;}
+.mt-10{margin-top:10px;}
+.mt-14{margin-top:14px;}
+.mt-16{margin-top:16px;}
+.mt-18{margin-top:18px;}
+.mt-20{margin-top:20px;}
+.mt-22{margin-top:22px;}
+.mb-0{margin-bottom:0;}
+.mb-8{margin-bottom:8px;}
+.mb-14{margin-bottom:14px;}
+.mb-16{margin-bottom:16px;}
+.ms-10{margin-inline-start:10px;}
+.p0{padding:0;}
+
+/* --- چیدمان --- */
+.d-flex{display:flex;}
+.flex-1{flex:1;min-width:0;}
+.split{justify-content:space-between;}
+.span-all{grid-column:1/-1;}
+.stack-8{display:flex;flex-direction:column;gap:8px;}
+.stack-10{display:flex;flex-direction:column;gap:10px;}
+.stack-16{display:flex;flex-direction:column;gap:16px;}
+.row-9{display:flex;gap:9px;flex-wrap:wrap;}
+.row-10{display:flex;gap:10px;flex-wrap:wrap;}
+.row-10-center{display:flex;align-items:center;gap:10px;}
+.btn-row-center{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+.pager-row{display:flex;gap:8px;justify-content:center;margin-top:16px;}
+
+/* --- متن --- */
+.fs-11{font-size:11px;}
+.fs-115{font-size:11.5px;}
+.fs-15{font-size:15px;}
+.fs-16{font-size:16px;}
+.fw-800{font-weight:800;}
+.h-22{font-size:22px;}
+.txt-soft{color:var(--ink-soft);}
+.txt-gold{color:var(--gold);}
+.txt-teal{color:#2BD9BC;}
+.txt-danger{color:#FF9B85;}
+.txt-coral{color:var(--coral);}
+.txt-white{color:#fff;}
+.addr-plain{font-style:normal;}
+.note-p{margin:0 0 14px;font-size:12.5px;line-height:1.8;}
+.note-p-sm{margin:0 0 12px;font-size:12px;line-height:1.8;}
+.field-label{display:block;font-size:12.5px;font-weight:700;margin:14px 0 8px;}
+
+/* --- اندازه‌ی آیکون‌ها --- */
+.ic-12{width:12px;height:12px;}
+.ic-19{width:19px;height:19px;flex:none;}
+.ic-40{width:40px;height:40px;}
+.ic-44{width:44px;height:44px;}
+.rot180{transform:rotate(180deg);}
+
+/* --- عرض --- */
+.narrow-460{max-width:460px;}
+.narrow-620{max-width:620px;}
+.narrow-640{max-width:640px;}
+.th-w34{width:34px;}
+.th-w110{width:110px;}
+.tbl-w420{min-width:420px;}
+.tbl-w460{min-width:460px;}
+.tbl-w600{min-width:600px;}
+.skel-190{height:190px;}
+.fill-img{width:100%;height:100%;object-fit:cover;border-radius:inherit;}
+
+/* --- اشاره‌گر --- */
+.cur-pointer{cursor:pointer;}
+.cur-default{cursor:default;}
+
+/* --- لوگوی کوچکِ صفحه‌های داخلی (هدرِ همه‌ی صفحه‌ها جز اصلی) --- */
+/* دو کلاسی نوشته شده تا از .logo و .logo-badge بالاتر بنشیند */
+.logo.logo-sm{font-size:17px;}
+.logo-badge.logo-badge-sm{width:40px;height:40px;}
+.logo.logo-center{justify-content:center;margin-bottom:22px;}
+
+/* --- دکمه‌ی قرمزِ خطرناک (حذف/لغو) در پنل --- */
+.btn.btn-coral{background:var(--coral);border-color:var(--coral);}
+
+/* --- کارتِ آدرسِ ذخیره‌شده در حساب کاربری --- */
+.addr-row{
+  display:flex;align-items:flex-start;gap:12px;padding:14px;
+  border:1.5px solid var(--line);border-radius:12px;font-size:13.5px;
+}
+.addr-row .addr-pin{width:18px;height:18px;flex:none;color:var(--gold);margin-top:2px;}
+
+/* --- آیکونِ فهرستِ خالی در پنل مدیریت --- */
+.ad-list-empty svg{width:26px;height:26px;display:block;margin:0 auto 8px;opacity:.5;}
+
+/* --- صفحه‌ی «این کالا دیگر نیست» --- */
+.gone-main{min-height:80vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+
+/* ============================================================
+   صفحه‌ی خطای ۵۰۰ — قبلاً این‌ها در <style> خودِ 500.html بودند.
+   با بستن style-src به اینجا آمدند. خودِ صفحه از قبل style.css را
+   لینک می‌کرد، پس چیزی به وابستگی‌هایش اضافه نشد.
+   ============================================================ */
+.err-wrap{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:40px 20px;}
+.err-card{
+  width:100%;max-width:560px;text-align:center;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius-lg);box-shadow:var(--shadow);
+  padding:44px 32px;
+}
+.err-ic{
+  width:74px;height:74px;margin:0 auto 20px;border-radius:50%;
+  display:grid;place-items:center;
+  background:rgba(245,185,90,.12);border:1px solid rgba(245,185,90,.28);
+  animation:errPulse 2.4s ease-in-out infinite;
+}
+.err-ic svg{width:34px;height:34px;color:var(--gold);}
+@keyframes errPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(245,185,90,.22);}
+  50%{box-shadow:0 0 0 14px rgba(245,185,90,0);}
+}
+.err-code{
+  display:inline-block;font-size:11.5px;font-weight:800;letter-spacing:.08em;
+  color:var(--ink-soft);background:rgba(237,246,241,.06);
+  border-radius:999px;padding:4px 12px;margin-bottom:14px;
+}
+.err-card h1{font-size:24px;line-height:1.5;margin-bottom:12px;}
+.err-card p{color:var(--ink-soft);font-size:14.5px;line-height:2;margin-bottom:8px;}
+.err-acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:26px 0 0;}
+.err-acts .btn{flex:1 1 auto;min-width:0;}
+/* حالت «در حال شمارش» دکمه‌ی تلاش دوباره. pointer-events را نمی‌بندیم تا
+   المان همچنان قابل فوکوس بماند؛ کلیک را خودِ جاوااسکریپت خنثی می‌کند. */
+#btnRetry[aria-disabled="true"]{opacity:.62;cursor:default;}
+.err-help{
+  margin-top:26px;padding-top:20px;border-top:1px solid var(--line);
+  font-size:13px;color:var(--ink-soft);line-height:2;
+}
+.err-help a{color:var(--teal);font-weight:700;}
+.err-help bdo{font-variant-numeric:tabular-nums;}
+@media (max-width:480px){
+  .err-card{padding:34px 22px;}
+  .err-card h1{font-size:20px;}
+}
+@media (prefers-reduced-motion:reduce){
+  .err-ic{animation:none;}
+}

@@ -218,6 +218,75 @@ const kill = (srv) => { try { srv.child.kill(); } catch (e) {} };
       `${upMetaJson.width}×${upMetaJson.height}`);
   }
 
+  // ---------- ساختِ خودکارِ نسخه‌ی سبک بعد از آپلود ----------
+  // چرا اینجا نگهبان لازم است: تا نسخه‌ی ۱۲ ساختِ WebP فقط با اجرای دستیِ
+  // tools/optimize-images.js انجام می‌شد، یعنی به «یادش ماند یا نه» بند بود.
+  // مالک ۹۶ عکس اضافه می‌کند؛ اگر این مسیر بی‌صدا بشکند، سایت روی موبایل
+  // چند برابر سنگین می‌شود و هیچ‌کس تا مدت‌ها نمی‌فهمد.
+  //
+  // این تست اگر انکودری روی سیستم نباشد **رد نمی‌شود**، چون آن حالت هم قرار
+  // است سالم باشد (عکسِ اصلی سرو می‌شود). فقط اگر انکودر هست و نسخه ساخته
+  // نمی‌شود، قرمز می‌شود.
+  const { pickEncoder } = require('../lib/image-encode');
+  const encAvail = pickEncoder();
+  if (!encAvail) {
+    check('انکودرِ عکس روی این سیستم نیست — ساختِ خودکار رد شد (سایت سالم است)', true, 'no encoder');
+  } else {
+    // عکسِ **واقعیِ** محصول را آپلود می‌کنیم، نه عکسِ ساختگی.
+    //
+    // چرا این نکته را اینجا نوشتم: بارِ اول با makePng(900,700) تست کردم و
+    // «نسخه‌ی WebP ساخته نشد» قرمز شد. کد درست کار می‌کرد و **تست** غلط بود:
+    // آن PNG تمامش پیکسلِ صفر است، zlib به ۶۹۱ بایت می‌رساندش و WebP از آن
+    // کوچک‌تر نمی‌شود (۱۲۰۴ بایت). گاردِ «اگر webp بزرگ‌تر درآمد نگهش ندار»
+    // دقیقاً کارِ خودش را کرده بود. نویزِ محض هم همان‌قدر غیرواقعی است
+    // (۲۲KB → ۳۷۷KB). عکسِ واقعیِ محصول بینِ این دو حدِ افراطی است و
+    // ۵۰ تا ۷۵ درصد کوچک می‌شود؛ فقط با آن می‌شود این مسیر را سنجید.
+    //
+    // سندباکس کلِ پوشه‌ی عکس را کپی می‌کند، پس عکس‌های واقعی همین‌جا هستند.
+    const realPhoto = fs.readdirSync(PICS)
+      .find(f => /\.jpe?g$/i.test(f) && !/-\d+w\./i.test(f));
+
+    if (!realPhoto) {
+      check('عکسِ واقعیِ محصول برای تست پیدا شد', false, 'no real jpg in the picture folder');
+    } else {
+    const upOpt = await upload('image/jpeg', fs.readFileSync(path.join(PICS, realPhoto)));
+    const upOptJson = await upOpt.json().catch(() => ({}));
+    check('آپلودِ عکسِ واقعیِ محصول پذیرفته می‌شود', upOpt.status === 200, String(upOpt.status));
+
+    if (upOpt.status === 200) {
+      const base = path.basename(upOptJson.path).replace(/\.[a-z0-9]+$/i, '');
+      const want = [`${base}.webp`, `${base}-320w.webp`, `${base}-560w.webp`];
+      // تبدیل در پس‌زمینه است، پس تا ۲۰ ثانیه منتظر می‌مانیم.
+      // (اگر همگام بود، کلِ سایت موقعِ هر آپلود قفل می‌شد.)
+      let found = [];
+      for (let i = 0; i < 100; i++) {
+        found = want.filter(f => fs.existsSync(path.join(PICS, f)));
+        if (found.length === want.length) break;
+        await new Promise(r => setTimeout(r, 200));
+      }
+      check('نسخه‌ی WebP و هر دو سایزِ کوچک خودکار ساخته شدند',
+        found.length === want.length, `${found.length}/${want.length}: ${found.join(', ')}`);
+
+      // مهم‌ترین بخش: نسخه‌ی سبک باید واقعاً سبک‌تر باشد. اگر روزی کیفیت یا
+      // آرگومان‌ها خراب شود، فایل ساخته می‌شود ولی بزرگ‌تر — و سرور نسخه‌ی
+      // *سنگین‌تر* را تحویل می‌دهد، یعنی بهینه‌سازی برعکس عمل می‌کند.
+      const origBytes = fs.statSync(path.join(PICS, path.basename(upOptJson.path))).size;
+      const webpPath = path.join(PICS, `${base}.webp`);
+      if (fs.existsSync(webpPath)) {
+        check('نسخه‌ی WebP از اصل کوچک‌تر است',
+          fs.statSync(webpPath).size < origBytes,
+          `${Math.round(fs.statSync(webpPath).size / 1024)}KB < ${Math.round(origBytes / 1024)}KB`);
+      }
+      // و سایزِ ۳۲۰ باید ابعادش واقعاً ۳۲۰ باشد، نه فقط نامش
+      const p320 = path.join(PICS, `${base}-320w.webp`);
+      if (fs.existsSync(p320)) {
+        const d = require('../lib/imagesize').imageSizeFromFile(p320);
+        check('سایزِ ۳۲۰ واقعاً ۳۲۰ پیکسل عرض دارد', d && d.width === 320, d ? `${d.width}×${d.height}` : 'unreadable');
+      }
+    }
+    }
+  }
+
   let removed = 0;
   for (const f of (fs.existsSync(PICS) ? fs.readdirSync(PICS) : [])) {
     if (!before.has(f)) { fs.unlinkSync(path.join(PICS, f)); removed++; }

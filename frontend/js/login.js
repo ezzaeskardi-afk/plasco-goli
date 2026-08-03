@@ -16,7 +16,18 @@
 document.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(location.search);
   // بعد از ورود: برگرد به همان‌جایی که کاربر بود (next)؛ وگرنه صفحه‌ی اصلی فروشگاه.
-  const next = params.get('next') || 'index.html';
+  //
+  // next از نوار نشانی می‌آید، پس مهاجم می‌تواند هر چیزی در آن بگذارد. اگر
+  // خام استفاده شود، لینکِ login.html?next=https://evil.com کاربر را *بعد از
+  // ورود موفق* به سایت جعلی می‌برد؛ کاربری که تازه رمز زده، به آن صفحه اعتماد
+  // می‌کند. پس فقط مسیرِ داخلی می‌پذیریم: هر چیزی که «:» یا «//» یا «\» دارد
+  // (یعنی می‌تواند طرح یا میزبان بسازد) دور ریخته می‌شود.
+  function safeNext(raw) {
+    const v = String(raw || '');
+    if (!v || v.startsWith('//') || v.includes(':') || v.includes('\\')) return 'index.html';
+    return v.startsWith('/') ? v : v.replace(/^[./]+/, '');
+  }
+  const next = safeNext(params.get('next'));
 
   const stepPhone = document.getElementById('stepPhone');
   const stepCode = document.getElementById('stepCode');

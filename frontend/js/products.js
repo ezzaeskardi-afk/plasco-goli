@@ -167,7 +167,7 @@
     // LCP گوگل است)؛ بقیه تنبل. width/height ثابت جلوی پرشِ چیدمان را
     // می‌گیرد حتی قبل از رسیدنِ عکس.
     const media = p.image
-      ? `<img src="${PG.esc(PG.cardImg(p.image))}" alt="${title}" width="560" height="560"
+      ? `<img src="${PG.esc(PG.cardImg(p.image))}"${PG.imgSizing(p.image, PG.LIST_SIZES)} alt="${title}" width="560" height="560"
            ${eager ? 'fetchpriority="high" decoding="sync"' : 'loading="lazy" decoding="async"'}>`
       : `<svg role="img" aria-label="${title}"><use href="#${PG.esc(p.icon || 'i-package')}"/></svg>`;
     // در صفحه‌ی اصلی، کلیک روی عکس «نمای سریع» را باز می‌کند. اینجا عمداً
@@ -198,9 +198,10 @@
         ${low ? `<span class="stock-hint">فقط ${PG.money(p.stock)} عدد باقی مانده</span>` : ''}
         <div class="product-footer">
           ${PG.priceHtml(p)}
-          <button class="buy-btn" data-id="${p.id}" ${out ? 'disabled' : ''} aria-label="${out ? 'ناموجود' : `افزودن ${title} به سبد خرید`}">
-            <svg><use href="#i-cart"/></svg> ${out ? 'ناموجود' : 'افزودن به سبد'}
-          </button>
+          ${out ? PG.notifyBtnHtml(p.id) : `
+          <button class="buy-btn" data-id="${p.id}" aria-label="افزودن ${title} به سبد خرید">
+            <svg><use href="#i-cart"/></svg> افزودن به سبد
+          </button>`}
         </div>
       </div>
     </article>`;

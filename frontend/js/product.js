@@ -8,6 +8,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const notFound = document.getElementById('pdNotFound');
   const loaded = document.getElementById('pdLoaded');
 
+  // کادرِ عکسِ اصلی در دسکتاپ حداکثر ۴۶۰ پیکسل است و در موبایل تمامِ عرض تا
+  // همان سقف. چون گالری همین عکس را با JS عوض می‌کند، این رشته باید یک‌جا
+  // تعریف شود؛ دو نسخه‌ی جدا یعنی بعد از تعویضِ عکس، sizes با HTML اولیه فرق کند.
+  const COVER_SIZES = '(max-width:820px) min(100vw, 460px), 460px';
+
   if (!id) return showNotFound();
 
   // هر دو درخواست هم‌زمان شروع می‌شوند (قبلاً پشت‌سرهم بودند و یک رفت‌وبرگشت
@@ -88,7 +93,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       ${p.discountPercent ? `<span class="product-badge off">${PG.money(p.discountPercent)}٪ تخفیف</span>` : (p.badge ? `<span class="product-badge">${PG.esc(p.badge)}</span>` : '')}
       ${PG.wishBtnHtml(p.id, 'pd-wish')}
       ${cover
-        ? `<img src="${PG.esc(cover)}" alt="${PG.esc(p.title)}" fetchpriority="high" decoding="async">
+        ? `<img src="${PG.esc(cover)}"${PG.imgSizing(cover, COVER_SIZES)} alt="${PG.esc(p.title)}" fetchpriority="high" decoding="async">
            <span class="pd-zoom-hint"><svg aria-hidden="true"><use href="#i-search"/></svg> برای بزرگ‌نمایی بزنید</span>`
         : `<svg role="img" aria-label="${PG.esc(p.title)}"><use href="#${PG.esc(p.icon)}"/></svg>`}`;
     PG.refreshWishlist();
@@ -122,32 +127,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     buy.querySelector('span').textContent = outOfStock ? 'ناموجود' : 'افزودن به سبد';
     const buyIdleHtml = buy.innerHTML; // بعد از تنظیم متن درست ذخیره می‌شود
 
-    // ناموجود؟ به‌جای بن‌بست، دکمه‌ی «موجود شد خبرم کن» — مشتری از دست نمی‌رود
-    if (outOfStock && !document.getElementById('pdNotifyMe')) {
+    // ناموجود؟ به‌جای بن‌بست، دکمه‌ی «موجود شد خبرم کن» — مشتری از دست نمی‌رود.
+    // خودِ دکمه و رفتارش در common.js است (همان که روی کارت‌ها هم می‌نشیند)،
+    // پس اینجا فقط جایش را می‌سازیم. قبلاً یک نسخه‌ی دومِ همین کد اینجا بود.
+    if (outOfStock && !document.querySelector('.notify-me-wrap')) {
       document.querySelector('.pd-buy-row').insertAdjacentHTML('afterend', `
         <div class="notify-me-wrap">
-          <button type="button" class="btn btn-outline" id="pdNotifyMe">
-            <svg><use href="#i-history"/></svg> موجود شد خبرم کن
-          </button>
+          ${PG.notifyBtnHtml(p.id)}
           <small>به محض شارژ موجودی، پیامک می‌گیرید.</small>
         </div>`);
-      document.getElementById('pdNotifyMe').addEventListener('click', async () => {
-        const b = document.getElementById('pdNotifyMe');
-        b.disabled = true;
-        try {
-          const r = await PG.api(`/products/${p.id}/notify-me`, { method: 'POST' });
-          PG.toast(r.message || 'ثبت شد', 'success');
-          b.innerHTML = '<svg><use href="#i-check"/></svg> خبرت می‌کنیم';
-        } catch (err) {
-          if (err.status === 401) {
-            PG.toast('برای «خبرم کن» اول وارد حساب‌تان شوید', 'info');
-            setTimeout(() => { location.href = `/login.html?next=${encodeURIComponent(`product.html?id=${p.id}`)}`; }, 900);
-          } else {
-            PG.toast(err.message || 'ثبت نشد؛ دوباره تلاش کنید', 'error');
-            b.disabled = false;
-          }
-        }
-      });
     }
     buy.addEventListener('click', async () => {
       if (buy.disabled) return;
@@ -194,7 +182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function show(i, { focusThumb = false } = {}) {
       idx = (i + gallery.length) % gallery.length;
-      if (mainImg) mainImg.src = gallery[idx];
+      if (mainImg) PG.setImgSrc(mainImg, gallery[idx], COVER_SIZES);
       if (lbImg) { lbImg.src = gallery[idx]; lbImg.classList.remove('is-zoomed'); }
       if (lbCount) lbCount.textContent = `${PG.money(idx + 1)} از ${PG.money(gallery.length)}`;
       thumbs.querySelectorAll('.pd-thumb').forEach((t, n) => {
@@ -215,7 +203,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       thumbs.innerHTML = gallery.map((src, i) => `
         <button type="button" class="pd-thumb${i === 0 ? ' on' : ''}" role="tab"
           aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}" aria-label="عکس ${PG.money(i + 1)}">
-          <img src="${PG.esc(src)}" alt="" loading="lazy" decoding="async">
+          <img src="${PG.esc(PG.thumb(src, 320))}" alt="" loading="lazy" decoding="async">
         </button>`).join('');
       thumbs.classList.remove('hidden');
 
@@ -539,11 +527,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const outOfStock = typeof p.stock === 'number' && p.stock <= 0;
     const title = PG.esc(p.title);
     const media = p.image
-      ? `<img src="${PG.esc(PG.cardImg(p.image))}" alt="${title}" loading="lazy" decoding="async">`
+      ? `<img src="${PG.esc(PG.cardImg(p.image))}"${PG.imgSizing(p.image)} alt="${title}" loading="lazy" decoding="async">`
       : `<svg role="img" aria-label="${title}"><use href="#${PG.esc(p.icon)}"/></svg>`;
     return `
       <article class="product-card">
-        <a href="/product/${p.id}" class="product-media${p.image ? ' has-image' : ''}" style="display:flex" aria-label="${title}">
+        <a href="/product/${p.id}" class="product-media${p.image ? ' has-image' : ''} d-flex" aria-label="${title}">
           ${p.discountPercent ? `<span class="product-badge off">${PG.money(p.discountPercent)}٪ تخفیف</span>` : (p.badge ? `<span class="product-badge">${PG.esc(p.badge)}</span>` : '')}
           ${PG.wishBtnHtml(p.id)}
           ${media}

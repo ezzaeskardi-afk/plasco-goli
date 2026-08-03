@@ -13,7 +13,7 @@
 <link rel="preload" href="assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=41">
+<link rel="stylesheet" href="css/style.css?v=42">
 </head>
 <body>
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -27,7 +27,7 @@
 
     <div class="search-box" id="searchBox">
       <svg class="search-ic"><use href="#i-search"/></svg>
-      <input type="search" id="siteSearch" placeholder="جستجو در محصولات؛ مثلاً «سطل» یا «ادویه»..." autocomplete="off" aria-label="جستجو در محصولات">
+      <input type="search" id="siteSearch" maxlength="60" placeholder="جستجو در محصولات؛ مثلاً «سطل» یا «ادویه»..." autocomplete="off" aria-label="جستجو در محصولات">
     </div>
 
     <div class="header-actions">
@@ -79,8 +79,8 @@
 <div class="mobile-drawer" id="drawer">
   <div class="drawer-panel">
     <div class="drawer-head">
-      <span class="logo" style="font-size:17px">
-        <span class="logo-badge" style="width:40px;height:40px"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="" width="48" height="48" decoding="async"></span>
+      <span class="logo logo-sm">
+        <span class="logo-badge logo-badge-sm"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="" width="48" height="48" decoding="async"></span>
         پلاسکو گلی
       </span>
       <button class="icon-btn drawer-close" id="menuClose" aria-label="بستن منو"><svg><use href="#i-close"/></svg></button>
@@ -88,7 +88,7 @@
 
     <div class="drawer-search">
       <svg><use href="#i-search"/></svg>
-      <input type="search" id="drawerSearch" placeholder="جستجوی محصول..." autocomplete="off" aria-label="جستجو در محصولات">
+      <input type="search" id="drawerSearch" maxlength="60" placeholder="جستجوی محصول..." autocomplete="off" aria-label="جستجو در محصولات">
     </div>
 
     <span class="drawer-label">صفحات</span>
@@ -119,7 +119,7 @@
     <h1>سلام، <span id="userPhone">کاربر عزیز</span> 👋</h1>
   </div>
 
-  <section style="padding-top:32px">
+  <section class="sec-pt32">
     <div class="container account-grid">
       <aside class="account-nav">
         <a href="#orders" id="navOrders" class="acc-tab active"><svg><use href="#i-package"/></svg> سفارش‌های من</a>
@@ -172,10 +172,10 @@
           </div>
 
           <!-- آدرس‌های من -->
-          <div class="profile-card" style="margin-top:20px">
+          <div class="profile-card mt-20">
             <h3>آدرس‌های من</h3>
             <p class="muted-sub">آدرس‌هاتون رو اینجا ذخیره کنید تا موقع خرید فقط انتخاب‌شون کنید.</p>
-            <div id="addrList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
+            <div id="addrList" class="stack-10 mb-16"></div>
             <div id="alertAddr"></div>
             <form id="formAddress">
               <div class="form-grid-2">
@@ -209,7 +209,7 @@
           </div>
 
           <!-- رمز عبور -->
-          <div class="profile-card" style="margin-top:20px">
+          <div class="profile-card mt-20">
             <h3>رمز عبور (اختیاری)</h3>
             <p class="muted-sub" id="passHint">اگه رمز بذارید، دفعه‌های بعد می‌تونید بدون منتظر پیامک موندن وارد بشید.</p>
             <div id="alertPass"></div>
@@ -218,7 +218,7 @@
                 <label for="newPass">رمز جدید (حداقل ۶ کاراکتر)</label>
                 <input id="newPass" type="password" minlength="6" maxlength="100" autocomplete="new-password" required>
               </div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <div class="row-10">
                 <button type="submit" class="btn btn-primary"><svg><use href="#i-lock"/></svg> ذخیره‌ی رمز</button>
                 <button type="button" id="btnRemovePass" class="btn btn-outline hidden">حذف رمز (فقط ورود پیامکی)</button>
               </div>
@@ -226,7 +226,7 @@
           </div>
 
           <!-- دستگاه‌های وارد‌شده -->
-          <div class="profile-card" style="margin-top:20px">
+          <div class="profile-card mt-20">
             <h3>دستگاه‌های وارد شده</h3>
             <p class="muted-sub" id="sessHint">در حال بررسی…</p>
             <div id="alertSess"></div>
@@ -250,7 +250,7 @@
     <div class="footer-about">
       <div class="logo">
         <span class="logo-badge"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="لوگوی پلاسکو گلی" width="48" height="48" decoding="async"></span>
-        <span style="color:#fff">پلاسکو گلی</span>
+        <span class="txt-white">پلاسکو گلی</span>
       </div>
       <p>فروشگاه محله‌ای لوازم پلاستیکی خانه؛ جنس اصل، قیمت منصفانه، مشاوره‌ی صادقانه.</p>
       <div class="footer-social">
@@ -278,8 +278,8 @@
     <span>ساخته‌شده با ❤ برای پلاسکو گلی</span>
   </div>
 </footer>
-<script src="js/common.js?v=41" defer></script>
-<script src="js/account.js?v=41" defer></script>
+<script src="js/common.js?v=42" defer></script>
+<script src="js/account.js?v=42" defer></script>
 
 </body>
 </html>

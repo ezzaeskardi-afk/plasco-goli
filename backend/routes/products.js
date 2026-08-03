@@ -93,7 +93,10 @@ function serializeProduct(p, ratings = null) {
 router.get('/',
   searchGate,
   validate({
-    q: V.str({ optional: true, max: 60 }),
+    // q تنها فیلدی است که برشِ خاموش برایش *درست* است: کسی که عنوانِ بلندِ یک
+    // کالا را در جست‌وجو می‌چسباند نباید خطا بگیرد، باید نتیجه ببیند. بقیه‌ی
+    // فیلدها با طولِ بیش از حد خطا می‌دهند (V.str پیش‌فرض).
+    q: V.str({ optional: true, max: 60, truncate: true }),
     category: V.str({ optional: true, max: 40 }),
     sort: V.enum(SORTS, { fallback: 'newest' }),
     minPrice: V.int({ min: 0, max: 10_000_000_000, optional: true }),

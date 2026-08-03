@@ -345,10 +345,17 @@ router.get('/sessions', (req, res) => {
 });
 
 // حذف رمز عبور (برگشت به ورود فقط با پیامک)
+// نکته‌ی امنیتی: حذفِ رمز نباید فقط «رمزش را بردارد»؛ هر دستگاهِ دیگری که
+// با این رمز وارد شده باید از نشستش بیرون بیفتد. اگر رمز خالی بماند و نشست‌ها
+// سر جاشان باشند، کسی که بعداً رمز را بازمی‌گذارد مطمئن نیست که هیچ
+// نشستِ قدیمیِ بی‌رمز هنوز زنده نمانده باشد. همان رفتار /password/set:
+// همه‌ی نشست‌های دیگر را می‌کشد و رویداد را لاگ می‌کند.
 router.post('/password/remove', (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'ابتدا وارد شوید' });
   const user = setUserPassword(req.session.userId, null);
-  res.json({ ok: true, user: publicUser(user) });
+  const killed = destroyOtherSessions(req.session.userId, req.sessionID);
+  log.info('User removed password and revoked other sessions', { userId: req.session.userId, killed });
+  res.json({ ok: true, user: publicUser(user), revoked: killed });
 });
 
 router.get('/me', (req, res) => {

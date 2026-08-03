@@ -918,7 +918,7 @@ function setStaff(userId, on) { stmtSetStaff.run(on ? 1 : 0, userId); return stm
 
 // لیست همه‌ی مشتری‌ها + آمار خرید هرکدام (برای تب مشتری‌های پنل)
 const stmtAllUsers = db.prepare(`
-  SELECT u.id, u.phone, u.full_name, u.is_admin, u.created_at,
+  SELECT u.id, u.phone, u.full_name, u.is_admin, u.is_staff, u.created_at,
          (u.password_hash IS NOT NULL) AS has_password,
          COUNT(CASE WHEN o.status IN ('paid','shipped','delivered','return_requested') THEN 1 END) AS paid_orders,
          COALESCE(SUM(CASE WHEN o.status IN ('paid','shipped','delivered','return_requested') THEN o.total END),0) AS total_spent,
@@ -1140,6 +1140,10 @@ const stmtStats = db.prepare(`SELECT
   (SELECT COUNT(*)               FROM wishlist) AS wish_count`);
 
 function getAdminStats() {
+  // شمارنده‌های بازدیدِ در حافظه را اول بنویس، وگرنه پنل تا ۳۰ ثانیه عددِ
+  // قدیمی نشان می‌دهد و مالک فکر می‌کند آمار خراب است. این مسیر فقط در
+  // پنل صدا زده می‌شود، پس هزینه‌ی یک تراکنشِ اضافه اینجا اهمیتی ندارد.
+  flushVisits();
   // مرزها در هر فراخوانی دوباره حساب می‌شوند، وگرنه سروری که چند روز بالا مانده
   // تا ابد «امروز»ِ روزِ راه‌اندازی را گزارش می‌کند.
   const n = new Date();
@@ -1555,12 +1559,43 @@ const adminMoveCategoryTx = transaction((id, dir) => {
 
 // ---------- شمارنده‌ی بازدید صفحه‌ها (سبک و بدون ردیابی شخصی) ----------
 // (جدولش کنار مهاجرت‌ها ساخته می‌شود چون stmtStats موقع لود به آن نیاز دارد)
+//
+// چرا بافر: قبلاً هر بازدیدِ صفحه یک INSERT..ON CONFLICT همگام بود. موتورِ ما
+// همگام است، پس آن نوشتن — هرچند کوچک — درست وسطِ مسیرِ پاسخ می‌نشیند و در
+// لحظه‌ی شلوغی (همان لحظه‌ای که مهم است) به هر بازدیدکننده کمی تأخیر می‌دهد.
+// بدتر: هر نوشتن روی WAL قفلِ نویسنده می‌گیرد، پس بازدیدِ ساده با ثبتِ سفارش
+// سرِ همان قفل رقابت می‌کند.
+//
+// حالا شمارش در حافظه جمع می‌شود و هر ۳۰ ثانیه یک‌جا نوشته می‌شود: صد بازدید
+// در نیم‌دقیقه یعنی یک تراکنش به‌جای صد تا. بهایش این است که با کشته‌شدنِ
+// ناگهانیِ پروسه (kill -9) حداکثر ۳۰ ثانیه آمار از دست می‌رود — و آمارِ
+// بازدید دقیقاً همان داده‌ای است که این معامله برایش می‌ارزد (برخلافِ سفارش
+// که هیچ‌وقت بافر نمی‌شود). خاموشیِ تمیز خودش flush می‌کند.
 const stmtVisitBump = db.prepare(`INSERT INTO visits (day, path, n)
-  VALUES (date('now','localtime'), ?, 1)
-  ON CONFLICT(day, path) DO UPDATE SET n = n + 1`);
+  VALUES (date('now','localtime'), ?, ?)
+  ON CONFLICT(day, path) DO UPDATE SET n = n + excluded.n`);
+const visitBuffer = new Map();     // path → تعداد
+const VISIT_FLUSH_MS = 30_000;
+const VISIT_PATHS_MAX = 500;       // سقف: مسیرهای ساختگی نباید حافظه را باد کنند
 function bumpVisit(path) {
-  try { stmtVisitBump.run(String(path).slice(0, 80)); } catch (e) { /* آمار نباید صفحه را بخواباند */ }
+  const p = String(path).slice(0, 80);
+  if (!visitBuffer.has(p) && visitBuffer.size >= VISIT_PATHS_MAX) return;
+  visitBuffer.set(p, (visitBuffer.get(p) || 0) + 1);
 }
+function flushVisits() {
+  if (!visitBuffer.size) return 0;
+  // اول عکس‌برداری و پاک‌کردن: اگر نوشتن خطا داد، شمارنده‌ها دوباره روی هم
+  // انباشته نمی‌شوند و آمارِ بعدی درست جلو می‌رود.
+  const batch = [...visitBuffer];
+  visitBuffer.clear();
+  try {
+    transaction(() => { for (const [p, n] of batch) stmtVisitBump.run(p, n); })();
+  } catch (e) { /* آمار نباید چیزی را بخواباند */ }
+  return batch.length;
+}
+// unref: این تایمر نباید جلوی خروجِ پروسه را بگیرد.
+const visitTimer = setInterval(flushVisits, VISIT_FLUSH_MS);
+if (visitTimer.unref) visitTimer.unref();
 const stmtVisitsCleanup = db.prepare(`DELETE FROM visits WHERE day < date('now','localtime','-90 days')`);
 function cleanupOldVisits() { return stmtVisitsCleanup.run().changes; }
 // پربازدیدترین صفحه‌های ۷ روز اخیر برای گزارش پنل
@@ -2229,6 +2264,8 @@ let closed = false;
 function closeDb(log = console) {
   if (closed) return;
   closed = true;
+  // آخرین شمارنده‌های بازدید که هنوز در حافظه‌اند، قبل از بستن نوشته شوند
+  try { flushVisits(); } catch (e) { /* آمار ارزشِ خراب‌کردنِ خاموشی را ندارد */ }
   try {
     db.exec('PRAGMA busy_timeout = 400;'); // خاموشی را معطل خواننده‌ها نکن
     db.exec('PRAGMA wal_checkpoint(PASSIVE);');
@@ -2239,6 +2276,7 @@ function closeDb(log = console) {
 
 module.exports = {
   db, DATA_DIR, initDb, closeDb, getDbHealth, checkIntegrity,
+  flushVisits,
   getProducts, getProduct, upsertProductsTx,
   // نسخه‌های عمومی — پیش‌نویس‌ها را نشان نمی‌دهند (ستون published)
   getPublicProducts, getPublicProduct, setProductPublished, getDraftSummary, batchHasOrders, deleteBatch,

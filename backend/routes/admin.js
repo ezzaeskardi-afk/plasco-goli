@@ -31,6 +31,7 @@ const { isAdminPhone, normalizePhone, isValidIranPhone } = require('../lib/phone
 const { notifyCustomerOrderStatus, notifyStockAvailable } = require('../lib/sms');
 const { imageSizeFromBuffer } = require('../lib/imagesize');
 const { stripImageMetadata } = require('../lib/image-clean');
+const { queueVariants } = require('../lib/image-encode');
 const { errorDigest } = require('../lib/error-digest');
 
 const log = require('../lib/logger');
@@ -1056,6 +1057,21 @@ router.post('/upload-image',
     fs.mkdirSync(PRODUCTS_PICTURE_DIR, { recursive: true });
     const name = `p-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
     fs.writeFileSync(path.join(PRODUCTS_PICTURE_DIR, name), cleaned.buf);
+
+    // نسخه‌ی سبکِ WebP و سایزهای کوچک را بساز — ولی **در پس‌زمینه**.
+    //
+    // چرا پس‌زمینه: تبدیلِ عکس چند صد میلی‌ثانیه تا چند ثانیه طول می‌کشد و
+    // موتورِ ما همگام است؛ اگر همین‌جا منتظر بمانیم، کلِ سایت برای همه‌ی
+    // بازدیدکننده‌ها همان‌قدر قفل می‌شود. (همان درسِ فشرده‌سازی در نسخه‌ی ۱۱.)
+    //
+    // چرا اینجا و نه فقط در ابزار: قبلاً ساختِ نسخه‌ی سبک فقط با اجرای دستیِ
+    // tools/optimize-images.js انجام می‌شد، یعنی به «یادش ماند یا نه» بند بود.
+    // عکسی که نسخه‌ی سبک ندارد، کامل و سنگین سرو می‌شود.
+    //
+    // اگر انکودری روی سیستم نباشد، این تابع false می‌دهد و هیچ‌چیز نمی‌شکند:
+    // عکسِ اصلی سرِ جایش است و lib/webp-negotiate.js خودش به آن برمی‌گردد.
+    queueVariants(path.join(PRODUCTS_PICTURE_DIR, name), log);
+
     // نوشتن روی دیسک باید ردپا داشته باشد؛ اگر روزی فایل ناخواسته‌ای پیدا شد
     // باید بشود فهمید چه کسی و کِی آن را گذاشته.
     note(req, 'image_upload', name,

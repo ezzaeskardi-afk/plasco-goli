@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const badge = (st) => `<span class="status-badge status-${esc(st)}">${esc(STATUS_FA[st] || st)}</span>`;
   const skel = (n = 4) => Array.from({ length: n }, () => '<div class="ad-skel ad-skel-row"></div>').join('');
   const emptyBox = (icon, text) =>
-    `<div class="ad-list-empty"><svg style="width:26px;height:26px;display:block;margin:0 auto 8px;opacity:.5"><use href="#${icon}"/></svg>${esc(text)}</div>`;
+    `<div class="ad-list-empty"><svg><use href="#${icon}"/></svg>${esc(text)}</div>`;
 
   // ============================================================
   // گارد دسترسی
@@ -228,8 +228,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       <div class="bar-row">
         <span class="bar-name">${esc(r[name] || '—')}</span>
         <span class="bar-val">${fmt(r[value])}${esc(suffix)}</span>
-        <span class="bar-track"><span class="bar-fill" style="width:${((Number(r[value]) || 0) / max * 100).toFixed(1)}%"></span></span>
+        <span class="bar-track"><span class="bar-fill" data-w="${((Number(r[value]) || 0) / max * 100).toFixed(1)}"></span></span>
       </div>`).join('') + `</div>`;
+    // درصدِ هر میله محاسبه‌شدنی است، پس با کلاسِ ثابت بیان نمی‌شود. صفتِ style=""
+    // هم با بستنِ style-src در CSP بلوکه می‌شود — ولی نوشتن روی el.style از
+    // جاوااسکریپت بلوکه نمی‌شود. پس عدد در data-w می‌آید و همین‌جا اعمال می‌شود.
+    for (const el of host.querySelectorAll('.bar-fill')) el.style.width = el.dataset.w + '%';
   }
 
   // کارت آماری
@@ -313,7 +317,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // تقاضای از‌دست‌رفته
       $('dashLost').innerHTML = d.wishedOutOfStock.length ? `<div class="ad-list">` + d.wishedOutOfStock.map(p => `
         <div class="ad-list-row">
-          <span class="rank"><svg style="width:12px;height:12px"><use href="#i-heart-fill"/></svg></span>
+          <span class="rank"><svg class="ic-12"><use href="#i-heart-fill"/></svg></span>
           <span class="grow"><b>${esc(p.title)}</b><small>ناموجود است و ${money(p.wishers)} نفر منتظرند</small></span>
           <span class="val bad">${money(p.wishers)} نفر</span>
         </div>`).join('') + `</div>`
@@ -328,12 +332,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       $('navReviews').textContent = money(s.pending_reviews || 0);
       $('navReviews').classList.toggle('urgent', (s.pending_reviews || 0) > 0);
     } catch (e) {
-      $('dashKpis').innerHTML = `<div class="alert alert-error" style="grid-column:1/-1"><svg><use href="#i-alert"/></svg><span>${esc(e.message)}</span></div>`;
+      $('dashKpis').innerHTML = `<div class="alert alert-error span-all"><svg><use href="#i-alert"/></svg><span>${esc(e.message)}</span></div>`;
     }
   }
 
   $('chartRange').addEventListener('change', async (e) => {
-    $('chartHost').innerHTML = '<div class="ad-skel" style="height:190px"></div>';
+    $('chartHost').innerHTML = '<div class="ad-skel skel-190"></div>';
     try {
       const { series } = await PG.api(`/admin/sales-series?days=${encodeURIComponent(e.target.value)}`);
       drawChart($('chartHost'), series);
@@ -505,7 +509,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cur = Math.floor(OQ.offset / OQ.limit) + 1;
     $('ordersPager').innerHTML = pages <= 1 ? '' : `
       <button class="btn btn-outline btn-sm" data-page="${cur - 1}" ${cur <= 1 ? 'disabled' : ''}>قبلی</button>
-      <span class="ad-chip" style="cursor:default">صفحه ${money(cur)} از ${money(pages)}</span>
+      <span class="ad-chip cur-default">صفحه ${money(cur)} از ${money(pages)}</span>
       <button class="btn btn-outline btn-sm" data-page="${cur + 1}" ${cur >= pages ? 'disabled' : ''}>بعدی</button>`;
   }
 
@@ -524,7 +528,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       b.push(`<button class="btn btn-ghost btn-sm act-status" data-from="return_requested" data-to="delivered">رد درخواست</button>`);
     }
     if (['paid', 'shipped', 'delivered', 'return_requested'].includes(o.status)) {
-      b.push(`<button class="btn btn-ghost btn-sm act-cancel" style="color:#FF9B85"><svg><use href="#i-ban"/></svg> لغو سفارش</button>`);
+      b.push(`<button class="btn btn-ghost btn-sm act-cancel txt-danger"><svg><use href="#i-ban"/></svg> لغو سفارش</button>`);
     }
     return b.join('');
   }
@@ -722,17 +726,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       <td>${money(n + 1)}</td><td>${esc(i.title)}</td><td>${money(i.qty)}</td>
       <td>${money(i.price)}</td><td>${money(i.price * i.qty)}</td></tr>`).join('');
     const html = `<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8">
-      <title>فاکتور سفارش ${o.id}</title><style>
-      body{font-family:Tahoma,sans-serif;padding:26px;color:#111;font-size:13px}
-      h1{font-size:19px;margin:0 0 4px}
-      .head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:16px}
-      .meta{font-size:12px;line-height:2}
-      table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px}
-      th,td{border:1px solid #bbb;padding:7px 9px;text-align:right}
-      th{background:#f1f1f1}
-      tfoot td{font-weight:bold;background:#fafafa}
-      .foot{margin-top:26px;font-size:11.5px;color:#555;border-top:1px dashed #aaa;padding-top:12px}
-      </style></head><body>
+      <title>فاکتور سفارش ${o.id}</title>
+      <link rel="stylesheet" href="/css/invoice.css?v=42">
+      </head><body class="ad-invoice">
       <div class="head">
         <div><h1>${esc(SETTINGS.shop_name || 'پلاسکو گلی')}</h1>
           <div class="meta">فاکتور فروش<br>
@@ -750,11 +746,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       <tbody>${rows}</tbody>
       <tfoot><tr><td colspan="4">مبلغ کل (تومان)</td><td>${money(o.total)}</td></tr></tfoot></table>
       <div class="foot">این فاکتور از پنل مدیریت صادر شده است. ${esc(SETTINGS.announcement || '')}</div>
-      <script>window.onload=function(){window.print()}<\/script>
       </body></html>`;
     const w = window.open('', '_blank');
     if (!w) return PG.toast('مرورگر پنجره‌ی چاپ را بست؛ pop-up را اجازه بدهید', 'error');
     w.document.write(html); w.document.close();
+    // چاپ از همین‌جا صدا زده می‌شود، نه با <script> داخلِ آن HTML: پنجره‌ای که با
+    // window.open('') باز شود CSP صفحه‌ی مادر را به ارث می‌برد، پس script-src 'self'
+    // اسکریپتِ درون‌خطی‌اش را اجرا نمی‌کرد و چاپِ خودکار عملاً کار نمی‌کرد.
+    // load را هم لازم داریم تا invoice.css قبل از چاپ رسیده باشد.
+    const go = () => { try { w.focus(); w.print(); } catch (e) { /* پنجره بسته شد */ } };
+    if (w.document.readyState === 'complete') go();
+    else w.addEventListener('load', go, { once: true });
   }
 
   // ============================================================
@@ -1154,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           <img src="${esc(src)}" alt="">
           <button type="button" class="pm-g-del" data-gi="${i}" title="حذف از گالری"><svg><use href="#i-close"/></svg></button>
         </span>`).join('')
-      : '<small class="muted-sub" style="font-size:11.5px">هنوز عکسی در گالری نیست</small>';
+      : '<small class="muted-sub fs-115">هنوز عکسی در گالری نیست</small>';
   }
   $('pmGallery').addEventListener('click', (e) => {
     const del = e.target.closest('.pm-g-del');
@@ -1290,7 +1292,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (LOADED.has('log')) loadLog();
     } catch (err) {
       $('pmAlert').innerHTML =
-        `<div class="alert alert-error" style="margin-bottom:14px"><svg><use href="#i-alert"/></svg><span>${esc(err.message)}</span></div>`;
+        `<div class="alert alert-error mb-14"><svg><use href="#i-alert"/></svg><span>${esc(err.message)}</span></div>`;
     } finally { btn.disabled = false; }
   });
 
@@ -1333,7 +1335,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       ${totalSpent ? `<span>جمع خرید این افراد: <span class="sum">${money(totalSpent)} تومان</span></span>` : ''}`;
 
     if (!list.length) {
-      $('usersHost').innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      $('usersHost').innerHTML = `<div class="empty-state span-all">
         <svg><use href="#i-users"/></svg><h3>مشتری‌ای با این فیلترها نیست</h3></div>`;
       return;
     }
@@ -1433,15 +1435,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       const s = u.summary;
       $('umTitle').textContent = u.fullName || `مشتری #${u.id}`;
       $('umBody').innerHTML = `
-        <div class="ad-kpis" style="margin-bottom:16px">
+        <div class="ad-kpis mb-16">
           ${kpi({ label: 'سفارش موفق', num: money(s.paidOrders), unit: 'عدد', icon: 'i-package' })}
           ${kpi({ label: 'جمع خرید', num: money(s.totalSpent), unit: 'تومان', icon: 'i-wallet', tone: 'purple' })}
           ${kpi({ label: 'میانگین سبد', num: money(s.avgOrder), unit: 'تومان', icon: 'i-chart', tone: 'blue' })}
-          ${kpi({ label: 'آخرین خرید', num: `<span style="font-size:15px">${esc(s.lastOrderAt ? faDate(s.lastOrderAt) : '—')}</span>`, icon: 'i-clock', tone: 'gold',
+          ${kpi({ label: 'آخرین خرید', num: `<span class="fs-15">${esc(s.lastOrderAt ? faDate(s.lastOrderAt) : '—')}</span>`, icon: 'i-clock', tone: 'gold',
             sub: s.firstOrderAt ? `اولین خرید: ${esc(faDate(s.firstOrderAt))}` : '' })}
         </div>
 
-        <div class="ad-card" style="margin-bottom:14px">
+        <div class="ad-card mb-14">
           <div class="ad-card-head"><h3><svg><use href="#i-user"/></svg> مشخصات</h3></div>
           <div class="ad-facts">
             <div class="ad-fact"><svg><use href="#i-phone"/></svg><span class="k">موبایل:</span>
@@ -1454,7 +1456,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
         </div>
 
-        <div class="ad-card" style="margin-bottom:14px">
+        <div class="ad-card mb-14">
           <div class="ad-card-head"><h3><svg><use href="#i-pin"/></svg> آدرس‌ها</h3>
             <span class="ad-hint">${money(u.addresses.length)} آدرس</span></div>
           ${u.addresses.length ? `<div class="ad-list">` + u.addresses.map((a, i) => `
@@ -1466,10 +1468,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             </div>`).join('') + `</div>` : emptyBox('i-pin', 'آدرسی ثبت نکرده')}
         </div>
 
-        <div class="ad-card" style="margin-bottom:14px">
+        <div class="ad-card mb-14">
           <div class="ad-card-head"><h3><svg><use href="#i-package"/></svg> سفارش‌ها</h3>
             <span class="ad-hint">${money(s.totalOrders)} سفارش (شامل ناموفق‌ها)</span></div>
-          ${u.orders.length ? `<div class="ad-table-wrap"><table class="ad-table" style="min-width:460px">
+          ${u.orders.length ? `<div class="ad-table-wrap"><table class="ad-table tbl-w460">
             <thead><tr><th>#</th><th>تاریخ</th><th>وضعیت</th><th>اقلام</th><th>مبلغ</th></tr></thead>
             <tbody>${u.orders.map(o => `<tr>
               <td>${money(o.id)}</td>
@@ -1480,7 +1482,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           </table></div>` : emptyBox('i-package', 'سفارشی ثبت نکرده')}
         </div>
 
-        <div class="ad-card" style="margin-bottom:0">
+        <div class="ad-card mb-0">
           <div class="ad-card-head"><h3><svg><use href="#i-heart"/></svg> علاقه‌مندی‌ها</h3>
             <span class="ad-hint">${money(u.wishlist.length)} کالا</span></div>
           ${u.wishlist.length ? `<div class="ad-list">` + u.wishlist.map(p => `
@@ -1507,7 +1509,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ============================================================
   async function loadReport() {
     const days = Number($('reportRange').value) || 30;
-    $('reportChart').innerHTML = '<div class="ad-skel" style="height:190px"></div>';
+    $('reportChart').innerHTML = '<div class="ad-skel skel-190"></div>';
     try {
       const d = await PG.api(`/admin/reports?days=${days}`);
       const s = d.stats;
@@ -1522,7 +1524,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           sub: `${money(activeDays)} روز از ${money(days)} روز فروش داشته` }),
         kpi({ label: 'میانگین هر سفارش', num: money(inRange.orders ? Math.round(inRange.sales / inRange.orders) : 0), unit: 'تومان', icon: 'i-trend-up', tone: 'purple',
           sub: `میانگین کل تاریخ فروشگاه: ${money(s.total_orders ? Math.round(s.total_sales / s.total_orders) : 0)}` }),
-        kpi({ label: 'بهترین روز', num: `<span style="font-size:16px">${esc(best && best.sales ? dayLabel(best.day) : '—')}</span>`, icon: 'i-star', tone: 'gold',
+        kpi({ label: 'بهترین روز', num: `<span class="fs-16">${esc(best && best.sales ? dayLabel(best.day) : '—')}</span>`, icon: 'i-star', tone: 'gold',
           sub: best && best.sales ? `${money(best.sales)} تومان در یک روز` : 'در این بازه فروشی نبوده' }),
         kpi({ label: 'سفارش‌های ناموفق', num: money((s.failed_orders || 0) + (s.canceled_orders || 0)), unit: 'عدد', icon: 'i-ban',
           tone: ((s.failed_orders || 0) + (s.canceled_orders || 0)) ? 'coral' : '',
@@ -1625,7 +1627,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       $('cfgPromoCode').value = SETTINGS.promo_code || '';
       $('cfgAlert').innerHTML = '';
     } catch (e) {
-      $('cfgAlert').innerHTML = `<div class="alert alert-error" style="margin-bottom:14px"><svg><use href="#i-alert"/></svg><span>${esc(e.message)}</span></div>`;
+      $('cfgAlert').innerHTML = `<div class="alert alert-error mb-14"><svg><use href="#i-alert"/></svg><span>${esc(e.message)}</span></div>`;
     }
   }
   $('cfgReload').addEventListener('click', loadConfig);
@@ -1651,11 +1653,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         })
       });
       SETTINGS = settings;
-      $('cfgAlert').innerHTML = `<div class="alert alert-success" style="margin-bottom:14px"><svg><use href="#i-check-circle"/></svg><span>تنظیمات ذخیره شد ✅</span></div>`;
+      $('cfgAlert').innerHTML = `<div class="alert alert-success mb-14"><svg><use href="#i-check-circle"/></svg><span>تنظیمات ذخیره شد ✅</span></div>`;
       PG.toast('تنظیمات ذخیره شد', 'success');
       if (LOADED.has('log')) loadLog();
     } catch (err) {
-      $('cfgAlert').innerHTML = `<div class="alert alert-error" style="margin-bottom:14px"><svg><use href="#i-alert"/></svg><span>${esc(err.message)}</span></div>`;
+      $('cfgAlert').innerHTML = `<div class="alert alert-error mb-14"><svg><use href="#i-alert"/></svg><span>${esc(err.message)}</span></div>`;
     } finally { btn.disabled = false; }
   });
 
@@ -1741,7 +1743,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
           <div class="ad-review-actions">
             ${r.status !== 'approved' ? `<button class="btn btn-primary btn-sm act-rv-approve"><svg><use href="#i-check"/></svg> تأیید</button>` : ''}
-            ${r.status !== 'rejected' ? `<button class="btn btn-ghost btn-sm act-rv-reject" style="color:#FF9B85"><svg><use href="#i-ban"/></svg> رد</button>` : ''}
+            ${r.status !== 'rejected' ? `<button class="btn btn-ghost btn-sm act-rv-reject txt-danger"><svg><use href="#i-ban"/></svg> رد</button>` : ''}
           </div>
         </article>`).join('');
     } catch (e) {
@@ -1799,7 +1801,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         <select class="cat-icon ad-select">${ICON_CHOICES.map(ic =>
           `<option value="${ic}" ${ic === c.icon ? 'selected' : ''}>${esc(CAT_ICONS_FA[ic] || ic)}</option>`).join('')}</select>
         <span class="cat-count" title="${money(c.count)} کالا روی سایت از ${money(c.countAll ?? c.count)} کالای این دسته">${money(c.count)} کالا${(c.countAll ?? c.count) > c.count ? ` <i class="cat-draft">+${money((c.countAll ?? c.count) - c.count)} پیش‌نویس</i>` : ''}</span>
-        <button type="button" class="icon-btn cat-up" title="بالا" ${i === 0 ? 'disabled' : ''}><svg style="transform:rotate(180deg)"><use href="#i-chevron-down"/></svg></button>
+        <button type="button" class="icon-btn cat-up" title="بالا" ${i === 0 ? 'disabled' : ''}><svg class="rot180"><use href="#i-chevron-down"/></svg></button>
         <button type="button" class="icon-btn cat-down" title="پایین" ${i === categories.length - 1 ? 'disabled' : ''}><svg><use href="#i-chevron-down"/></svg></button>
         <button type="button" class="icon-btn cat-save" title="ذخیره"><svg><use href="#i-save"/></svg></button>
         <!-- شرطِ حذف عمداً countAll است نه count: دسته‌ای که ۱۸ پیش‌نویس دارد
@@ -1907,7 +1909,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       .map(row => ({ productId: Number(row.querySelector('.mo-p').value), qty: Number(row.querySelector('.mo-q').value) || 1 }))
       .filter(i => i.productId);
     if (!items.length) {
-      $('moAlert').innerHTML = `<div class="alert alert-error" style="margin-bottom:14px"><svg><use href="#i-alert"/></svg><span>حداقل یک کالا انتخاب کنید</span></div>`;
+      $('moAlert').innerHTML = `<div class="alert alert-error mb-14"><svg><use href="#i-alert"/></svg><span>حداقل یک کالا انتخاب کنید</span></div>`;
       return;
     }
     const btn = e.target.querySelector('button[type="submit"]');
@@ -1930,7 +1932,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (LOADED.has('stock')) loadStock();
       if (LOADED.has('log')) loadLog();
     } catch (err) {
-      $('moAlert').innerHTML = `<div class="alert alert-error" style="margin-bottom:14px"><svg><use href="#i-alert"/></svg><span>${esc(err.message)}</span></div>`;
+      $('moAlert').innerHTML = `<div class="alert alert-error mb-14"><svg><use href="#i-alert"/></svg><span>${esc(err.message)}</span></div>`;
     } finally { btn.disabled = false; }
   });
 
@@ -1966,7 +1968,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
           <div class="ad-review-actions">
             <button class="btn btn-outline btn-sm cp-toggle">${c.active ? 'خاموش کن' : 'روشن کن'}</button>
-            <button class="btn btn-ghost btn-sm cp-del" style="color:#FF9B85"><svg><use href="#i-trash"/></svg> حذف</button>
+            <button class="btn btn-ghost btn-sm cp-del txt-danger"><svg><use href="#i-trash"/></svg> حذف</button>
           </div>
         </article>`).join('');
     } catch (e) {
@@ -2003,7 +2005,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       loadCoupons();
       if (LOADED.has('log')) loadLog();
     } catch (err) {
-      $('cpAlert').innerHTML = `<div class="alert alert-error" style="margin-bottom:14px"><svg><use href="#i-alert"/></svg><span>${esc(err.message)}</span></div>`;
+      $('cpAlert').innerHTML = `<div class="alert alert-error mb-14"><svg><use href="#i-alert"/></svg><span>${esc(err.message)}</span></div>`;
     } finally { btn.disabled = false; }
   });
 

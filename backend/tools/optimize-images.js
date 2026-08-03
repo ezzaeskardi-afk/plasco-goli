@@ -25,66 +25,30 @@ const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
 const { imageSizeFromFile } = require('../lib/imagesize');
+// انکودر و اعدادِ کیفیت از کتابخانه‌ی مشترک می‌آیند، نه از اینجا.
+// چرا: همین منطق در مسیرِ آپلودِ پنل هم لازم شد. دو نسخه یعنی روزی یکی درست
+// می‌شود و دیگری نه — مثل تله‌ی `convert.exe` ویندوز که فقط یک طرف بسته می‌شد.
+const IMGENC = require('../lib/image-encode');
 
 const PICTURE_DIR = path.join(__dirname, '..', '..', 'picture');
-const QUALITY = 82;              // آستانه‌ی عملی: پایین‌تر از این، لبه‌ها روی عکسِ محصول دیده می‌شود
-const MAX_EDGE = 1400;           // بزرگ‌ترین ضلعِ خروجی؛ بزرگ‌تر از این روی هیچ صفحه‌ای دیده نمی‌شود
+const { QUALITY, MAX_EDGE } = IMGENC;  // آستانه‌ی کیفیت و بزرگ‌ترین ضلع — تعریفشان در lib/image-encode.js
 const FORCE = process.argv.includes('--force');
 
-const has = (cmd) => {
-  const probe = process.platform === 'win32' ? 'where' : 'which';
-  return cp.spawnSync(probe, [cmd], { stdio: 'ignore' }).status === 0;
-};
-
-// انکودرها به ترتیبِ کیفیت/سرعت. هر کدام یک تابع می‌سازد که true/false برمی‌گرداند.
+// انکودر همان چیزی است که مسیرِ آپلود استفاده می‌کند؛ اینجا فقط حالتِ همگامش
+// را می‌سازیم. ابزارِ خطِ فرمان اجازه‌ی spawnSync دارد چون کسی منتظرش نیست —
+// برخلافِ سرور که با آن قفل می‌شود.
 function pickEncoder() {
-  if (has('cwebp')) {
-    return {
-      name: 'cwebp',
-      run: (src, dst) => cp.spawnSync('cwebp', ['-q', String(QUALITY), '-resize', '0', '0', src, '-o', dst], { stdio: 'ignore' }).status === 0,
-      // cwebp خودش JPEG نمی‌سازد؛ نسخه‌ی کوچک را هم webp می‌دهیم و همان کافی است
-      resize: (src, dst, w) => cp.spawnSync('cwebp', ['-q', String(QUALITY), '-resize', String(w), '0', src, '-o', dst.replace(/\.[a-z0-9]+$/i, '.webp')], { stdio: 'ignore' }).status === 0
-    };
-  }
-  for (const im of ['magick', 'convert']) {
-    if (!has(im)) continue;
-    return {
-      name: im,
-      run: (src, dst) => cp.spawnSync(im, [src, '-quality', String(QUALITY), '-resize', `${MAX_EDGE}x${MAX_EDGE}>`, dst], { stdio: 'ignore' }).status === 0,
-      resize: (src, dst, w) => cp.spawnSync(im, [src, '-quality', String(QUALITY), '-resize', `${w}x>`, dst], { stdio: 'ignore' }).status === 0
-    };
-  }
-  if (has('ffmpeg')) {
-    return {
-      name: 'ffmpeg',
-      run: (src, dst) => cp.spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', src,
-        '-vf', `scale='min(${MAX_EDGE},iw)':-1`, '-quality', String(QUALITY), dst], { stdio: 'ignore' }).status === 0,
-      resize: (src, dst, w) => cp.spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', src,
-        '-vf', `scale='min(${w},iw)':-1`, '-quality', String(QUALITY), dst], { stdio: 'ignore' }).status === 0
-    };
-  }
-  // آخرین تیر: پایتون با Pillow. روی خیلی از سیستم‌ها هست حتی وقتی ابزارِ عکس نیست.
-  for (const py of ['python3', 'python']) {
-    if (!has(py)) continue;
-    const ok = cp.spawnSync(py, ['-c', 'import PIL'], { stdio: 'ignore' }).status === 0;
-    if (!ok) continue;
-    const script = `
-import sys
-from PIL import Image
-src, dst, q, m = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
-im = Image.open(src)
-if im.mode in ('P', 'LA'): im = im.convert('RGBA')
-if max(im.size) > m:
-    im.thumbnail((m, m), Image.LANCZOS)
-im.save(dst, 'WEBP', quality=q, method=6)
-`;
-    return {
-      name: `${py} + Pillow`,
-      run: (s, d) => cp.spawnSync(py, ['-c', script, s, d, String(QUALITY), String(MAX_EDGE)], { stdio: 'ignore' }).status === 0,
-      resize: (s, d, w) => cp.spawnSync(py, ['-c', script, s, d, String(QUALITY), String(w)], { stdio: 'ignore' }).status === 0
-    };
-  }
-  return null;
+  const e = IMGENC.pickEncoder();
+  if (!e) return null;
+  const runSync = (src, dst, w) =>
+    cp.spawnSync(e.cmd, e.args(src, dst, w), { stdio: 'ignore' }).status === 0;
+  return {
+    name: e.name,
+    // w=0 یعنی «فقط اگر لازم شد کوچک کن» و برای هر چهار انکودر همان رفتارِ
+    // قبلیِ این ابزار را می‌دهد.
+    run: (src, dst) => runSync(src, dst, 0),
+    resize: (src, dst, w) => runSync(src, dst, w)
+  };
 }
 
 /* نسخه‌های کم‌عرض برای srcset — عمداً پیش‌فرض خاموش است. چرا؟
@@ -132,10 +96,7 @@ const VARIANT_MIN_SOURCE = 700;   // زیر این عرض، ساختنِ نسخ�
    ۳۸۲ × نسبتِ عکس می‌شود؛ پهن‌ترین عکسِ فعلی نسبتِ ۱٫۳۵ دارد → ۵۱۶px.
    ۵۶۰ با حاشیه پوششش می‌دهد، و چون به عرضِ پنجره کار ندارد، تغییرِ اندازه‌ی
    پنجره هم نمی‌تواند خرابش کند. روی DPR ≥۲ اصلاً سراغش نمی‌رویم. */
-const SMALL_SIZES = [
-  { w: 320, minSource: 420 },   // منبعی که خودش نزدیکِ ۳۲۰ است، کوچک‌کردن ندارد
-  { w: 560, minSource: 700 },
-];
+const { SMALL_SIZES } = IMGENC;  // { w:320, minSource:420 } و { w:560, minSource:700 }
 const SKIP_THUMBS = process.argv.includes('--no-thumbs');
 
 function makeVariant(enc, src, width) {
@@ -172,28 +133,28 @@ function walk(dir, out = []) {
 const kb = (n) => (n / 1024).toFixed(0) + 'KB';
 
 console.log('\n════════════════════════════════════════════');
-console.log('  بهینه‌سازی عکس‌ها — ساختِ نسخه‌ی WebP');
+console.log('  Image optimization - building WebP versions');
 console.log('════════════════════════════════════════════\n');
 
 const enc = pickEncoder();
 if (!enc) {
-  console.log('  هیچ ابزارِ تبدیلِ عکسی روی این سیستم پیدا نشد.');
-  console.log('  یکی از این‌ها را نصب کنید و دوباره اجرا کنید:');
-  console.log('    • cwebp  (بسته‌ی webp گوگل — سبک‌ترین گزینه)');
-  console.log('    • ImageMagick');
-  console.log('    • ffmpeg');
-  console.log('    • Python با کتابخانه‌ی Pillow');
-  console.log('\n  سایت بدون این کار هم درست کار می‌کند؛ فقط عکس‌ها سنگین‌تر می‌مانند.\n');
+  console.log('  No image encoder found on this system.');
+  console.log('  Install one of these and run again:');
+  console.log('    - cwebp        (Google webp package - lightest option)');
+  console.log('    - ImageMagick');
+  console.log('    - ffmpeg');
+  console.log('    - Python with the Pillow library');
+  console.log('\n  The site works fine without this; images just stay heavier.\n');
   process.exit(0);
 }
-console.log(`  انکودر: ${enc.name}   کیفیت: ${QUALITY}   بزرگ‌ترین ضلع: ${MAX_EDGE}px\n`);
+console.log(`  Encoder: ${enc.name}   Quality: ${QUALITY}   Max edge: ${MAX_EDGE}px\n`);
 
 const files = walk(PICTURE_DIR)
   .filter(f => /\.(jpe?g|jfif|png)$/i.test(f))
   // خروجی‌های خودمان نباید ورودیِ دورِ بعد شوند
   .filter(f => !/-\d+w\.[a-z0-9]+$/i.test(f));
 if (!files.length) {
-  console.log('  عکسی برای تبدیل پیدا نشد.\n');
+  console.log('  No images found to convert.\n');
   process.exit(0);
 }
 
@@ -217,7 +178,7 @@ function buildFullWebp(src, rel, srcSize) {
 
   if (!enc.run(src, dst) || !fs.existsSync(dst)) {
     failed++;
-    console.log(`  ✗ ${rel} — تبدیل نشد`);
+    console.log(`  [FAIL] ${rel} - could not convert`);
     return null;
   }
 
@@ -227,14 +188,14 @@ function buildFullWebp(src, rel, srcSize) {
   if (dstSize >= srcSize) {
     fs.unlinkSync(dst);
     skipped++;
-    console.log(`  · ${rel} — WebP بزرگ‌تر شد (${kb(dstSize)} > ${kb(srcSize)})، همان اصل می‌ماند`);
+    console.log(`  [SKIP] ${rel} - WebP came out larger (${kb(dstSize)} > ${kb(srcSize)}), keeping the original`);
     return null;
   }
 
   made++;
   before += srcSize;
   after += dstSize;
-  console.log(`  ✓ ${rel}  ${kb(srcSize)} → ${kb(dstSize)}  (${Math.round((1 - dstSize / srcSize) * 100)}% کمتر)`);
+  console.log(`  [OK]   ${rel}  ${kb(srcSize)} -> ${kb(dstSize)}  (${Math.round((1 - dstSize / srcSize) * 100)}% smaller)`);
   return dst;
 }
 
@@ -266,7 +227,7 @@ for (const src of files) {
       if (s.w === 320) { thumbBytes += tSize; fullBytes += nowSize; }
       if (t.fresh) {
         thumbsMade++;
-        console.log(`      └ نسخه‌ی ${s.w}px  ${kb(nowSize)} → ${kb(tSize)}`);
+        console.log(`           ${s.w}px version  ${kb(nowSize)} -> ${kb(tSize)}`);
       }
     }
   }
@@ -282,25 +243,25 @@ for (const src of files) {
       if (!fs.existsSync(vWebp)) enc.run(v, vWebp);
       variants++;
       const vs = fs.existsSync(vWebp) ? fs.statSync(vWebp).size : fs.statSync(v).size;
-      console.log(`      └ نسخه‌ی ${w}px  ${kb(vs)}`);
+      console.log(`           ${w}px version  ${kb(vs)}`);
     }
   }
 }
 
 console.log('');
 console.log('════════════════════════════════════════════');
-console.log(`  ساخته‌شده: ${made}   بندانگشتی: ${thumbsMade}   نسخه‌ی کم‌عرض: ${variants}   رد‌شده: ${skipped}   ناموفق: ${failed}`);
+console.log(`  Built: ${made}   Thumbnails: ${thumbsMade}   Narrow versions: ${variants}   Skipped: ${skipped}   Failed: ${failed}`);
 if (made) {
   const cut = Math.round((1 - after / before) * 100);
-  console.log(`  حجم: ${kb(before)} → ${kb(after)}  یعنی ${cut}% کمتر`);
+  console.log(`  Size: ${kb(before)} -> ${kb(after)}  =  ${cut}% smaller`);
 }
 if (fullBytes) {
   const cut = Math.round((1 - thumbBytes / fullBytes) * 100);
-  console.log(`  بندانگشتی‌ها (کادرِ کوچکِ جست‌وجو/سبد/پنل): ${kb(fullBytes)} → ${kb(thumbBytes)}  یعنی ${cut}% کمتر`);
+  console.log(`  Thumbnails (small boxes in search/cart/panel): ${kb(fullBytes)} -> ${kb(thumbBytes)}  =  ${cut}% smaller`);
 }
 if (oversized.length) {
-  console.log('\n  عکس‌های بی‌دلیل بزرگ (بهتر است در پنل با نسخه‌ی کوچک‌تر عوض شوند):');
-  for (const o of oversized) console.log('    ⚠  ' + o);
+  console.log('\n  Needlessly large images (better replaced with smaller ones in the panel):');
+  for (const o of oversized) console.log('    [!] ' + o);
 }
 console.log('════════════════════════════════════════════\n');
 

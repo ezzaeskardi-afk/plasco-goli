@@ -2,6 +2,13 @@
 
 let PAGE_ITEMS = [];     // فقط کالاهای همین صفحه — نمای سریع از همین می‌خواند
 let CATEGORIES = [];     // از /products/facets می‌آید، بدون دانلود کل کاتالوگ
+// تعدادِ کالای هر دسته و کلِ کاتالوگ، از همان facets.
+// عمداً از facets و نه از meta.total پاسخِ محصولات: meta.total تعدادِ کالای
+// *فیلترشده* است (قیمت و جستجو هم رویش اثر دارد)، ولی دکمه‌ی «همه‌ی محصولات»
+// به صفحه‌ای می‌رود که آن فیلترها را ندارد. اگر عددِ فیلترشده را روی دکمه
+// بنویسیم، کاربر روی «۲ محصول» کلیک می‌کند و ۱۲ تا می‌بیند.
+let CAT_COUNTS = new Map();
+let CATALOG_TOTAL = 0;
 let ACTIVE_CAT = 'همه';
 let SEARCH_QUERY = '';
 let SORT_BY = 'default';
@@ -43,8 +50,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     CATEGORIES = (facets.categories || [])
       .map(c => (typeof c === 'string' ? c : (c.category || c.name)))
       .filter(Boolean);
+    // شمارشِ هر دسته را هم برمی‌داریم (اگر سرور داده باشد) تا دکمه‌ی پایینِ
+      // بخش عددِ درست بگوید. جمعِ دسته‌ها = کلِ کاتالوگِ منتشرشده.
+    CAT_COUNTS = new Map();
+    for (const c of (facets.categories || [])) {
+      if (c && typeof c === 'object' && Number.isFinite(c.n)) {
+        CAT_COUNTS.set(c.category || c.name, c.n);
+      }
+    }
+    CATALOG_TOTAL = [...CAT_COUNTS.values()].reduce((a, b) => a + b, 0);
     buildFilterPills(CATEGORIES);
   } catch (e) { /* بدون قرص‌های دسته هم ویترین باید بالا بیاید */ }
+  syncAllProductsCta();
   initFilterToolbar();
 
   // اگر از صفحه‌ی دیگری با ?cat= یا ?q= آمدیم، همان فیلتر اعمال شود
@@ -398,6 +415,9 @@ async function renderGrid(opts = {}) {
     LAST_FILTER_SIG = sig;
     CUR_PAGE = 1;
   }
+  // یک جای واحد برای هماهنگ‌کردنِ دکمه‌ی پایینِ بخش: هر تغییرِ فیلتر از همین‌جا
+  // رد می‌شود، پس هیچ مسیری (خطا، خالی، موفق) از قلم نمی‌افتد.
+  syncAllProductsCta();
 
   // هر درخواست شماره می‌گیرد؛ اگر کاربر وسط راه فیلتر را عوض کند،
   // جوابِ دیررسِ درخواست قبلی نباید ویترین را عوض کند.
@@ -428,7 +448,7 @@ async function renderGrid(opts = {}) {
     // فقط همین یک درخواست را تکرار می‌کند و پیام هم می‌گوید مشکل از کجاست.
     grid.innerHTML = `
       <div class="grid-empty">
-        <svg style="width:44px;height:44px;color:var(--coral)"><use href="#i-alert"/></svg>
+        <svg class="ic-44 txt-coral"><use href="#i-alert"/></svg>
         <p>${PG.esc(e.message || 'در حال حاضر امکان بارگذاری محصولات نیست.')}</p>
         <button class="btn btn-outline" data-retry-products>تلاش دوباره</button>
       </div>`;
@@ -447,7 +467,7 @@ async function renderGrid(opts = {}) {
   if (!PAGE_ITEMS.length) {
     grid.innerHTML = `
       <div class="grid-empty">
-        <svg style="width:44px;height:44px;color:var(--gold)"><use href="#i-search"/></svg>
+        <svg class="ic-44 txt-gold"><use href="#i-search"/></svg>
         <p>${SEARCH_QUERY ? `محصولی مطابق «${PG.esc(SEARCH_QUERY)}» پیدا نشد.` : (PRICE_MIN != null || PRICE_MAX != null) ? 'در این محدوده‌ی قیمت محصولی پیدا نشد.' : 'در این دسته فعلاً محصولی موجود نیست.'}</p>
         <button class="btn btn-outline" data-reset-filters>نمایش همه‌ی محصولات</button>
       </div>`;
@@ -465,6 +485,29 @@ async function renderGrid(opts = {}) {
   // کارت‌های تازه‌آمده پلکانی وارد می‌شوند؛ اگر «نمایش بیشتر» زده شده
   // فقط همان کارت‌های جدید انیمیشن می‌گیرند نه کل گرید
   animateCards(grid, append ? oldCount : 0);
+}
+
+// دکمه‌ی ثابتِ «مشاهده‌ی همه‌ی محصولات» زیر گرید (در index.html است، نه اینجا).
+// اینجا فقط متن و آدرسش را با وضعیتِ فعلی هماهنگ می‌کنیم:
+//   • عددِ واقعی بگذاریم، چون «۱۰۰ کالا» خیلی قانع‌کننده‌تر از «همه» است
+//   • اگر دسته‌ای فعال است، همان دسته را در فهرست هم باز کنیم
+// هیچ‌وقت مخفی نمی‌شود: حتی وقتی همه‌ی کالاها همین‌جا نشان داده شده‌اند، صفحه‌ی
+// فهرست چیزی دارد که این بخش ندارد — فیلترِ ترکیبی و آدرسِ قابلِ اشتراک.
+function syncAllProductsCta() {
+  const link = document.getElementById('allProductsCta');
+  const label = document.getElementById('allProductsCtaText');
+  if (!link || !label) return;
+  const cat = ACTIVE_CAT && ACTIVE_CAT !== 'همه' ? ACTIVE_CAT : '';
+  link.href = `/products.html${cat ? `?cat=${encodeURIComponent(cat)}` : ''}`;
+
+  // عدد فقط وقتی نوشته می‌شود که واقعاً بدانیمش و مثبت باشد؛ «۰ کالا» روی
+  // دکمه بدتر از ننوشتنِ عدد است (مثلاً وقتی facets نیامده باشد).
+  const n = cat ? (CAT_COUNTS.get(cat) || 0) : CATALOG_TOTAL;
+  if (cat) {
+    label.textContent = n ? `دیدنِ همه‌ی ${PG.money(n)} کالای «${cat}»` : `دیدنِ همه‌ی کالاهای «${cat}»`;
+  } else {
+    label.textContent = n ? `مشاهده‌ی همه‌ی ${PG.money(n)} محصول` : 'مشاهده‌ی همه‌ی محصولات';
+  }
 }
 
 // ---------- ورود پلکانی کارت‌ها ----------
@@ -537,13 +580,12 @@ function flyToCart(fromEl) {
   } catch (e) { /* افکت تزئینی است؛ هیچ‌وقت نباید خرید را خراب کند */ }
 }
 
-// دکمه‌ی «نمایش محصولات بیشتر» زیر گرید — فقط وقتی محصول دیده‌نشده‌ای مانده باشد
+// دکمه‌ی «نمایش محصولات بیشتر» زیر گرید — فقط وقتی محصول دیده‌نشده‌ای مانده باشد.
 //
-// از صفحه‌ی سوم به بعد، کنارش لینکِ صفحه‌ی فهرست هم می‌آید. دلیلش ساده است:
-// «نمایش بیشتر» برای چند کالای باقی‌مانده خوب است، ولی وقتی هنوز ده‌ها کالا
-// مانده یعنی مشتری در حال کلیک‌کردنِ پیاپی است بدون اینکه بتواند محدود کند،
-// و اگر صفحه را ببندد همه‌ی آن کلیک‌ها از بین می‌رود. صفحه‌ی فهرست هم فیلترِ
-// درست‌وحسابی دارد، هم آدرسش قابلِ ذخیره و اشتراک است.
+// لینکِ «یا همه را با فیلتر ببین» که قبلاً از صفحه‌ی دوم به بعد اینجا ساخته
+// می‌شد حذف شد: حالا دکمه‌ی ثابتِ #allProductsCta همیشه پایینِ بخش هست و همان
+// کار را از همان اولین نگاه می‌کند. دو تا لینک به یک مقصد، درست زیر هم، فقط
+// تصمیم‌گیری را سخت می‌کرد.
 function syncLoadMore() {
   const grid = document.getElementById('productGrid');
   let btn = document.getElementById('loadMoreBtn');
@@ -561,26 +603,10 @@ function syncLoadMore() {
   btn.disabled = false;
   const left = Math.max(0, TOTAL - PAGE_ITEMS.length);
   btn.textContent = `نمایش محصولات بیشتر (${PG.money(left)} محصول دیگر)`;
-
-  let all = document.getElementById('seeAllLink');
-  if (CUR_PAGE >= 2) {
-    if (!all) {
-      all = document.createElement('a');
-      all.id = 'seeAllLink';
-      all.className = 'see-all-link';
-      btn.insertAdjacentElement('afterend', all);
-    }
-    const q = ACTIVE_CAT && ACTIVE_CAT !== 'همه' ? `?cat=${encodeURIComponent(ACTIVE_CAT)}` : '';
-    all.href = `/products.html${q}`;
-    all.textContent = `یا همه‌ی ${PG.money(TOTAL)} کالا را با فیلتر ببین ←`;
-  } else if (all) {
-    all.remove();
-  }
 }
 
 function removeLoadMore() {
   document.getElementById('loadMoreBtn')?.remove();
-  document.getElementById('seeAllLink')?.remove();
 }
 
 function resetFilters() {
@@ -673,7 +699,7 @@ function renderProductCard(p) {
   const lowStock = typeof p.stock === 'number' && p.stock > 0 && p.stock <= PG.lowStockAt();
   const title = PG.esc(p.title);
   const media = p.image
-    ? `<img src="${PG.esc(PG.cardImg(p.image))}" alt="${title}" loading="lazy" decoding="async">`
+    ? `<img src="${PG.esc(PG.cardImg(p.image))}"${PG.imgSizing(p.image)} alt="${title}" loading="lazy" decoding="async">`
     : `<svg role="img" aria-label="${title}"><use href="#${PG.esc(p.icon)}"/></svg>`;
   return `
     <article class="product-card" data-id="${p.id}">
@@ -696,9 +722,10 @@ function renderProductCard(p) {
         ${lowStock ? `<span class="stock-hint">فقط ${PG.money(p.stock)} عدد باقی مانده</span>` : ''}
         <div class="product-footer">
           ${PG.priceHtml(p)}
-          <button class="buy-btn" data-id="${p.id}" ${outOfStock ? 'disabled' : ''} aria-label="${outOfStock ? 'ناموجود' : `افزودن ${title} به سبد خرید`}">
-            <svg><use href="#i-cart"/></svg> ${outOfStock ? 'ناموجود' : 'افزودن به سبد'}
-          </button>
+          ${outOfStock ? PG.notifyBtnHtml(p.id) : `
+          <button class="buy-btn" data-id="${p.id}" aria-label="افزودن ${title} به سبد خرید">
+            <svg><use href="#i-cart"/></svg> افزودن به سبد
+          </button>`}
         </div>
       </div>
     </article>
@@ -707,6 +734,10 @@ function renderProductCard(p) {
 
 // ---------- مودال نمای سریع محصول ----------
 let QV_LAST_FOCUS = null;
+
+// نیمِ چپِ دیالوگِ min(880px,100%) است، پس زیرِ ۷۰۰ پیکسل تمامِ عرض و بالای آن
+// حداکثر ۴۴۰. عکسِ اینجا object-fit:cover است و کلِ کادر را پر می‌کند.
+const QV_SIZES = '(max-width:700px) 100vw, 440px';
 
 function ensureQuickView() {
   let overlay = document.getElementById('qvOverlay');
@@ -754,7 +785,7 @@ function openQuickView(p) {
   else if (p.badge) media.insertAdjacentHTML('beforeend', `<span class="product-badge">${PG.esc(p.badge)}</span>`);
   media.insertAdjacentHTML('beforeend', PG.wishBtnHtml(p.id, 'qv-wish'));
   media.insertAdjacentHTML('beforeend', p.image
-    ? `<img src="${PG.esc(p.image)}" alt="${PG.esc(p.title)}">`
+    ? `<img src="${PG.esc(PG.cardImg(p.image))}"${PG.imgSizing(p.image, QV_SIZES)} alt="${PG.esc(p.title)}">`
     : `<svg role="img" aria-label="${PG.esc(p.title)}"><use href="#${PG.esc(p.icon)}"/></svg>`);
 
   overlay.querySelector('#qvCat').textContent = p.category;
@@ -771,6 +802,15 @@ function openQuickView(p) {
 
   const buy = overlay.querySelector('#qvBuy');
   overlay.querySelector('#qvMore').href = `/product/${p.id}`;
+
+  // ناموجود؟ همان دکمه‌ی «خبرم کن» کارت‌ها اینجا هم می‌آید تا مسیر بن‌بست نشود.
+  // این مودال برای هر محصول *بازاستفاده* می‌شود، پس هر بار باید هر دو حالت را
+  // تمیز کنیم؛ وگرنه دکمه‌ی خبرم کنِ کالای قبلی روی کالای موجود می‌ماند.
+  overlay.querySelector('[data-notify]')?.remove();
+  buy.hidden = outOfStock;
+  if (outOfStock) {
+    overlay.querySelector('.qv-footer').insertAdjacentHTML('beforeend', PG.notifyBtnHtml(p.id));
+  }
   buy.disabled = outOfStock;
   buy.querySelector('span').textContent = outOfStock ? 'ناموجود' : 'افزودن به سبد';
   buy.onclick = async () => {

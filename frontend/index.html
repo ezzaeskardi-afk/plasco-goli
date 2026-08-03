@@ -107,7 +107,7 @@
 <link rel="preload" href="assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=41">
+<link rel="stylesheet" href="css/style.css?v=42">
 </head>
 <body>
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -121,7 +121,7 @@
 
     <div class="search-box" id="searchBox">
       <svg class="search-ic"><use href="#i-search"/></svg>
-      <input type="search" id="siteSearch" placeholder="جستجو در محصولات؛ مثلاً «سطل» یا «ادویه»..." autocomplete="off" aria-label="جستجو در محصولات">
+      <input type="search" id="siteSearch" maxlength="60" placeholder="جستجو در محصولات؛ مثلاً «سطل» یا «ادویه»..." autocomplete="off" aria-label="جستجو در محصولات">
     </div>
 
     <div class="header-actions">
@@ -173,8 +173,8 @@
 <div class="mobile-drawer" id="drawer">
   <div class="drawer-panel">
     <div class="drawer-head">
-      <span class="logo" style="font-size:17px">
-        <span class="logo-badge" style="width:40px;height:40px"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="" width="48" height="48" decoding="async"></span>
+      <span class="logo logo-sm">
+        <span class="logo-badge logo-badge-sm"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="" width="48" height="48" decoding="async"></span>
         پلاسکو گلی
       </span>
       <button class="icon-btn drawer-close" id="menuClose" aria-label="بستن منو"><svg><use href="#i-close"/></svg></button>
@@ -182,7 +182,7 @@
 
     <div class="drawer-search">
       <svg><use href="#i-search"/></svg>
-      <input type="search" id="drawerSearch" placeholder="جستجوی محصول..." autocomplete="off" aria-label="جستجو در محصولات">
+      <input type="search" id="drawerSearch" maxlength="60" placeholder="جستجوی محصول..." autocomplete="off" aria-label="جستجو در محصولات">
     </div>
 
     <span class="drawer-label">صفحات</span>
@@ -312,17 +312,33 @@
       <div class="product-grid" id="productGrid" data-reveal aria-live="polite">
         <!-- با جاوااسکریپت از /api/products پر می‌شود -->
       </div>
+
+      <!-- راهِ رسیدن به فهرستِ کامل.
+           چرا ثابت در HTML و نه ساخته‌شده با JS: تا امروز تنها راهِ رسیدن به
+           صفحه‌ی فهرست از داخلِ این بخش، لینکی بود که فقط *از صفحه‌ی دوم به بعد*
+           ساخته می‌شد؛ و چون اینجا ۱۲ کالا در هر صفحه نشان می‌دهیم و همین حالا
+           ۱۲ کالا منتشر است، دکمه‌ی «نمایش بیشتر» هم نمی‌آمد. نتیجه: شبکه تمام
+           می‌شد و هیچ نشانه‌ای نبود که فهرستِ کامل و فیلترها وجود دارند.
+           ثابت‌بودنش یعنی بدونِ جاوااسکریپت هم هست و گوگل هم می‌بیندش. -->
+      <div class="products-cta" data-reveal>
+        <a href="/products.html" class="btn btn-outline products-cta-btn" id="allProductsCta">
+          <svg aria-hidden="true"><use href="#i-package"/></svg>
+          <span id="allProductsCtaText">مشاهده‌ی همه‌ی محصولات</span>
+          <svg class="pc-arrow" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+        </a>
+        <p class="products-cta-note">فیلترِ دسته‌بندی، محدوده‌ی قیمت و مرتب‌سازی — همه در یک صفحه</p>
+      </div>
     </div>
   </section>
 
   <!-- ============ اخیراً دیده‌اید ============ -->
   <!-- برای مشتریِ برگشته: کالایی که دفعه‌ی قبل نگاه کرده ولی نخریده، همان اول
        جلوی چشمش است. تا وقتی چیزی ندیده باشد کلاً پنهان می‌ماند. -->
-  <section id="recentWrap" aria-labelledby="recent-title" style="padding-top:0" hidden>
+  <section id="recentWrap" class="sec-pt0" aria-labelledby="recent-title" hidden>
     <div class="container">
       <div class="section-head">
         <span class="eyebrow"><span class="dot"></span> ادامه‌ی گشت‌وگذار</span>
-        <h2 id="recent-title" style="font-size:22px">اخیراً دیده‌اید</h2>
+        <h2 id="recent-title" class="h-22">اخیراً دیده‌اید</h2>
       </div>
       <div class="product-grid" id="recentGrid" data-reveal></div>
     </div>
@@ -330,7 +346,7 @@
 
   <!-- ============ PROMO ============ -->
   <!-- بنر جشنواره: متن و کدش از پنل ← تنظیمات می‌آید؛ تا وقتی خالی است کلاً پنهان است -->
-  <section aria-labelledby="promo-title" style="padding-top:0" id="promoStrip" hidden>
+  <section class="sec-pt0" aria-labelledby="promo-title" id="promoStrip" hidden>
     <div class="container">
       <div class="promo" data-reveal>
         <div class="promo-text">
@@ -349,7 +365,7 @@
   </section>
 
   <!-- ============ FEATURES ============ -->
-  <section aria-labelledby="features-title" style="padding-top:0">
+  <section class="sec-pt0" aria-labelledby="features-title">
     <div class="container">
       <h2 id="features-title" class="visually-hidden">چرا پلاسکو گلی</h2>
       <div class="feature-grid" data-reveal>
@@ -394,12 +410,12 @@
   <section class="about" id="about" aria-labelledby="about-title">
     <div class="container about-grid">
       <div class="about-art" data-reveal aria-hidden="true">
-        <img src="/picture/products/ست ادویه گردان 8 عددی چوبی.jpg" alt="" width="921" height="682" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">
+        <img src="/picture/products/ست ادویه گردان 8 عددی چوبی.jpg" alt="" width="921" height="682" loading="lazy" decoding="async" class="fill-img">
       </div>
       <div data-reveal>
         <span class="eyebrow"><span class="dot"></span> درباره‌ی پلاسکو گلی</span>
         <h2 id="about-title">مغازه‌ای که با محله‌ش بزرگ شده</h2>
-        <p style="margin-top:16px;color:var(--ink-soft)">پلاسکو گلی از همان روزهای اول با هدف ساده‌ای شروع شد: وسایل پلاستیکی خوب و کاربردی، با قیمتی که هر خانواده‌ای بتواند بخرد. هنوز هم همان راه را ادامه می‌دهیم؛ انتخاب دقیق جنس، مشاوره‌ی صادقانه و رفتار محترمانه با هر مشتری — حالا هم به‌صورت حضوری و هم آنلاین.</p>
+        <p class="mt-16 txt-soft">پلاسکو گلی از همان روزهای اول با هدف ساده‌ای شروع شد: وسایل پلاستیکی خوب و کاربردی، با قیمتی که هر خانواده‌ای بتواند بخرد. هنوز هم همان راه را ادامه می‌دهیم؛ انتخاب دقیق جنس، مشاوره‌ی صادقانه و رفتار محترمانه با هر مشتری — حالا هم به‌صورت حضوری و هم آنلاین.</p>
         <ul class="values">
           <li><svg><use href="#i-shield"/></svg><div><b>جنس تضمینی</b><span>محصولات از تولیدکننده‌های معتبر و باکیفیت انتخاب می‌شوند.</span></div></li>
           <li><svg><use href="#i-tag"/></svg><div><b>قیمت منصفانه</b><span>بدون واسطه‌ی اضافه، قیمت واقعی و رقابتی.</span></div></li>
@@ -440,7 +456,7 @@
   <!-- ============ CONTACT ============ -->
   <!-- رهگیری بدون ورود: مشتری بعد از خرید فقط می‌خواهد بداند بسته کجاست؛
        نباید برای این یک کار مجبور به گرفتن پیامک تأیید شود. -->
-  <section id="track" aria-labelledby="track-title" style="padding-top:0">
+  <section id="track" class="sec-pt0" aria-labelledby="track-title">
     <div class="container">
       <div class="section-head" data-reveal>
         <span class="eyebrow"><span class="dot"></span> پیگیری سفارش</span>
@@ -467,7 +483,7 @@
     </div>
   </section>
 
-  <section id="contact" aria-labelledby="contact-title" style="padding-top:0">
+  <section id="contact" class="sec-pt0" aria-labelledby="contact-title">
     <div class="container">
       <div class="section-head" data-reveal>
         <span class="eyebrow"><span class="dot"></span> راه‌های ارتباطی</span>
@@ -479,7 +495,7 @@
           <div class="info-card"><svg><use href="#i-phone"/></svg><div><b>تماس تلفنی</b><span dir="ltr">۰۹۱۱-۳۵۶-۷۴۰۹</span></div></div>
           <div class="info-card"><svg><use href="#i-clock"/></svg><div><b>ساعات کاری</b><span>شنبه تا پنجشنبه، ۹ صبح تا ۸ شب</span></div></div>
         </div>
-        <address class="map-box" style="font-style:normal">
+        <address class="map-box addr-plain">
           <svg><use href="#i-pin"/></svg>
           <b>پلاسکو گلی</b>
           <span>ساری، بلوار کشاورز، قبل از مسجد صاحب‌الزمان، مغازه پلاسکو گلی</span>
@@ -505,7 +521,7 @@
     <div class="footer-about">
       <div class="logo">
         <span class="logo-badge"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="لوگوی پلاسکو گلی" width="48" height="48" decoding="async"></span>
-        <span style="color:#fff">پلاسکو گلی</span>
+        <span class="txt-white">پلاسکو گلی</span>
       </div>
       <p>فروشگاه محله‌ای لوازم پلاستیکی خانه؛ جنس اصل، قیمت منصفانه، مشاوره‌ی صادقانه.</p>
       <div class="footer-social">
@@ -538,8 +554,8 @@
   <svg><use href="#i-phone"/></svg>
   <span class="fab-label">تماس با فروشگاه</span>
 </a>
-<script src="js/common.js?v=41" defer></script>
-<script src="js/main.js?v=41" defer></script>
+<script src="js/common.js?v=42" defer></script>
+<script src="js/main.js?v=42" defer></script>
 
 </body>
 </html>

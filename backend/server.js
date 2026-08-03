@@ -10,7 +10,7 @@ const log = require('./lib/logger');
 const {
   initDb, expireStaleOrders, cleanupExpired, backupNow, getPublicProducts, getPublicProduct,
   bumpVisit, cleanupOldVisits, getProductReviews, getSetting, getShippingQuote,
-  closeDb, getDbHealth, getCategories
+  closeDb, getDbHealth, getCategories, getCatalogSignature
 } = require('./lib/db');
 const { SqliteSessionStore } = require('./lib/session-store');
 const { rateLimit } = require('./lib/middleware');
@@ -62,14 +62,44 @@ app.use(express.json({ limit: '64kb' })); // بدنه‌ی بزهکارانه‌
 
 // هدرهای امنیتی پایه (بدون وابستگی به helmet)
 const HTTPS_MODE = process.env.COOKIE_SECURE === 'true';
+
+// ---------- هشِ استایلِ درون‌خطیِ صفحه‌ی آفلاین ----------
+// همه‌ی استایل‌های درون‌خطیِ سایت به style.css منتقل شدند تا 'unsafe-inline'
+// از style-src برداشته شود — به‌جز offline.html. آن صفحه وقتی نشان داده می‌شود
+// که مشتری *اینترنت ندارد*؛ اگر به style.css وابسته شود، دقیقاً همان لحظه‌ای که
+// لازم است بی‌استایل بالا می‌آید. پس <style> خودش سرِ جایش می‌ماند و به‌جای
+// مجوزِ کلی، فقط هشِ همین یک بلوک به CSP اضافه می‌شود: مرورگر این یکی را اجرا
+// می‌کند و هر استایلِ درون‌خطیِ دیگری — از جمله تزریق‌شده — را نه.
+//
+// هش در زمانِ بالا آمدن از خودِ فایل حساب می‌شود، نه دستی. اگر روزی کسی آن
+// استایل را عوض کند، هش خودکار همراهش می‌آید؛ ثابتِ دستی یعنی صفحه‌ی آفلاینِ
+// بی‌استایل، و کسی هم نمی‌فهمد چون آن صفحه فقط در قطعیِ اینترنت دیده می‌شود.
+const offlineStyleHashes = (() => {
+  try {
+    const html = fs.readFileSync(path.join(FRONTEND_DIR, 'offline.html'), 'utf8');
+    const out = [];
+    for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)) {
+      out.push(`'sha256-${crypto.createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
+    }
+    if (!out.length) log.warn('offline.html: no inline <style> found — CSP hash skipped');
+    return out;
+  } catch (e) {
+    // نبودِ فایل نباید جلوی بالا آمدن سرور را بگیرد؛ فقط آن صفحه بی‌استایل می‌شود
+    log.warn('Could not hash offline.html inline style', { err: e.message });
+    return [];
+  }
+})();
+
 // سیاست امنیت محتوا (CSP): سد اصلی در برابر تزریق اسکریپت (XSS).
 // فقط منابع خودِ سایت مجازند؛ اسکریپت بیگانه — حتی اگر جایی به HTML تزریق شود —
-// اجرا نمی‌شود. 'unsafe-inline' فقط برای style لازم است چون چند صفحه استایل
-// درون‌خطی دارند. رشته یک بار ساخته می‌شود و در هر درخواست فقط ست می‌شود.
+// اجرا نمی‌شود. style-src هم بسته است: 'unsafe-inline' برداشته شد چون با آن
+// مرورگر نمی‌توانست استایلِ ما را از استایلِ تزریق‌شده تشخیص دهد، و استایل
+// به‌تنهایی هم می‌تواند دکمه‌ی «تأیید سفارش» را نامرئی یا فرمِ جعلی درست کند.
+// رشته یک بار ساخته می‌شود و در هر درخواست فقط ست می‌شود.
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
+  ["style-src 'self'", ...offlineStyleHashes].join(' '),
   "img-src 'self' data:",
   "font-src 'self'",
   "connect-src 'self'",
@@ -160,6 +190,12 @@ app.use((req, res, next) => {
 // خروجی عمداً بی‌اطلاعاتِ حساس است (نه نسخه‌ی Node، نه مسیر، نه تنظیمات) چون
 // این آدرس بدون احراز هویت باز است. آمار کاملِ دیتابیس در پنل مدیریت هست.
 let bootTime = Date.now();
+// اینجا اعلام می‌شود و نه کنارِ shutdown() در انتهای فایل: /healthz پایین‌تر
+// همین بلوک آن را می‌خواند و با `let`ِ انتهای فایل، در فاصله‌ی بین شروعِ ماژول و
+// رسیدن به آن خط، خواندنش ReferenceError می‌داد (منطقه‌ی مرده‌ی زمانی). امروز
+// خطا نمی‌دهد چون سرور قبل از پذیرشِ درخواست کلِ فایل را اجرا کرده، ولی این
+// «تصادفاً امن» است نه «امن». مقدارِ اولیه همان‌جا که خوانده می‌شود تعریف شود.
+let shuttingDown = false;
 app.get('/healthz', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   // در حال خاموش شدن: به لودبالانسر می‌گوییم دیگر ترافیک تازه نفرست، ولی
@@ -261,7 +297,13 @@ app.use('/api', (req, res, next) => {
 // ضدسیل: هر تخلف با کلیدِ «دستور + منبع بلاک‌شده» یک بار لاگ می‌شود. یک باگ
 // واقعی معمولاً یک کلید یکتا می‌سازد ولی هزاران بازدیدکننده گزارشش می‌کنند؛
 // بدون این، یک اشتباه کوچک کل فایل لاگ را پر می‌کرد.
-const cspSeen = new Set();
+//
+// چرا Map و نه Set: قبلاً پر که می‌شد، کلِ حافظه clear() می‌شد. مهاجم با
+// ۶۰ گزارشِ ساختگیِ بی‌تکرار حافظه را صفر می‌کرد و بعد تخلفِ *واقعی* دوباره
+// «تازه» حساب می‌شد — یعنی همان سیلِ لاگی که این کد جلویش را می‌گرفت، با
+// کمی تلاش دوباره ممکن بود. حالا فقط قدیمی‌ترین‌ها کنار می‌روند و کلیدهای
+// اخیر — که احتمال دارد همان تخلفِ در جریان باشند — سرِ جایشان می‌مانند.
+const cspSeen = new Map(); // key -> true (فقط برای ترتیبِ درج)
 const CSP_SEEN_MAX = 60;
 app.post(
   '/api/csp-report',
@@ -284,8 +326,13 @@ app.post(
       const line = r.lineNumber || r['line-number'] || 0;
       const key = `${directive}|${blocked}`;
       if (cspSeen.has(key)) continue;
-      if (cspSeen.size >= CSP_SEEN_MAX) cspSeen.clear(); // شروع دوباره‌ی دوره‌ی مشاهده
-      cspSeen.add(key);
+      if (cspSeen.size >= CSP_SEEN_MAX) {
+        // قدیمی‌ترین ۱۰٪ کنار می‌رود، نه همه‌چیز
+        const drop = Math.max(1, Math.ceil(CSP_SEEN_MAX / 10));
+        let i = 0;
+        for (const k of cspSeen.keys()) { cspSeen.delete(k); if (++i >= drop) break; }
+      }
+      cspSeen.set(key, true);
       log.warn('CSP violation', { directive, blocked, doc, line });
     }
     res.status(204).end();
@@ -307,10 +354,17 @@ app.use('/api', (req, res, next) => {
   if (!raw) return next();
   let host = '';
   try { host = new URL(raw).host; } catch (e) { return next(); } // مبدأ نامفهوم = قضاوت نمی‌کنیم
-  // چند نام میزبان مجاز است: هدر Host، هدر پروکسی، و دامنه‌ی رسمیِ .env
-  // (بعضی پیکربندی‌های nginx هدر Host را به آدرس داخلی عوض می‌کنند و بدون این،
-  //  همه‌ی درخواست‌های نوشتنِ کاربران واقعی رد می‌شد.)
-  const ok = new Set([req.get('host'), req.headers['x-forwarded-host'], SITE_HOST].filter(Boolean));
+  // چند نام میزبان مجاز است: هدر Host، دامنه‌ی رسمیِ .env، و — فقط وقتی پشت
+  // پروکسی هستیم — هدر x-forwarded-host.
+  // چرا شرطِ TRUST_PROXY: بدون پروکسی، x-forwarded-host را *خودِ مهاجم* در
+  // درخواست می‌گذارد. یعنی صفحه‌ی evil.com می‌توانست هم Origin: evil.com بفرستد
+  // هم X-Forwarded-Host: evil.com و این سد را کامل دور بزند. وقتی پروکسی واقعی
+  // جلو باشد (TRUST_PROXY روشن) این هدر را خودِ پروکسی بازنویسی می‌کند و
+  // قابل‌اعتماد است. (بعضی پیکربندی‌های nginx هدر Host را به آدرس داخلی عوض
+  // می‌کنند و بدون این، درخواست‌های نوشتنِ کاربران واقعی رد می‌شد.)
+  const allowed = [req.get('host'), SITE_HOST];
+  if (TRUST_PROXY) allowed.push(req.headers['x-forwarded-host']);
+  const ok = new Set(allowed.filter(Boolean));
   if (!ok.has(host)) {
     log.warn('Cross-origin write blocked', { ip: req.ip, origin: raw, path: req.originalUrl });
     return res.status(403).json({ error: 'درخواست از مبدأ نامعتبر رد شد' });
@@ -517,6 +571,12 @@ function productJsonLd(product, base) {
 // می‌تواند باعث ایندکس نشدن کل صفحه شود. اینجا با دامنه‌ی واقعی جایگزین می‌شود.
 const PLACEHOLDER_HOST = 'https://polasco-goli.example.com';
 const seoPageCache = new Map(); // `${file}|${base}` -> { html, mtimeMs }
+// سقف: کلید این کش شاملِ `base` است و base — تا وقتی SITE_URL در .env نباشد —
+// از هدر Host خوانده می‌شود. یعنی هر کسی با فرستادنِ Host دلخواه یک ورودیِ
+// تازه (به‌اندازه‌ی کلِ index.html) می‌سازد و حافظه بی‌سقف بالا می‌رود. عملاً
+// دو-سه میزبانِ واقعی بیشتر نداریم (دامنه، www، localhost) پس ۸ با فاصله کافی
+// است و بیشتر از آن یعنی کسی دارد بازی می‌کند.
+const SEO_CACHE_MAX = 8;
 
 // تنها صفحه‌های ایندکس‌شدنی سایت این دوتا هستند؛ بقیه noindex اند و لازم نیست
 // از مسیر جایگزینی رد شوند.
@@ -530,6 +590,9 @@ function renderSeoPage(fileName) {
       const hit = seoPageCache.get(key);
       if (!hit || hit.mtimeMs !== mtimeMs) {
         const raw = fs.readFileSync(file, 'utf-8');
+        if (!hit) {
+          if (seoPageCache.size >= SEO_CACHE_MAX) seoPageCache.delete(seoPageCache.keys().next().value);
+        }
         seoPageCache.set(key, { html: raw.split(PLACEHOLDER_HOST).join(base), mtimeMs });
       }
       res.setHeader('Cache-Control', 'no-cache');
@@ -569,9 +632,22 @@ Sitemap: ${base}/sitemap.xml
 
 // نقشه‌ی سایت داینامیک — صفحه‌ی اصلی + همه‌ی محصولات (برای سئو)
 // نکته: باید قبل از express.static باشد تا جای فایل sitemap.xml قدیمی را بگیرد
+//
+// کش: ساختنِ این فایل یعنی خواندنِ همه‌ی محصولات + همه‌ی دسته‌ها + یک statSync و
+// بعد چسباندنِ یک رشته‌ی چندده‌کیلوبایتی. تا امروز این کار در *هر* درخواست
+// تکرار می‌شد، در حالی که خروجی تا وقتی کاتالوگ عوض نشده حرف‌به‌حرف یکی است.
+// خزنده‌ها هم این آدرس را مرتب می‌زنند. کلید همان امضای کاتالوگ است (با هر
+// تغییر محصول عوض می‌شود) به‌علاوه‌ی base، پس تازه‌ماندن خودکار است.
+let sitemapCache = null; // { key, xml }
+const SITEMAP_MAX_URLS = 5000; // سقفِ استاندارد نقشه‌ی سایت ۵۰٬۰۰۰ است؛ خیلی قبل‌تر می‌ایستیم
 app.get('/sitemap.xml', (req, res) => {
-  const products = getPublicProducts();
   const base = siteBase(req);
+  const cacheKey = `${getCatalogSignature()}|${base}`;
+  if (sitemapCache && sitemapCache.key === cacheKey) {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.type('application/xml').send(sitemapCache.xml);
+  }
+  const products = getPublicProducts();
   const today = new Date().toISOString().slice(0, 10);
   // lastmod محصول از updated_at خودش می‌آید نه «امروز». تاریخِ امروز روی همه‌ی
   // آدرس‌ها به گوگل سیگنال دروغ می‌دهد که همه چیز هر روز عوض می‌شود و بعد از
@@ -620,9 +696,11 @@ app.get('/sitemap.xml', (req, res) => {
     `  <url><loc>${base}/terms.html</loc><lastmod>${termsLastmod}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>`,
     ...products.map(p =>
       `  <url><loc>${base}/product/${p.id}</loc><lastmod>${lastmodOf(p)}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority>${imageTag(p)}</url>`)
-  ].join('\n');
-  res.type('application/xml').send(
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${urls}\n</urlset>`);
+  ].slice(0, SITEMAP_MAX_URLS).join('\n');
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${urls}\n</urlset>`;
+  sitemapCache = { key: cacheKey, xml };
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.type('application/xml').send(xml);
 });
 
 // ---------- فایل‌های استاتیک ----------
@@ -768,7 +846,7 @@ server.requestTimeout = 120_000;
 // خاموشی تمیز: درخواست‌های در جریان تمام می‌شوند، دیتابیس بسته می‌شود،
 // بعد پروسه خارج می‌شود. بستن دیتابیس مهم است: WAL در فایل اصلی ادغام
 // می‌شود و دیسک بدون فایل جانبیِ نیمه‌کاره می‌ماند.
-let shuttingDown = false;
+// (پرچمِ shuttingDown بالاتر، کنارِ /healthz که می‌خواندش، تعریف شده.)
 function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;

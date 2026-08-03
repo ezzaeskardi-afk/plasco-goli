@@ -1,0 +1,29 @@
+/* ============================================================
+   فاکتور چاپیِ پنل مدیریت
+   ------------------------------------------------------------
+   این فایل فقط در پنجره‌ی چاپِ فاکتور (admin.js → printInvoice) بارگذاری
+   می‌شود. قبلاً همین قواعد به‌صورت یک بلوکِ <style> داخلِ همان HTML نوشته
+   می‌شد؛ با بستنِ style-src در CSP دیگر اجازه‌ی اجرا نداشت — و آن پنجره
+   چون با window.open باز می‌شود، CSP صفحه‌ی مادر را به ارث می‌برد.
+   style.css اینجا بارگذاری نمی‌شود: آن پوسته‌ی تاریکِ سایت است و فاکتور
+   باید کاغذِ سفید باشد.
+   ============================================================ */
+body.ad-invoice{
+  font-family:Tahoma,sans-serif;padding:26px;color:#111;font-size:13px;
+  background:#fff;margin:0;
+}
+.ad-invoice h1{font-size:19px;margin:0 0 4px;}
+.ad-invoice .head{
+  display:flex;justify-content:space-between;align-items:flex-start;
+  border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:16px;
+}
+.ad-invoice .meta{font-size:12px;line-height:2;}
+.ad-invoice table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px;}
+.ad-invoice th,
+.ad-invoice td{border:1px solid #bbb;padding:7px 9px;text-align:right;}
+.ad-invoice th{background:#f1f1f1;}
+.ad-invoice tfoot td{font-weight:bold;background:#fafafa;}
+.ad-invoice .foot{
+  margin-top:26px;font-size:11.5px;color:#555;
+  border-top:1px dashed #aaa;padding-top:12px;
+}

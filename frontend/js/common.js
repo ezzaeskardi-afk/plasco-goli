@@ -185,6 +185,9 @@ const PG = (function () {
     paintCartBadge(cart.count);
     // لینک «مشاهده سبد» داخل توست — مشتری بدون گشتن دنبال آیکون، مستقیم برود سمت پرداخت
     toast('به سبد خرید اضافه شد', 'success', { action: { href: '/cart.html', label: 'مشاهده سبد' } });
+    // مهمانی که کالا در سبد گذاشته، «علاقه‌ی واقعی» نشان داده — کادرِ خوش‌آمد
+    // اینجا مزاحمت نیست، چون بی‌ثبت‌نام سبدش با بستنِ مرورگر گم می‌شود.
+    document.dispatchEvent(new CustomEvent('pg:intent', { detail: { source: 'cart' } }));
     return cart;
   }
 
@@ -267,6 +270,54 @@ const PG = (function () {
         <svg><use href="#i-heart"/></svg>
       </button>`;
   }
+
+  // ---------- «موجود شد خبرم کن» روی کارتِ ناموجود ----------
+  // چرا اینجا و نه در main.js: این دکمه باید در هر سه جایی که کارتِ ناموجود
+  // دیده می‌شود کار کند (صفحه‌ی اصلی، اخیراً دیده‌اید، فهرستِ کامل محصولات) و
+  // هر کدام رندرکننده‌ی خودش را دارد. تا امروز فقط صفحه‌ی *جزئیاتِ* محصول این
+  // دکمه را داشت — یعنی مشتری در فهرست فقط «ناموجود» می‌دید و رد می‌شد؛ همان
+  // مشتری که با یک پیامک برمی‌گشت. یک تابعِ مشترک، سه مصرف‌کننده.
+  function notifyBtnHtml(productId) {
+    return `
+      <button type="button" class="notify-btn" data-notify="${productId}">
+        <svg aria-hidden="true"><use href="#i-history"/></svg> موجود شد خبرم کن
+      </button>`;
+  }
+
+  // شنونده روی document، پس برای کارت‌هایی که *بعداً* ساخته می‌شوند هم کار
+  // می‌کند (فیلتر، صفحه‌بندی، نمای سریع) بدون اینکه هر رندر دوباره ببندد.
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-notify]');
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    // stopPropagation جلوی هندلرهای *بالادستی* را می‌گیرد (اگر روزی خودِ کارت
+    // کلیک‌شدنی شود). هندلرهای دیگرِ خودِ document با این متوقف نمی‌شوند و لازم
+    // هم نیست: این دکمه داخل .product-footer است نه .product-media، پس «نمای
+    // سریع» با آن باز نمی‌شود.
+    e.stopPropagation();
+    const id = Number(btn.dataset.notify);
+    if (!Number.isInteger(id) || id < 1) return;
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    try {
+      const r = await api(`/products/${id}/notify-me`, { method: 'POST' });
+      toast(r.message || 'ثبت شد؛ به محض موجود شدن خبرتان می‌کنیم', 'success');
+      btn.classList.add('is-done');
+      btn.innerHTML = '<svg aria-hidden="true"><use href="#i-check"/></svg> خبرت می‌کنیم';
+    } catch (err) {
+      if (err.status === 401) {
+        toast('برای «خبرم کن» اول وارد حساب‌تان شوید', 'info');
+        const next = encodeURIComponent(location.pathname + location.search);
+        setTimeout(() => { location.href = `/login.html?next=${next}`; }, 1100);
+        return;                   // به حالتِ اول برنگرد؛ داریم می‌رویم صفحه‌ی ورود
+      }
+      // ۴۰۹ یعنی موجودی همین لحظه شارژ شد. پیامِ سرور خودش این را می‌گوید و
+      // بازگرداندنِ دکمه به حالتِ اول درست است: کاربر صفحه را نو کند و بخرد.
+      toast(err.message || 'ثبت نشد؛ دوباره تلاش کنید', 'error');
+      btn.innerHTML = original;
+      btn.disabled = false;
+    }
+  });
 
   function initDrawer() {
     const drawer = document.getElementById('drawer');
@@ -659,7 +710,16 @@ const PG = (function () {
     document.body.appendChild(nav);
   }
 
-  // ---------- دعوت به ثبت‌نام در اولین بازدید ----------
+  // ---------- دعوت به ثبت‌نام ----------
+  // این کادر عمداً *در لحظه‌ی ورود* باز نمی‌شود. کسی که تازه رسیده هنوز نمی‌داند
+  // اینجا چه می‌فروشیم؛ گرفتن جلوی صفحه با «ثبت‌نام کن» قبل از نشان‌دادنِ حتی یک
+  // کالا، هم بی‌منطق است هم بیشترِ مردم را فراری می‌دهد. پس صبر می‌کنیم تا خودِ
+  // کاربر علاقه نشان دهد و بعد پیشنهاد می‌دهیم:
+  //   • تا محصولات را ندیده باشد → هیچ‌وقت
+  //   • بعد از آن، هر کدام زودتر رسید: ۲۵ ثانیه ماندن، یا اسکرول تا نیمه‌ی صفحه
+  // «علاقه‌ی واقعی» (افزودن به سبد یا علاقه‌مندی) کادر را فوری می‌آورد، چون آنجا
+  // ثبت‌نام دیگر مزاحمت نیست — واقعاً به‌دردش می‌خورد که سبدش گم نشود.
+  const WELCOME_DELAY_MS = 25000;
   async function initWelcomePrompt() {
     const user = await refreshAuthNav();
     // فقط صفحه‌ی اصلی، فقط یک بار، و فقط برای مهمان
@@ -667,6 +727,64 @@ const PG = (function () {
     if (localStorage.getItem('pg_welcomed')) return;
     if (user) { localStorage.setItem('pg_welcomed', '1'); return; }
 
+    let armed = false;   // آیا کاربر محصولات را دیده؟
+    let done = false;    // یک‌بار بیشتر اجرا نشود
+    const timers = [];
+    const stop = () => {
+      done = true;
+      timers.forEach(clearTimeout);
+      window.removeEventListener('scroll', onScroll);
+      io?.disconnect();
+      document.removeEventListener('pg:intent', onIntent);
+    };
+
+    // اگر کاربر وسطِ کاری است (مودالِ نمای سریع، سبد بازشو، فیلترِ کناری)
+    // نپریم وسطش؛ چند ثانیه بعد دوباره امتحان می‌کنیم.
+    function busy() {
+      return document.body.classList.contains('qv-lock')
+        || document.body.classList.contains('no-scroll')
+        || !!document.querySelector('.qv-overlay.open, .pl-side.open, .modal.open');
+    }
+
+    function fire() {
+      if (done) return;
+      if (busy()) { timers.push(setTimeout(fire, 4000)); return; }
+      stop();
+      showWelcome();
+    }
+
+    // «محصولات را دید» = بخشِ محصولات یک بار وارد دید شد
+    let io = null;
+    const anchor = document.getElementById('products');
+    const arm = () => {
+      if (armed) return;
+      armed = true;
+      timers.push(setTimeout(fire, WELCOME_DELAY_MS));
+    };
+    if (anchor && 'IntersectionObserver' in window) {
+      io = new IntersectionObserver((entries) => {
+        if (entries.some(en => en.isIntersecting)) { io.disconnect(); io = null; arm(); }
+      }, { threshold: 0.15 });
+      io.observe(anchor);
+    } else {
+      arm(); // مرورگرِ قدیمی یا صفحه‌ای بدون این بخش: فقط تایمر
+    }
+
+    // اسکرول تا نیمه‌ی صفحه هم یعنی «دارد می‌گردد»
+    function onScroll() {
+      if (!armed) return;
+      const seen = window.scrollY + window.innerHeight;
+      if (seen >= document.documentElement.scrollHeight * 0.5) fire();
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    // سیگنالِ علاقه‌ی واقعی از جای دیگرِ سایت (افزودن به سبد).
+    // کمی مکث می‌کنیم تا روی توستِ «به سبد اضافه شد» نیفتد.
+    function onIntent() { if (!done) timers.push(setTimeout(fire, 2200)); }
+    document.addEventListener('pg:intent', onIntent);
+  }
+
+  function showWelcome() {
     const overlay = document.createElement('div');
     overlay.className = 'welcome-overlay';
     overlay.innerHTML = `
@@ -873,6 +991,57 @@ const PG = (function () {
     return thumb(src, 560);
   }
 
+  // ---------- srcset برای کارتِ محصول ----------
+  // cardImg بالا فقط دو حالت دارد: DPR۱ نسخه‌ی ۵۶۰، DPR۲+ عکسِ کامل. یعنی
+  // موبایلِ DPR۳ با کارتِ ۳۹۴ پیکسلی همان فایلِ ~۹۵۰ پیکسلی را می‌گیرد که
+  // دسکتاپِ DPR۲ می‌گیرد — و بدتر، گوشیِ DPR۲ با کارتِ ۱۴۸ پیکسلیِ دو ستونه هم
+  // همان را می‌گیرد در حالی که ۳۲۰ کافی بود. با srcset این تصمیم از ما گرفته
+  // می‌شود و به مرورگر می‌رسد که هم عرضِ واقعیِ کادر را می‌داند هم DPR را.
+  //
+  // چرا 900w برای عکسِ کامل: ابعادِ واقعی در API نیست و عکس‌های امروز ۹۲۱ تا
+  // ۹۷۲ پیکسل‌اند. کم‌گفتنِ عرض جهتِ امنِ خطاست: مرورگر فکر می‌کند این نامزد
+  // کوچک‌تر از چیزی است که هست، پس در بدترین حالت عکسِ *بزرگ‌تر از نیاز*
+  // برمی‌دارد (کمی بایتِ اضافه) نه کوچک‌تر از نیاز (عکسِ تار). اگر روزی عکسی
+  // با MAX_EDGE=1400 آپلود شود، باز هم همین رابطه برقرار است.
+  // اندازه‌های اندازه‌گیری‌شده‌ی کارت در شبکه‌ی صفحه‌ی اصلی (۴←۳←۲←۱ ستون).
+  const CARD_SIZES = '(max-width:430px) 100vw, (max-width:640px) 46vw, (max-width:1080px) 31vw, 264px';
+  // شبکه‌ی صفحه‌ی فهرست فرق دارد: ستونِ فیلتر عرض می‌گیرد، پس ۳ ستون است نه ۴.
+  const LIST_SIZES = '(max-width:420px) 100vw, (max-width:760px) 47vw, (max-width:1180px) 31vw, 270px';
+
+  function srcsetFor(src) {
+    if (!src || typeof src !== 'string') return '';
+    if (!src.startsWith('/picture/')) return '';
+    if (src.includes('?')) return '';
+    if (!/\.(jpe?g|jfif|png)$/i.test(src)) return '';
+    return src + '?w=320 320w, ' + src + '?w=560 560w, ' + src + ' 900w';
+  }
+
+  // رشته‌ی آماده‌ی صفتِ srcset+sizes. اگر عکس نسخه‌ی کوچک ندارد (svg، webp،
+  // آدرسِ بیرونی) رشته‌ی خالی برمی‌گردد تا صفتِ خالی در HTML نیفتد.
+  function imgSizing(src, sizes) {
+    const ss = srcsetFor(src);
+    if (!ss) return '';
+    return ` srcset="${esc(ss)}" sizes="${esc(sizes || CARD_SIZES)}"`;
+  }
+
+  // همان کار، ولی روی عکسی که *از قبل در صفحه است* (گالریِ محصول عکسِ اصلی را
+  // با JS عوض می‌کند). فقط عوض‌کردنِ src کافی نیست: تا وقتی صفتِ srcset روی
+  // عکسِ قبلی مانده، مرورگر نامزدهای همان را معتبر می‌داند و تصویر عوض نمی‌شود.
+  // پس هر سه صفت با هم ست می‌شوند — و اگر عکسِ جدید نسخه‌ی کوچک ندارد، srcset
+  // و sizes پاک می‌شوند تا src تنها منبع بماند.
+  function setImgSrc(img, src, sizes) {
+    if (!img) return;
+    const ss = srcsetFor(src);
+    if (ss) {
+      img.setAttribute('srcset', ss);
+      img.setAttribute('sizes', sizes || CARD_SIZES);
+    } else {
+      img.removeAttribute('srcset');
+      img.removeAttribute('sizes');
+    }
+    img.src = src;
+  }
+
   // ---------- خطای کل صفحه ----------
   // چند صفحه (سبد، پرداخت، حساب کاربری) کارشان را با یک درخواست شروع می‌کنند.
   // اگر همان اولی بترکد، هیچ‌چیزِ صفحه ساخته نمی‌شود: نه لیست، نه پیام، نه دکمه —
@@ -917,5 +1086,5 @@ const PG = (function () {
     }
   }
 
-  return { api, toast, pageError, boot, refreshCartBadge, paintCartBadge, addToCart, refreshAuthNav, money, num, statusLabel, esc, thumb, cardImg, normFa, foldFa, isWished, syncWishHearts, refreshWishlist, toggleWish, wishBtnHtml, lowStockAt, priceHtml, freeShipNote, pushRecent, recentIds, recentProducts };
+  return { api, toast, pageError, boot, refreshCartBadge, paintCartBadge, addToCart, refreshAuthNav, money, num, statusLabel, esc, thumb, cardImg, imgSizing, setImgSrc, CARD_SIZES, LIST_SIZES, normFa, foldFa, isWished, syncWishHearts, refreshWishlist, toggleWish, wishBtnHtml, notifyBtnHtml, lowStockAt, priceHtml, freeShipNote, pushRecent, recentIds, recentProducts };
 })();

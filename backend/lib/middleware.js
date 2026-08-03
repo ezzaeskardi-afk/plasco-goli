@@ -118,7 +118,7 @@ const latinDigits = (s) => String(s).replace(/[۰-۹٠-٩]/g, d => DIGIT_MAP[d])
 
 const V = {
   // رشته: trim، حذف کاراکترهای کنترلی، محدودیت طول
-  str({ min = 0, max = 200, optional = false, fallback = '' } = {}) {
+  str({ min = 0, max = 200, optional = false, fallback = '', truncate = false } = {}) {
     return (raw, field) => {
       if (raw === undefined || raw === null || raw === '') {
         if (optional) return fallback;
@@ -126,7 +126,14 @@ const V = {
       }
       const s = String(raw).replace(/[\u0000-\u001F\u007F]/g, '').trim();
       if (s.length < min) throw new ValidationError(`«${field}» باید حداقل ${min} کاراکتر باشد`, field);
-      return s.slice(0, max);
+      // برشِ خاموشِ طول، ورودیِ بزهکارانه را بی‌صدا می‌پذیرد و بعد داده‌ی
+      // بریده‌شده وارد دیتابیس می‌شود. پیش‌فرض: طولِ زیاد خطاست؛ جایی که برش
+      // واقعاً خواسته شده (فیلد جست‌وجو) باید صریحاً truncate: true بدهد.
+      if (s.length > max) {
+        if (truncate) return s.slice(0, max);
+        throw new ValidationError(`«${field}» نباید بیشتر از ${max} کاراکتر باشد`, field);
+      }
+      return s;
     };
   },
   // عدد صحیح با بازه — ارقام فارسی هم پذیرفته می‌شود
