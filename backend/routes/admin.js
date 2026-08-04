@@ -711,6 +711,18 @@ router.post('/products/:id/published', (req, res) => {
     });
   }
 
+  // قیمتِ صفر با «عکس ندارد» فرق دارد و عمداً force ندارد: کالای بی‌عکس بد
+  // فروش می‌رود ولی کالای صفر تومان *فروخته می‌شود* — مشتری آن را در سبد
+  // می‌گذارد، سفارش ثبت می‌شود و مغازه جنس را مجانی داده. این اشتباهی نیست
+  // که با یک confirm بشود پذیرفتش، پس راهِ عبور ندارد. کالاهایی که با
+  // واردکردنِ عکس ساخته می‌شوند قیمتشان صفر است تا مالک خودش پرش کند؛ این
+  // نگهبان همان چیزی است که آن حالت را بی‌خطر می‌کند.
+  if (on && !(Number(existing.price) > 0)) {
+    return res.status(400).json({
+      error: 'قیمتِ این محصول هنوز صفر است. اول قیمت را وارد کن، بعد منتشر کن.'
+    });
+  }
+
   setProductPublished(id, on);
   note(req, on ? 'product_publish' : 'product_unpublish', `#${id}`, existing.title);
   res.json({ ok: true, published: on ? 1 : 0, product: getProduct(id) });
@@ -914,13 +926,24 @@ router.post('/products/bulk', (req, res) => {
   // بدون این، «انتخابِ همه ← انتشار» در یک کلیک ده‌ها صفحه‌ی خالی روی سایت
   // می‌آورد و گوگل همه را ایندکس می‌کند — پاک‌کردنشان از نتایج ماه‌ها طول
   // می‌کشد. سمتِ سرور است نه فقط فرانت، چون فرانت قابلِ دورزدن است.
-  if (op === 'publish' && value !== 'force') {
-    const noImage = ids.filter(id => { const p = getProduct(Number(id)); return p && !p.image; });
-    if (noImage.length) {
-      return res.status(409).json({
-        error: `${noImage.length} تا از این کالاها عکس ندارند؛ اگر مطمئنی، دوباره با تأیید بفرست`,
-        needsConfirm: true, reason: 'no_image', count: noImage.length
+  if (op === 'publish') {
+    // قیمتِ صفر، مثل مسیرِ تکی، راهِ عبور ندارد: کالای صفر تومان فروخته
+    // می‌شود و پولش برنمی‌گردد. اول از force چک می‌شود چون حتی با تأییدِ
+    // مدیر هم مجاز نیست.
+    const noPrice = ids.filter(id => { const p = getProduct(Number(id)); return p && !(Number(p.price) > 0); });
+    if (noPrice.length) {
+      return res.status(400).json({
+        error: `${noPrice.length} تا از این کالاها قیمت ندارند. اول قیمتشان را وارد کن، بعد منتشر کن.`
       });
+    }
+    if (value !== 'force') {
+      const noImage = ids.filter(id => { const p = getProduct(Number(id)); return p && !p.image; });
+      if (noImage.length) {
+        return res.status(409).json({
+          error: `${noImage.length} تا از این کالاها عکس ندارند؛ اگر مطمئنی، دوباره با تأیید بفرست`,
+          needsConfirm: true, reason: 'no_image', count: noImage.length
+        });
+      }
     }
   }
 

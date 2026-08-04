@@ -312,10 +312,21 @@
     paintFacets();
     PG.syncWishHearts();
 
-    // بعد از عوض‌کردنِ صفحه، بالای فهرست برو — ولی نه در بارگذاریِ اول،
-    // چون آن‌وقت لینکی که کسی با #anchor فرستاده پرت می‌شود.
+    // بعد از عوض‌کردنِ فیلتر یا صفحه، برگرد بالای فهرست — ولی نه در
+    // بارگذاریِ اول، چون آن‌وقت لینکی که کسی با #anchor فرستاده پرت می‌شود.
+    //
+    // هدف .page-head است نه .pl-bar: عنوان و بردکرامب و زیرعنوان هر سه
+    // همین الان با فیلترِ تازه عوض شدند. اگر تا .pl-bar پایین برویم،
+    // مشتری روی دسته‌ای کلیک می‌کند و درست از بالای نامِ همان دسته رد
+    // می‌شود — حسش این است که صفحه او را «پایین انداخته» و باید دستی
+    // اسکرول کند تا ببیند کجاست.
+    //
+    // scrollIntoView خودش scroll-margin-top را رعایت می‌کند و مرورگر
+    // نتیجه را به بازه‌ی معتبر می‌چسباند؛ پس وقتی مشتری همین حالا بالای
+    // صفحه است، این کار هیچ حرکتی ایجاد نمی‌کند.
     if (opts.scroll && !firstPaint) {
-      document.querySelector('.pl-bar').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const head = document.querySelector('.page-head') || document.querySelector('.pl-bar');
+      if (head) head.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
     firstPaint = false;
   }

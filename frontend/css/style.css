@@ -441,12 +441,24 @@ nav.main-links a:hover::after{width:100%;}
 @keyframes marquee{to{transform:translateX(50%)}}
 
 /* ---------- بدنه‌ی سکشن‌ها ---------- */
-section{padding:var(--sp-section) 0;}
+/* این ریتمِ عمودی «تحریریه‌ای» است: مالِ سکشن‌های سطحِ اولِ صفحه، آن‌جا
+   که هر سکشن یک فصلِ جداست و باید هوا دورش باشد. تا امروز با نامِ تگ
+   انتخاب می‌شد، پس روی سکشن‌های «ساختاری» هم می‌افتاد — .pl-main که
+   داخلِ .pl-layout است و .admin-view که داخلِ .admin-content است — و
+   آن‌جا حدود ۱۰۰px فاصله‌ی بی‌دلیل از بالا و پایین می‌ساخت: ستونِ
+   فیلتر از شبکه‌ی کالاها یک صد پیکسل بالاتر می‌افتاد و ته صفحه هوای
+   مرده می‌ماند. راه‌حلِ تا حالا این بوده که هر صفحه با یک کلاسِ
+   sec-pt* آن را خنثی کند؛ همین که این کلاس‌ها وجود دارند یعنی قاعده
+   از اول زیادی پهن بوده. با > فقط فرزندِ مستقیمِ main گرفته می‌شود،
+   که دقیقاً همان چیزی است که از ابتدا منظور بوده. */
+main > section{padding:var(--sp-section) 0;}
 section[id],main [id]{scroll-margin-top:var(--header-h);} /* جای انکرها زیر هدر دو طبقه نره */
 
 /* دو سکشن پشت‌سرهم = دو برابر فاصله. جفتِ بالا/پایین را جمع می‌کنیم
-   تا فضای خالیِ عجیب بین «دسته‌بندی‌ها» و «محصولات» از بین برود. */
-section + section{padding-top:calc(var(--sp-section) * .45);}
+   تا فضای خالیِ عجیب بین «دسته‌بندی‌ها» و «محصولات» از بین برود.
+   این هم مثل بالا فقط سطحِ اول؛ وگرنه در پنل، هر ۱۰ تا .admin-view
+   خواهر‌وبرادرِ هم‌اند و همه‌شان جز اولی این فاصله را می‌گرفتند. */
+main > section + section{padding-top:calc(var(--sp-section) * .45);}
 .marquee + section{padding-top:calc(var(--sp-section) * .7);}
 
 .section-head{max-width:640px;margin-bottom:var(--sp-head);}
@@ -1014,7 +1026,7 @@ footer.site::before{
 /* فاصله‌ی بالای سربرگ عمداً کم است: هدر sticky است و خودش ۱۱۸px ارتفاع دارد،
    پس ۵۶px فاصله‌ی اضافه یعنی مشتری روی موبایل باید اسکرول کند تا اولین کالا را
    ببیند. ۱۷px همان «نفس کشیدنِ» لازم را می‌دهد بدون هدردادنِ صفحه‌ی اول. */
-.page-head{padding:17px 0 8px;}
+.page-head{padding:17px 0 8px;scroll-margin-top:calc(var(--header-h) + 10px);}
 .page-head h1{font-size:clamp(26px,3.4vw,36px);}
 .breadcrumb{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-soft);margin-bottom:14px;}
 .breadcrumb a:hover{color:#2BD9BC;}
@@ -3344,12 +3356,15 @@ table.ad-table tbody tr:last-child td{border-bottom:0;}
    ============================================================ */
 .pl-layout{
   display:grid;grid-template-columns:250px 1fr;gap:28px;
-  align-items:start;padding-bottom:64px;
+  align-items:start;padding-top:20px;padding-bottom:64px;
 }
+/* فاصله‌ی نفس‌کشیدنِ بالای فهرست روی خودِ .pl-layout است، نه روی یکی از
+   دو ستون. اگر روی ستونِ کالاها بنشیند، آن ستون از ستونِ فیلتر پایین‌تر
+   می‌افتد و دو ستون هم‌تراز نمی‌مانند — همان چیزی که قبلاً پیش می‌آمد. */
 
 /* ---- ستون فیلترها ---- */
 .pl-side{
-  position:sticky;top:96px;background:var(--surface);
+  position:sticky;top:calc(var(--header-h) + 16px);background:var(--surface);
   border:1px solid var(--line);border-radius:var(--radius-md);
   padding:18px;box-shadow:var(--shadow-sm);
 }
@@ -3389,11 +3404,20 @@ table.ad-table tbody tr:last-child td{border-bottom:0;}
 .pl-reset{width:100%;margin-top:14px;justify-content:center;}
 
 /* ---- نوار بالای فهرست ---- */
+/* scroll-margin-top باید حداقل به بلندیِ واقعیِ هدرِ چسبان باشد، وگرنه
+   scrollIntoView نوار را دقیقاً زیرِ هدر پارک می‌کند و پیدا نیست. عدد
+   ۹۰ از وقتی مانده که هدر یک طبقه بود؛ حالا هدر دو طبقه است. از همان
+   متغیرِ هدر استفاده می‌کنیم تا در موبایل هم (که --header-h کوچک‌تر
+   می‌شود) خودش را تنظیم کند. */
 .pl-bar{
   display:flex;align-items:center;gap:14px;flex-wrap:wrap;
-  margin-bottom:16px;scroll-margin-top:90px;
+  margin-bottom:16px;scroll-margin-top:calc(var(--header-h) + 14px);
 }
-.pl-count{flex:1;min-width:150px;font-size:13px;color:var(--ink-soft);}
+/* ترتیب: مرتب‌سازی و فیلتر سمتِ راست (ابتدای خطِ RTL)، شمارشِ کالاها
+   انتهای نوار. ترتیبِ DOM هم همین است، پس ترتیبِ فوکوسِ کیبورد و
+   خواندنِ صفحه‌خوان با آن‌چه دیده می‌شود یکی است. flex:1 فضای خالیِ
+   میان را می‌خورد تا آن دو واقعاً به لبه بچسبند. */
+.pl-count{flex:1;min-width:150px;font-size:13px;color:var(--ink-soft);text-align:end;}
 .pl-count b{color:var(--ink);font-weight:800;}
 .pl-sort{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-soft);white-space:nowrap;}
 .pl-sort select{
@@ -3500,8 +3524,17 @@ table.ad-table tbody tr:last-child td{border-bottom:0;}
 @media (max-width:760px){.pl-grid{grid-template-columns:repeat(2,1fr);gap:14px;}}
 @media (max-width:420px){
   .pl-grid{grid-template-columns:1fr;}
-  .pl-sort{width:100%;}
-  .pl-sort select{flex:1;}
+  /* در این عرض، select برای انگشت باید تمامِ پهنا را بگیرد. با flex-wrap
+     این یعنی خطِ خودش را می‌گیرد و شمارش می‌افتد خطِ سوم — سه ردیف بالای
+     اولین کالا، درست همان فضای هدررفته‌ای که داریم کمش می‌کنیم. پس همین
+     یک بازه grid می‌شود و جای هر سه را صریح می‌گوییم: ردیفِ اول دکمه‌ی
+     فیلتر (ستون ۱ = راست) و شمارش (ستون ۲ = چپ)، ردیفِ دوم مرتب‌سازی در
+     تمامِ پهنا. جای‌گذاریِ صریح یعنی ترتیبِ DOM دست‌نخورده می‌ماند. */
+  .pl-bar{display:grid;grid-template-columns:auto minmax(0,1fr);}
+  .pl-filter-btn{grid-column:1;grid-row:1;justify-self:start;}
+  .pl-count{grid-column:2;grid-row:1;}
+  .pl-sort{grid-column:1 / -1;grid-row:2;width:100%;}
+  .pl-sort select{flex:1;min-width:0;}
 }
 
 /* شمارنده‌ی پیش‌نویسِ دسته در پنل — طلایی، هم‌رنگِ بقیه‌ی نشانه‌های پیش‌نویس */

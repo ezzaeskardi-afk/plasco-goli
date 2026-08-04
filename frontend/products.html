@@ -13,7 +13,7 @@
 <link rel="preload" href="/assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
-<link rel="stylesheet" href="/css/style.css?v=42">
+<link rel="stylesheet" href="/css/style.css?v=44">
 </head>
 <body>
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -153,11 +153,12 @@
     </aside>
 
     <section class="pl-main">
+      <!-- ترتیب عمدی است: فیلتر و مرتب‌سازی سمتِ راست (ابتدای خطِ RTL)،
+           شمارشِ کالاها ته نوار. ترتیبِ DOM با ترتیبِ دیداری یکی است. -->
       <div class="pl-bar">
         <button class="btn btn-ghost btn-sm pl-filter-btn" type="button" id="plFilterBtn">
           <svg><use href="#i-menu"/></svg> فیلترها <span class="pl-fcount" id="plFCount" hidden>۰</span>
         </button>
-        <span class="pl-count" id="plCount"></span>
         <label class="pl-sort">
           مرتب‌سازی:
           <select id="plSort" aria-label="مرتب‌سازی">
@@ -168,6 +169,7 @@
             <option value="stock">بیشترین موجودی</option>
           </select>
         </label>
+        <span class="pl-count" id="plCount"></span>
       </div>
 
       <!-- تراشه‌های فیلترِ فعال: مشتری باید ببیند چه چیزی نتیجه را محدود کرده -->
@@ -220,8 +222,8 @@
   <svg><use href="#i-phone"/></svg>
   <span class="fab-label">تماس با فروشگاه</span>
 </a>
-<script src="/js/common.js?v=42" defer></script>
-<script src="/js/products.js?v=42" defer></script>
+<script src="/js/common.js?v=44" defer></script>
+<script src="/js/products.js?v=44" defer></script>
 
 </body>
 </html>
