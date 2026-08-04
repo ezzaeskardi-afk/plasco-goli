@@ -136,7 +136,13 @@ ul{margin:0;padding:0;list-style:none;}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
 h1,h2,h3,h4{margin:0;font-weight:800;letter-spacing:-.01em;}
 p{margin:0;}
-.container{width:100%;max-width:var(--container);margin:0 auto;padding:0 24px;}
+/* padding-inline نه padding: با شورتهند، فاصله‌ی عمودیِ هر کلاسی که کنارِ
+   .container می‌نشیند صفر می‌شد. .container در دو جا تعریف شده و نسخه‌ی
+   موبایلش (‎@media 640) *بعد* از .page-head و .footer-bottom می‌آید، پس
+   با هم‌وزن‌بودنِ specificity آخری برنده می‌شد و padding عمودیِ آن‌ها را
+   بی‌صدا پاک می‌کرد. .container فقط کارش فاصله‌ی افقی است؛ با longhand
+   منطقی، دیگر هیچ‌وقت به عمودی دست نمی‌زند. */
+.container{width:100%;max-width:var(--container);margin:0 auto;padding-inline:24px;}
 
 ::selection{background:rgba(245,185,90,.35);color:#fff;}
 
@@ -1023,12 +1029,17 @@ footer.site::before{
 .to-top svg{width:20px;height:20px;color:var(--gold);}
 
 /* ---------- سربرگ صفحات داخلی ---------- */
-/* فاصله‌ی بالای سربرگ عمداً کم است: هدر sticky است و خودش ۱۱۸px ارتفاع دارد،
-   پس ۵۶px فاصله‌ی اضافه یعنی مشتری روی موبایل باید اسکرول کند تا اولین کالا را
-   ببیند. ۱۷px همان «نفس کشیدنِ» لازم را می‌دهد بدون هدردادنِ صفحه‌ی اول. */
-.page-head{padding:17px 0 8px;scroll-margin-top:calc(var(--header-h) + 10px);}
+/* هدر sticky است و خودش ~۱۱۸px ارتفاع دارد، پس هر پیکسلِ اضافه اینجا یعنی
+   مشتری باید اسکرول کند تا اولین کالا را ببیند. سه عددِ زیر روی هم نوارِ
+   «تهِ هدر تا عنوان» را می‌سازند و به خواستِ مالک نصف شدند:
+     padding-top ‎۱۷→۴‎ ، فاصله‌ی زیرِ بردکرامب ‎۱۴→۵‎ ، خطِ بردکرامب ‎۲۴٫۳→۱۹٫۶
+   جمعاً ۵۵px → ۲۹px. کمتر از این، بردکرامب به عنوان می‌چسبد.
+   نکته: عمودی را با padding-block می‌گذاریم نه شورتهند، وگرنه فاصله‌ی
+   افقیِ .container صفر می‌شود و متن به لبه‌ی صفحه می‌چسبد. */
+.page-head{padding-block:4px 6px;scroll-margin-top:calc(var(--header-h) + 10px);}
 .page-head h1{font-size:clamp(26px,3.4vw,36px);}
-.breadcrumb{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-soft);margin-bottom:14px;}
+/* line-height:1.45 برای فارسی امن است (زیرِ ۱٫۳ دنباله‌ی ج و چ بریده می‌شود) */
+.breadcrumb{display:flex;align-items:center;gap:8px;font-size:13.5px;line-height:1.45;color:var(--ink-soft);margin-bottom:5px;}
 .breadcrumb a:hover{color:#2BD9BC;}
 .breadcrumb .sep{opacity:.5;}
 
@@ -2138,7 +2149,7 @@ a.cart-row-title:hover{color:var(--teal);}
   .ft-result{padding-bottom:0;text-align:center;}
 }
 @media (max-width:640px){
-  .container{padding:0 18px;}
+  .container{padding-inline:18px;}   /* عمودی را دست نزن — دلیلش پای تعریفِ اصلیِ .container */
   .cat-grid{grid-template-columns:repeat(2,1fr);}
   .product-grid{grid-template-columns:repeat(2,1fr);}
   .feature-grid{grid-template-columns:1fr;}

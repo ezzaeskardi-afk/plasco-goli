@@ -2568,10 +2568,15 @@ function shutdown(code) {
       }
 
       /* و نگهبانِ عددِ ۳۸۲ خودش: از CSS خوانده می‌شود تا اگر کسی نقطه‌ی شکستِ
-         تک‌ستونه یا پدینگِ کانتینر را عوض کند، فرضِ بالا بی‌سروصدا کهنه نشود. */
+         تک‌ستونه یا پدینگِ کانتینر را عوض کند، فرضِ بالا بی‌سروصدا کهنه نشود.
+         پدینگ با هر دو نگارش خوانده می‌شود — شورتهندِ «padding:0 24px» و
+         longhandِ «padding-inline:24px». .container عمداً به longhand رفت
+         (شورتهند فاصله‌ی عمودیِ .page-head را پاک می‌کرد)، و آن تغییرِ درست
+         این نگهبان را کور کرد: pad برابرِ null شد و تست به‌جای «عدد عوض شد»
+         گفت «از CSS درآمد nullpx». یعنی نگهبان به نگارش حساس بود نه به عدد. */
       {
         const bp = cssSrc.match(/@media \(max-width:(\d+)px\)\{[^@]*?\.product-grid\{grid-template-columns:1fr/s);
-        const pad = cssSrc.match(/\.container\{[^}]*?padding:0 (\d+)px/s);
+        const pad = cssSrc.match(/\.container\{[^}]*?padding(?:-inline)?:(?:0 )?(\d+)px/s);
         const box = bp && pad ? Number(bp[1]) - 2 * Number(pad[1]) : null;
         check('V27 نگهبان: بزرگ‌ترین کادرِ کارت هنوز همان ۳۸۲px است',
           box === CARD_MAX_BOX, `از CSS درآمد ${box}px، فرضِ کد ${CARD_MAX_BOX}px`);
