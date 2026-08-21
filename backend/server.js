@@ -17,6 +17,7 @@ const { rateLimit } = require('./lib/middleware');
 const { staticCompress, compressJson, sendHtml } = require('./lib/static-compress');
 const { webpNegotiate } = require('./lib/webp-negotiate');
 const { isLive: paymentLive } = require('./lib/payment');
+const { reconcileStaleOrders } = require('./lib/reconcile');
 
 const productsRoute = require('./routes/products');
 const cartRoute = require('./routes/cart');
@@ -62,6 +63,7 @@ app.use(express.json({ limit: '64kb' })); // بدنه‌ی بزهکارانه‌
 
 // هدرهای امنیتی پایه (بدون وابستگی به helmet)
 const HTTPS_MODE = process.env.COOKIE_SECURE === 'true';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 // ---------- هشِ استایلِ درون‌خطیِ صفحه‌ی آفلاین ----------
 // همه‌ی استایل‌های درون‌خطیِ سایت به style.css منتقل شدند تا 'unsafe-inline'
@@ -223,8 +225,12 @@ app.get('/healthz', (req, res) => {
 // SESSION_SECRET: اگر تنظیم نشده بود، یک secret تصادفی برای این اجرا ساخته می‌شود
 // (امن‌تر از secret ثابتِ داخل کد؛ ولی برای production حتماً در .env بگذارید)
 const sessionSecret = process.env.SESSION_SECRET || (() => {
+  const generated = crypto.randomBytes(32).toString('hex');
+  if (IS_PRODUCTION) {
+    throw new Error('SESSION_SECRET must be set in production; refusing to start with an ephemeral secret');
+  }
   log.warn('SESSION_SECRET is not set in .env - generated a temporary one (users must log in again after each restart)');
-  return crypto.randomBytes(32).toString('hex');
+  return generated;
 })();
 
 app.use(session({
@@ -811,12 +817,29 @@ process.on('uncaughtException', (err) => {
 
 // ---------- کارهای دوره‌ای ----------
 // آزادسازی موجودی سفارش‌های رهاشده + پاکسازی سشن/OTPهای منقضی
+//
+// دو مرحله دارد و ترتیبش عمدی است:
+//   ۱) expireStaleOrders — فقط سفارش‌هایی که هرگز به درگاه نرسیدند. همگام و ارزان.
+//   ۲) reconcileStaleOrders — سفارش‌هایی که authority دارند. از درگاه می‌پرسد
+//      «پول گرفته شد؟» و تازه بعدش تصمیم می‌گیرد. ناهمگام است چون شبکه دارد.
+// جزئیاتِ چراییِ مرحله‌ی دوم در lib/reconcile.js نوشته شده.
+//
+// نگهبانِ reconcileRunning لازم است: اگر درگاه کند باشد ممکن است یک اجرا بیش
+// از پنج دقیقه طول بکشد و اجرای بعدی رویش سوار شود — یعنی پرسیدنِ هم‌زمانِ یک
+// سفارش از درگاه و دو برابر شدنِ بارِ شبکه بدونِ هیچ فایده‌ای.
+let reconcileRunning = false;
 setInterval(() => {
   try {
     const n = expireStaleOrders();
-    if (n > 0) log.info(`${n} unpaid order(s) expired; stock released`);
+    if (n > 0) log.info(`${n} order(s) that never reached the gateway expired; stock released`);
     cleanupExpired();
   } catch (e) { log.error('Periodic cleanup failed', e); }
+
+  if (reconcileRunning) return;
+  reconcileRunning = true;
+  reconcileStaleOrders()
+    .catch(e => log.error('Order reconciliation failed', e))
+    .finally(() => { reconcileRunning = false; });
 }, 5 * 60 * 1000).unref();
 
 // بکاپ روزانه‌ی دیتابیس + پاکسازی لاگ‌ها و آمار بازدید قدیمی (هر ۶ ساعت چک می‌شود)
@@ -872,7 +895,7 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 // هیچ‌کدام سرور را نمی‌خواباند؛ فقط بلند و واضح هشدار می‌دهد.
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
-    log.warn('[PROD] SESSION_SECRET missing or shorter than 32 chars - set a long random value in .env');
+    log.warn('[PROD] SESSION_SECRET should be at least 32 chars');
   }
   if (!process.env.ZARINPAL_MERCHANT_ID) log.warn('[PROD] Payment gateway is in TEST mode (no ZARINPAL_MERCHANT_ID)');
   if (!HTTPS_MODE) log.warn('[PROD] COOKIE_SECURE is off - the session cookie will also travel over plain HTTP; turn it on as soon as the domain has SSL');

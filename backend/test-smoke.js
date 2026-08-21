@@ -106,10 +106,14 @@ function storeCookies(res) {
 function cookieHeader() {
   return [...cookies.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
 }
-async function api(method, p, body) {
+async function api(method, p, body, extraHeaders = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(cookies.size ? { Cookie: cookieHeader() } : {}), ...extraHeaders };
+  if (method === 'POST' && p === '/orders' && !headers['Idempotency-Key']) {
+    headers['Idempotency-Key'] = `smoke-auto-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
   const res = await fetch(`${BASE}/api${p}`, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(cookies.size ? { Cookie: cookieHeader() } : {}) },
+    headers,
     body: body ? JSON.stringify(body) : undefined
   });
   storeCookies(res);
@@ -377,8 +381,14 @@ function shutdown(code) {
     check('Throwaway test product created (real stock is never touched)',
       Boolean(buyable && buyable.id > 0 && buyable.stock === 999));
     await api('POST', '/cart/add', { productId: buyable.id, qty: 1 });
-    const orderRes = await api('POST', '/orders', { addressId: addr.data.address.id });
+    const orderKey = `smoke-${Date.now()}-order-key`;
+    const orderRes = await api('POST', '/orders', { addressId: addr.data.address.id }, { 'Idempotency-Key': orderKey });
+    const orderRetry = await api('POST', '/orders', { addressId: addr.data.address.id }, { 'Idempotency-Key': orderKey });
     check('Order is created (test payment mode)', orderRes.status === 200 && orderRes.data.orderId > 0 && orderRes.data.testMode === true);
+    check('Order retry reuses the same payment attempt',
+      orderRetry.status === 200 && orderRetry.data.repeated === true &&
+      orderRetry.data.orderId === orderRes.data.orderId &&
+      orderRetry.data.paymentUrl === orderRes.data.paymentUrl);
 
     // visit the test payment URL (simulates gateway redirect back)
     const payVisit = await fetch(orderRes.data.paymentUrl, { headers: { Cookie: cookieHeader() }, redirect: 'follow' });
@@ -388,6 +398,10 @@ function shutdown(code) {
     check('Order is marked as paid after test payment', myOrder.status === 200 && myOrder.data.order?.status === 'paid');
 
     // ============ PASSWORD LOGIN (optional second method) ============
+    // اجرای تست باید تکرارپذیر باشد: این کاربرِ تستی ممکن است از اجرای قبلی رمز
+    // داشته باشد. پاک‌سازی را از طریق API انجام می‌دهیم تا تست به اتصال داخلی
+    // دیتابیس وابسته نشود؛ این سرور روی sandbox موقت اجرا شده است.
+    await api('POST', '/auth/password/remove', { currentPassword: 'test-pass-1234' });
     const passSet = await api('POST', '/auth/password/set', { password: 'test-pass-1234' });
     check('Setting a password works', passSet.status === 200 && passSet.data.user?.hasPassword === true);
     const passShort = await api('POST', '/auth/password/set', { password: '123' });
@@ -454,8 +468,11 @@ function shutdown(code) {
     check('Existing product page still returns HTTP 200', aliveRes.status === 200);
 
     // ============ V7: SHIPPING / CANCEL / RETURN / REVIEWS / GALLERY ============
-    // admin gets a password so we can hop between sessions without OTP cooldowns
-    const adminPass = await api('POST', '/auth/password/set', { password: 'admin-pass-1234' });
+    // admin gets a password so we can hop between sessions without OTP cooldowns.
+    // currentPassword هم فرستاده می‌شود چون از اجرای قبلی رمز مانده است — سرور
+    // وقتی رمزی وجود ندارد نادیده‌اش می‌گیرد، پس اجرای اول هم درست کار می‌کند.
+    const adminPass = await api('POST', '/auth/password/set',
+      { password: 'admin-pass-1234', currentPassword: 'admin-pass-1234' });
     check('V7: admin can set a password too', adminPass.status === 200);
     const loginAdmin = () => api('POST', '/auth/password/login', { phone: ADMIN_PHONE, password: 'admin-pass-1234' });
     const loginBuyer = () => api('POST', '/auth/password/login', { phone: buyerPhone, password: 'test-pass-1234' });
@@ -474,7 +491,7 @@ function shutdown(code) {
       cartFee.data.payable === cartFee.data.total + 45000 &&
       cartFee.data.freeShippingGap === 90000000 - cartFee.data.total);
 
-    const shipOrder = await api('POST', '/orders', { addressId: addr.data.address.id });
+    const shipOrder = await api('POST', '/orders', { addressId: addr.data.address.id }, { 'Idempotency-Key': `smoke-ship-${Date.now()}-key` });
     await fetch(shipOrder.data.paymentUrl, { headers: { Cookie: cookieHeader() }, redirect: 'follow' });
     const shipOrderGet = await api('GET', `/orders/${shipOrder.data.orderId}`);
     check('V7 shipping: paid order stores the fee inside the total',
@@ -503,7 +520,7 @@ function shutdown(code) {
 
     // ---------- return flow + postal tracking ----------
     await api('POST', '/cart/add', { productId: buyable.id, qty: 1 });
-    const retOrder = await api('POST', '/orders', { addressId: addr.data.address.id });
+    const retOrder = await api('POST', '/orders', { addressId: addr.data.address.id }, { 'Idempotency-Key': `smoke-return-${Date.now()}-key` });
     await fetch(retOrder.data.paymentUrl, { headers: { Cookie: cookieHeader() }, redirect: 'follow' });
     const roid = retOrder.data.orderId;
 
@@ -582,7 +599,7 @@ function shutdown(code) {
     check('V8 closed shop: reflected in shop-info', infoClosed.data.shopOpen === false);
     await loginBuyer();
     await api('POST', '/cart/add', { productId: buyable.id, qty: 1 });
-    const closedOrder = await api('POST', '/orders', { addressId: addr.data.address.id });
+    const closedOrder = await api('POST', '/orders', { addressId: addr.data.address.id }, { 'Idempotency-Key': `smoke-closed-${Date.now()}-key` });
     check('V8 closed shop: ordering is blocked (503)', closedOrder.status === 503);
     await loginAdmin();
     await api('POST', '/admin/settings', {
@@ -604,7 +621,7 @@ function shutdown(code) {
     const badCode = await api('POST', '/cart/coupon', { code: 'NOPE-1' });
     check('V8 coupons: unknown code rejected (400)', badCode.status === 400);
 
-    const cOrder = await api('POST', '/orders', { addressId: addr.data.address.id });
+    const cOrder = await api('POST', '/orders', { addressId: addr.data.address.id }, { 'Idempotency-Key': `smoke-coupon-${Date.now()}-key` });
     await fetch(cOrder.data.paymentUrl, { headers: { Cookie: cookieHeader() }, redirect: 'follow' });
     const cOrderGet = await api('GET', `/orders/${cOrder.data.orderId}`);
     check('V8 coupons: order stores code + discount',
@@ -3133,7 +3150,8 @@ function shutdown(code) {
       /* تغییرِ رمز هم باید نشست‌های دیگر را ببندد — سناریوی «حسابم لو رفته».
          عمداً همان رمزِ قبلی را می‌گذاریم تا تست‌های بعدی نشکنند. */
       await lost('POST', '/auth/password/login', LOGIN);
-      const setp = await laptop('POST', '/auth/password/set', { password: 'test-pass-1234' });
+      const setp = await laptop('POST', '/auth/password/set',
+        { password: 'test-pass-1234', currentPassword: 'test-pass-1234' });
       check('V31 رمز: تغییرِ رمز، نشست‌های دیگر را می‌بندد',
         setp.status === 200 && setp.data.revoked >= 1, JSON.stringify(setp.data));
       check('V31 رمز: بعد از تغییرِ رمز، دستگاهِ دیگر بیرون است',
@@ -3273,6 +3291,206 @@ function shutdown(code) {
         Buffer.isBuffer(rPub1._ended) && rPub1._ended.length < 3000, `${rPub1._ended?.length} B`);
     }
 
+    /* ============ V33: تطبیقِ سفارش‌های رهاشده با درگاه ============
+       این بخش گران‌ترین اشتباهِ ممکن را میخ می‌کند: «پول گرفته شد ولی مرورگرِ
+       مشتری برنگشت». تا پیش از این، کارِ دوره‌ای بعد از نیم‌ساعت چنین سفارشی را
+       `failed` می‌کرد و موجودی را آزاد می‌کرد — بدون اینکه حتی یک بار از خودِ
+       درگاه بپرسد پولی گرفته شده یا نه.
+
+       سفارش‌های ساختگی مستقیم در جدول ساخته می‌شوند و به محصولِ ۹۹۹۹۹۹ (که وجود
+       ندارد) اشاره می‌کنند، تا releaseStock هیچ کالای واقعی‌ای را تکان ندهد؛
+       نگهبانِ V15 در پایان همین را دوباره می‌سنجد. */
+    {
+      const dbm = require('./lib/db');
+      const pay = require('./lib/payment');
+      const { reconcileStaleOrders } = require('./lib/reconcile');
+
+      const uid = dbm.db.prepare('SELECT id FROM users LIMIT 1').get()?.id;
+      const fakeItems = JSON.stringify([{ productId: 999999, title: 'V33 ساختگی', price: 1000, qty: 2 }]);
+      const fakeAddr = JSON.stringify({ fullName: 'ت', phone: '09120000000', city: 'ت', addressLine: 'ت' });
+      const mkOrder = (authority) => dbm.db.prepare(
+        `INSERT INTO orders (user_id, items, address, total, status, authority, expires_at)
+         VALUES (?,?,?,?, 'pending_payment', ?, ?)`
+      ).run(uid, fakeItems, fakeAddr, 2000, authority, Date.now() - 60000).lastInsertRowid;
+
+      const idNoAuth = mkOrder(null);           // هرگز به درگاه نرسید
+      const idWithAuth = mkOrder('A-REAL-LOOKING-AUTH-33');  // رفت و برنگشت
+      const statusOf = id => dbm.db.prepare('SELECT status FROM orders WHERE id=?').get(id)?.status;
+
+      /* ---- ۱) مرزِ اصلی: چه چیزی همگام باطل می‌شود و چه چیزی نه ---- */
+      dbm.expireStaleOrders();
+      check('V33 مرز: سفارشی که هرگز به درگاه نرسید باطل می‌شود',
+        statusOf(idNoAuth) === 'failed', String(statusOf(idNoAuth)));
+      check('V33 مرز: سفارشی که authority دارد بدونِ پرسیدن باطل نمی‌شود',
+        statusOf(idWithAuth) === 'pending_payment', String(statusOf(idWithAuth)));
+
+      const queue = dbm.getStaleOrdersToReconcile(50).map(r => r.id);
+      check('V33 صف: سفارشِ authority دار در صفِ تطبیق می‌آید', queue.includes(idWithAuth));
+      check('V33 صف: سفارشِ باطل‌شده دیگر در صف نیست', !queue.includes(idNoAuth));
+
+      /* ---- ۲) پرچمِ retriable: «نه» از درگاه با «نرسیدن به درگاه» یکی نیست ---- */
+      // این تفاوت کلِ ایمنیِ ماجراست؛ اگر جایی گم شود، یک قطعیِ گذرای شبکه
+      // دوباره شروع می‌کند به باطل‌کردنِ سفارش‌های پرداخت‌شده.
+      const vTest = await pay.verifyPayment({ authority: 'NOT-A-TEST-AUTH', amountToman: 1000 });
+      check('V33 پرچم: نداشتنِ درگاه «قابلِ تلاشِ دوباره» علامت می‌خورد',
+        vTest.ok === false && vTest.retriable === true, JSON.stringify(vTest));
+
+      /* ---- ۳) حالتِ آزمایشی هرگز نباید «پرداخت شد» بگوید ---- */
+      // دامِ ظریف: verifyPayment در حالت آزمایشی هر authorityِ -TEST را تایید
+      // می‌کند (و درست هم هست، چون مشتری تازه از صفحه‌ی جعلی برگشته). ولی کارِ
+      // تطبیق سراغِ کسانی می‌رود که *برنگشته‌اند*. اگر همان منطق وام گرفته شود،
+      // هر سبدِ رهاشده‌ی آزمایشی نیم‌ساعت بعد خودبه‌خود «فروش» می‌شد.
+      const vDirect = await pay.verifyPayment({ authority: 'TEST-1-2', amountToman: 1000 });
+      check('V33 دام: verifyPayment در حالت آزمایشی authorityِ آزمایشی را تایید می‌کند',
+        vDirect.ok === true);
+      const qTest = await pay.inquirePayment({ authority: 'TEST-1-2', amountToman: 1000 });
+      check('V33 دام: ولی inquirePayment همان را «پرداخت‌نشده» می‌داند',
+        qTest.verdict === 'unpaid', JSON.stringify(qTest));
+      check('V33 دام: inquirePayment هیچ‌وقت در حالت آزمایشی paid نمی‌دهد',
+        (await pay.inquirePayment({ authority: 'X-1', amountToman: 1 })).verdict !== 'paid');
+
+      /* ---- ۴) خودِ کارِ تطبیق ---- */
+      const before = dbm.db.prepare('SELECT reconcile_tries FROM orders WHERE id=?').get(idWithAuth).reconcile_tries;
+      const rep = await reconcileStaleOrders();
+      check('V33 اجرا: کارِ تطبیق سفارشِ منتظر را دید', rep.checked >= 1, JSON.stringify(rep));
+      check('V33 اجرا: شمارنده‌ی تلاش بالا رفت',
+        dbm.db.prepare('SELECT reconcile_tries FROM orders WHERE id=?').get(idWithAuth).reconcile_tries === before + 1);
+      // در حالت آزمایشی حکم «پرداخت‌نشده» است، پس حالا باطل‌شدن درست است
+      check('V33 اجرا: بعد از پرسیدن، سفارشِ پرداخت‌نشده باطل می‌شود',
+        statusOf(idWithAuth) === 'failed', String(statusOf(idWithAuth)));
+      check('V33 اجرا: هیچ سفارشی الکی «پرداخت‌شده» نشد', rep.paid === 0, String(rep.paid));
+
+      /* ---- ۵) نگهبانِ متنِ کد: مسیرِ برگشت هم نباید در ندانستن باطل کند ---- */
+      const ordSrc = fs.readFileSync(path.join(__dirname, 'routes', 'orders.js'), 'utf8');
+      check('V33 نگهبان: مسیرِ برگشت شاخه‌ی retriable دارد',
+        /verification\.retriable/.test(ordSrc));
+      check('V33 نگهبان: و در آن شاخه markOrderFailedTx صدا زده نمی‌شود',
+        /retriable\)\s*\{[^}]*\}/s.test(ordSrc) &&
+        !/retriable\)\s*\{[^}]*markOrderFailedTx/s.test(ordSrc));
+      const srvSrc = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+      check('V33 نگهبان: کارِ دوره‌ای تطبیق را صدا می‌زند',
+        /reconcileStaleOrders\(\)/.test(srvSrc));
+      check('V33 نگهبان: نگهبانِ هم‌پوشانیِ اجراها هست',
+        /reconcileRunning/.test(srvSrc));
+
+      // پاکسازی — سفارش‌های ساختگی نباید در پنل بمانند
+      dbm.db.prepare('DELETE FROM orders WHERE id IN (?,?)').run(idNoAuth, idWithAuth);
+      check('V33 پاکسازی: سفارش‌های ساختگی حذف شدند',
+        dbm.db.prepare('SELECT COUNT(*) n FROM orders WHERE id IN (?,?)').get(idNoAuth, idWithAuth).n === 0);
+    }
+    /* ============ V34: عوض‌کردنِ رمز، رمزِ فعلی می‌خواهد ============
+       تا پیش از این، داشتنِ نشست به‌تنهایی برای گذاشتنِ رمزِ تازه کافی بود. یعنی
+       هر کسی که یک بار به حسابِ باز دست پیدا می‌کرد — گوشیِ قفل‌نشده روی میز،
+       لپ‌تاپِ مشترک، کوکیِ لو‌رفته — می‌توانست رمز را عوض کند و *همان لحظه* با
+       destroyOtherSessions صاحبِ اصلی را از همه‌ی دستگاه‌هایش بیرون بیندازد.
+       دسترسیِ موقت می‌شد تصاحبِ دائمی، و آن هم با کمکِ خودِ سایت.
+
+       نکته‌ی باریکی که این بخش نگهبانش است: تلاشِ ناموفق نباید هیچ اثری بگذارد
+       — نه رمز را عوض کند و نه نشستی را ببندد. وگرنه حتی «نتوانستنِ» مهاجم هم
+       به بیرون‌انداختنِ کاربرِ واقعی می‌ارزید. */
+    {
+      const mkDev = () => {
+        const jar = new Map();
+        return async function call(method, p, body) {
+          const res = await fetch(`${BASE}/api${p}`, {
+            method,
+            headers: {
+              'Content-Type': 'application/json',
+              ...(jar.size ? { Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join('; ') } : {})
+            },
+            body: body ? JSON.stringify(body) : undefined
+          });
+          const list = typeof res.headers.getSetCookie === 'function'
+            ? res.headers.getSetCookie()
+            : (res.headers.get('set-cookie') ? [res.headers.get('set-cookie')] : []);
+          for (const c of list) {
+            const [pair] = c.split(';');
+            const eq = pair.indexOf('=');
+            if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+          }
+          let data = {};
+          try { data = await res.json(); } catch (e) { /* بدنه‌ی خالی */ }
+          return { status: res.status, data };
+        };
+      };
+      const thief = mkDev();   // نشستِ دزدیده‌شده
+      const owner = mkDev();   // خودِ صاحبِ حساب، روی دستگاهِ دیگر
+      const OLD = 'test-pass-1234';
+      const NEW = 'brand-new-pass-9876';
+      const LG = { phone: buyerPhone, password: OLD };
+
+      check('V34 آماده: هر دو دستگاه وارد شدند',
+        (await thief('POST', '/auth/password/login', LG)).status === 200 &&
+        (await owner('POST', '/auth/password/login', LG)).status === 200);
+
+      /* ---- ۱) بدونِ رمزِ فعلی: رد ---- */
+      const noCur = await thief('POST', '/auth/password/set', { password: NEW });
+      check('V34 سد: تغییرِ رمز بدونِ رمزِ فعلی رد می‌شود',
+        noCur.status === 400 && noCur.data.needCurrent === true, JSON.stringify(noCur));
+
+      /* ---- ۲) با رمزِ فعلیِ غلط: رد، و ۴۰۱ نه ۴۰۰ ---- */
+      const badCur = await thief('POST', '/auth/password/set', { password: NEW, currentPassword: 'not-the-password' });
+      check('V34 سد: رمزِ فعلیِ غلط با ۴۰۱ رد می‌شود',
+        badCur.status === 401 && badCur.data.needCurrent === true, JSON.stringify(badCur));
+
+      /* ---- ۳) تلاشِ ناموفق هیچ اثری نگذاشته باشد ---- */
+      check('V34 بی‌اثر: رمز عوض نشد — رمزِ قدیمی هنوز کار می‌کند',
+        (await mkDev()('POST', '/auth/password/login', LG)).status === 200);
+      check('V34 بی‌اثر: رمزِ جدید هنوز کار نمی‌کند',
+        (await mkDev()('POST', '/auth/password/login',
+          { phone: buyerPhone, password: NEW })).status === 401);
+      check('V34 بی‌اثر: نشستِ صاحبِ حساب بسته نشد',
+        (await owner('GET', '/auth/me')).data.user?.phone === buyerPhone);
+
+      /* ---- ۴) با رمزِ فعلیِ درست: انجام می‌شود و نشست‌های دیگر بسته ---- */
+      const okSet = await owner('POST', '/auth/password/set', { password: NEW, currentPassword: OLD });
+      check('V34 مجاز: با رمزِ فعلیِ درست رمز عوض می‌شود',
+        okSet.status === 200 && okSet.data.user?.hasPassword === true, JSON.stringify(okSet));
+      check('V34 مجاز: نشست‌های دیگر بسته شدند', okSet.data.revoked >= 1, String(okSet.data.revoked));
+      check('V34 مجاز: نشستِ دزدیده‌شده بیرون افتاد',
+        (await thief('GET', '/auth/me')).data.user === null);
+      check('V34 مجاز: رمزِ جدید واقعاً کار می‌کند',
+        (await mkDev()('POST', '/auth/password/login',
+          { phone: buyerPhone, password: NEW })).status === 200);
+
+      /* ---- ۵) برداشتنِ رمز هم همان سد را دارد ---- */
+      // این را جا انداختن یعنی همان حمله از درِ پشتی: مهاجم رمز را «برمی‌دارد»
+      // (که خودش نشست‌ها را می‌بندد) و بعد آزادانه رمزِ تازه‌ی خودش را می‌گذارد.
+      const rmNo = await owner('POST', '/auth/password/remove', {});
+      check('V34 حذف: برداشتنِ رمز بدونِ رمزِ فعلی رد می‌شود',
+        rmNo.status === 400 && rmNo.data.needCurrent === true, JSON.stringify(rmNo));
+      const rmBad = await owner('POST', '/auth/password/remove', { currentPassword: OLD });
+      check('V34 حذف: با رمزِ فعلیِ غلط هم رد می‌شود',
+        rmBad.status === 401, JSON.stringify(rmBad));
+      check('V34 حذف: رمز هنوز سرِ جایش است',
+        (await mkDev()('POST', '/auth/password/login',
+          { phone: buyerPhone, password: NEW })).status === 200);
+      const rmOk = await owner('POST', '/auth/password/remove', { currentPassword: NEW });
+      check('V34 حذف: با رمزِ فعلیِ درست برداشته می‌شود',
+        rmOk.status === 200 && rmOk.data.user?.hasPassword === false, JSON.stringify(rmOk));
+
+      /* ---- ۶) بارِ اول رمز گذاشتن هنوز بی‌دردسر است ---- */
+      // کاربری که رمز ندارد فقط با پیامک وارد می‌شود، و همان ورود هویتش را ثابت
+      // کرده. اگر اینجا هم رمزِ فعلی بخواهیم، عملاً هیچ‌کس نمی‌تواند رمز بگذارد.
+      const firstSet = await owner('POST', '/auth/password/set', { password: OLD });
+      check('V34 بارِ اول: بدونِ رمزِ فعلی، گذاشتنِ رمزِ اول کار می‌کند',
+        firstSet.status === 200 && firstSet.data.user?.hasPassword === true, JSON.stringify(firstSet));
+
+      /* ---- ۷) نگهبانِ متنِ کد و فرانت ---- */
+      const authSrc = fs.readFileSync(path.join(__dirname, 'routes', 'auth.js'), 'utf8');
+      check('V34 نگهبان: /password/set قبل از نوشتن، هشِ فعلی را می‌خواند',
+        authSrc.indexOf('current.password_hash') < authSrc.indexOf('setUserPassword(req.session.userId, await hashPassword'));
+      check('V34 نگهبان: /password/remove هم سقفِ نرخ دارد',
+        /password\/remove['"],\s*passwordSetLimiter/.test(authSrc));
+      const acJs34 = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'js', 'account.js'), 'utf8');
+      const acHtml34 = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'account.html'), 'utf8');
+      check('V34 فرانت: کادرِ رمزِ فعلی در صفحه‌ی حساب هست', acHtml34.includes('id="curPass"'));
+      check('V34 فرانت: هر دو مسیر currentPassword می‌فرستند',
+        (acJs34.match(/currentPassword/g) || []).length >= 2);
+      check('V34 فرانت: کادر فقط برای کسی که رمز دارد باز می‌شود',
+        /fieldCurPass\.classList\.toggle\('hidden', !hasPassword\)/.test(acJs34));
+    }
+
   } catch (err) {
     check('Tests ran without an unexpected error', false, err.message);
   } finally {
@@ -3300,6 +3518,25 @@ function shutdown(code) {
       } else {
         check('V15 موجودی: عکس موجودی گرفته شد', false, 'تست قبل از ساخت محصول تستی متوقف شد');
       }
+
+      /* ---------- V34: کاربرِ ادمینِ ساختگی نباید در دیتابیس جا بماند ----------
+         این را وقتی پیدا کردم که تستِ رمز شکست: تست برای جابه‌جا شدن بین
+         نشست‌ها، شماره‌ی ۰۹۱۲۰۰۰۰۰۰۹ را ادمین می‌کند و رمزِ `admin-pass-1234`
+         رویش می‌گذارد — و **هیچ‌وقت پاکش نمی‌کرد**. یعنی دیتابیسِ واقعیِ سایت یک
+         حسابِ ادمینِ زنده داشت که رمزش عیناً داخلِ همین فایلِ گیت‌شده نوشته است.
+         هر کسی که مخزن را ببیند می‌توانست وارد پنلِ مدیریت شود.
+
+         پرچمِ ادمین هم برداشته می‌شود، نه فقط رمز: اگر آن شماره مالِ کسی باشد،
+         با یک ورودِ پیامکیِ ساده صاحبِ پنل می‌شد. اجرای بعدیِ تست خودش دوباره
+         (از راهِ ADMIN_PHONE) ارتقایش می‌دهد، پس چیزی از دست نمی‌رود. */
+      const wiped = dbm.db.prepare(
+        "UPDATE users SET password_hash=NULL, is_admin=0, is_staff=0 WHERE phone='09120000009'"
+      ).run().changes;
+      check('V34 پاکسازی: ادمینِ ساختگیِ تست بی‌رمز و بی‌دسترسی شد', wiped >= 0);
+      check('V34 پاکسازی: هیچ ادمینی با رمزِ داخلِ مخزن باقی نماند',
+        dbm.db.prepare(
+          "SELECT COUNT(*) n FROM users WHERE phone='09120000009' AND (is_admin=1 OR password_hash IS NOT NULL)"
+        ).get().n === 0);
     } catch (e) {
       check('V15 پاکسازی بدون خطا انجام شد', false, e.message);
     }

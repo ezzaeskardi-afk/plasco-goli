@@ -160,10 +160,15 @@ CREATE TABLE IF NOT EXISTS orders (
   ref_id     TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   paid_at    TEXT,
-  expires_at INTEGER                    -- سفارش پرداخت‌نشده بعد از این زمان منقضی و موجودی آزاد می‌شود
+  expires_at INTEGER,                   -- سفارش پرداخت‌نشده بعد از این زمان منقضی و موجودی آزاد می‌شود
+  idempotency_key TEXT                   -- کلید یکتا برای جلوگیری از ثبت دوباره‌ی سفارش
 );
 CREATE INDEX IF NOT EXISTS idx_orders_user    ON orders(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_orders_pending ON orders(status, expires_at);
+-- authority ستون سوم است تا کوئریِ «سفارش‌های منقضی» پوشا (covering) بماند:
+-- آن کوئری هر پنج دقیقه اجرا می‌شود و حالا باید authority را هم ببیند تا بفهمد
+-- سفارش اصلاً به درگاه رسیده یا نه (lib/reconcile.js). بدون این ستون، موتور
+-- مجبور بود برای هر ردیفِ پیداشده یک بار هم به خودِ جدول سر بزند.
+CREATE INDEX IF NOT EXISTS idx_orders_pending ON orders(status, expires_at, authority);
 
 CREATE TABLE IF NOT EXISTS sessions (
   sid        TEXT PRIMARY KEY,
@@ -277,6 +282,25 @@ if (!orderCols.includes('return_reason')) db.exec("ALTER TABLE orders ADD COLUMN
 if (!orderCols.includes('delivered_at')) db.exec('ALTER TABLE orders ADD COLUMN delivered_at TEXT'); // مبنای مهلت ۷ روزه‌ی مرجوعی
 if (!orderCols.includes('coupon_code')) db.exec("ALTER TABLE orders ADD COLUMN coupon_code TEXT NOT NULL DEFAULT ''");
 if (!orderCols.includes('discount')) db.exec('ALTER TABLE orders ADD COLUMN discount INTEGER NOT NULL DEFAULT 0');
+// شمارنده‌ی تلاش‌های «تطبیق با درگاه» (lib/reconcile.js). وقتی درگاه در دسترس
+// نیست نمی‌دانیم پول گرفته شده یا نه؛ سفارش را باطل نمی‌کنیم و دوباره می‌پرسیم.
+// این شمارنده فقط برای دیده‌شدن در پنل و لاگ است — تصمیمِ «تسلیم شدن» بر پایه‌ی
+// زمان گرفته می‌شود نه تعداد، چون فاصله‌ی اجراها ممکن است عوض شود.
+if (!orderCols.includes('reconcile_tries')) db.exec('ALTER TABLE orders ADD COLUMN reconcile_tries INTEGER NOT NULL DEFAULT 0');
+if (!orderCols.includes('idempotency_key')) db.exec('ALTER TABLE orders ADD COLUMN idempotency_key TEXT');
+if (!orderCols.includes('payment_url')) db.exec("ALTER TABLE orders ADD COLUMN payment_url TEXT NOT NULL DEFAULT ''");
+// کلید سفارش برای هر کاربر یکتا است؛ ساختنش بعد از مهاجرت امن است چون سفارش‌های
+// قدیمی مقدار NULL دارند و چند NULL در UNIQUE مجاز است.
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_user_idempotency ON orders(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL');
+
+// دیتابیس‌هایی که از قبل وجود دارند idx_orders_pending را با دو ستون ساخته‌اند و
+// `CREATE INDEX IF NOT EXISTS` بالاتر سراغشان نمی‌رود (اسم که هست، پس رد می‌شود).
+// اینجا اگر ستون سومی نداشت، بازسازی‌اش می‌کنیم. روی یک جدولِ سفارش در این ابعاد
+// کارِ لحظه‌ای است.
+if (db.prepare('PRAGMA index_info(idx_orders_pending)').all().length < 3) {
+  db.exec('DROP INDEX IF EXISTS idx_orders_pending');
+  db.exec('CREATE INDEX idx_orders_pending ON orders(status, expires_at, authority)');
+}
 
 // ---------- کدهای تخفیف ----------
 // «مصرف» از خود جدول سفارش‌ها شمرده می‌شود (نه ستون شمارنده) تا هیچ‌وقت ناهماهنگ نشود.
@@ -2006,11 +2030,18 @@ function updateAddress(id, userId, a) {
 const ORDER_TTL_MS = 30 * 60 * 1000; // مهلت پرداخت؛ بعدش موجودی آزاد می‌شود
 
 const stmtInsertOrder = db.prepare(`INSERT INTO orders
-  (user_id, items, address, total, shipping_fee, coupon_code, discount, status, expires_at)
-  VALUES (?,?,?,?,?,?,?, 'pending_payment', ?)`);
+  (user_id, items, address, total, shipping_fee, coupon_code, discount, status, expires_at, idempotency_key)
+  VALUES (?,?,?,?,?,?,?, 'pending_payment', ?, ?)`);
 const stmtOrderById = db.prepare('SELECT * FROM orders WHERE id = ?');
 const stmtOrdersByUser = db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100');
 const stmtSetAuthority = db.prepare('UPDATE orders SET authority = ? WHERE id = ?');
+const stmtSetPaymentUrl = db.prepare('UPDATE orders SET payment_url = ? WHERE id = ?');
+function setPaymentDetails(authority, paymentUrl, orderId) {
+  const id = Number(orderId);
+  stmtSetAuthority.run(String(authority || ''), id);
+  stmtSetPaymentUrl.run(String(paymentUrl || ''), id);
+  return true;
+}
 const stmtMarkPaid = db.prepare(`UPDATE orders SET status='paid', ref_id=?, paid_at=datetime('now'), expires_at=NULL
   WHERE id = ? AND status = 'pending_payment'`);
 const stmtMarkFailed = db.prepare(`UPDATE orders SET status='failed', expires_at=NULL
@@ -2023,7 +2054,7 @@ function serializeOrder(o) {
     items: JSON.parse(o.items), address: JSON.parse(o.address),
     total: o.total, shippingFee: o.shipping_fee || 0,
     couponCode: o.coupon_code || '', discount: o.discount || 0,
-    status: o.status, authority: o.authority, refId: o.ref_id,
+    status: o.status, authority: o.authority, refId: o.ref_id, paymentUrl: o.payment_url || '',
     createdAt: o.created_at, paidAt: o.paid_at, deliveredAt: o.delivered_at || null,
     adminNote: o.admin_note || '', trackingCode: o.tracking_code || '',
     cancelReason: o.cancel_reason || '', returnReason: o.return_reason || ''
@@ -2031,10 +2062,10 @@ function serializeOrder(o) {
 }
 
 // ساخت سفارش + رزرو موجودی در «یک» تراکنش — total = کالاها − تخفیف + ارسال
-const createOrderTx = transaction((userId, items, addressSnapshot, total, shippingFee = 0, couponCode = '', discount = 0) => {
+const createOrderTx = transaction((userId, items, addressSnapshot, total, shippingFee = 0, couponCode = '', discount = 0, idempotencyKey = null) => {
   reserveStock(items);
   const info = stmtInsertOrder.run(userId, JSON.stringify(items), JSON.stringify(addressSnapshot),
-    total, shippingFee, couponCode, discount, Date.now() + ORDER_TTL_MS);
+    total, shippingFee, couponCode, discount, Date.now() + ORDER_TTL_MS, idempotencyKey);
   return info.lastInsertRowid;
 });
 
@@ -2050,6 +2081,10 @@ const createManualOrderTx = transaction((userId, items, addressSnapshot, total, 
   return info.lastInsertRowid;
 });
 
+const stmtOrderByUserIdempotency = db.prepare('SELECT * FROM orders WHERE user_id = ? AND idempotency_key = ?');
+function getOrderByIdempotency(userId, key) {
+  return serializeOrder(stmtOrderByUserIdempotency.get(Number(userId), String(key || '')));
+}
 function getOrder(id) { return serializeOrder(stmtOrderById.get(Number(id))); }
 function getUserOrders(userId) { return stmtOrdersByUser.all(userId).map(serializeOrder); }
 
@@ -2105,12 +2140,35 @@ const markOrderFailedTx = transaction((id) => {
 });
 
 // سفارش‌های پرداخت‌نشده‌ی منقضی → آزادسازی موجودی
-const stmtStale = db.prepare(`SELECT id FROM orders WHERE status='pending_payment' AND expires_at IS NOT NULL AND expires_at < ?`);
+//
+// **مهم:** اینجا فقط سفارش‌هایی باطل می‌شوند که «هرگز به درگاه نرسیده‌اند»
+// (authority ندارند — یعنی بین ساختِ سفارش و پاسخِ درگاه چیزی شکسته است).
+// سفارشی که authority دارد یعنی مشتری *به صفحه‌ی بانک رفته* و ممکن است پول
+// داده باشد و فقط مرورگرش برنگشته باشد. باطل‌کردنِ چنین سفارشی یعنی «پول را
+// گرفتیم و سفارش را هم دور انداختیم». تکلیفِ آن دسته را lib/reconcile.js
+// با پرسیدن از خودِ درگاه روشن می‌کند.
+const stmtStaleNoAuthority = db.prepare(`SELECT id FROM orders
+  WHERE status='pending_payment' AND expires_at IS NOT NULL AND expires_at < ?
+    AND (authority IS NULL OR authority = '')`);
 function expireStaleOrders() {
-  const stale = stmtStale.all(Date.now());
+  const stale = stmtStaleNoAuthority.all(Date.now());
   for (const row of stale) { try { markOrderFailedTx(row.id); } catch (e) { /* در اجرای بعدی دوباره تلاش می‌شود */ } }
   return stale.length;
 }
+
+// سفارش‌های منقضی‌ای که authority دارند — ورودیِ کارِ تطبیق با درگاه.
+// expires_at را هم برمی‌گردانیم چون مهلتِ «تسلیم شدن» از روی آن حساب می‌شود.
+const stmtStaleWithAuthority = db.prepare(`SELECT id, authority, total, expires_at, reconcile_tries
+  FROM orders
+  WHERE status='pending_payment' AND expires_at IS NOT NULL AND expires_at < ?
+    AND authority IS NOT NULL AND authority <> ''
+  ORDER BY id LIMIT ?`);
+function getStaleOrdersToReconcile(limit = 50) {
+  return stmtStaleWithAuthority.all(Date.now(), Math.max(1, Number(limit) || 50));
+}
+
+const stmtBumpReconcile = db.prepare('UPDATE orders SET reconcile_tries = reconcile_tries + 1 WHERE id = ?');
+function bumpReconcileTries(id) { return stmtBumpReconcile.run(Number(id)).changes > 0; }
 
 // ---------- OTP (ماندگار — با ری‌استارت سرور دور زده نمی‌شود) ----------
 const stmtOtpGet = db.prepare('SELECT * FROM otp_codes WHERE phone = ?');
@@ -2304,7 +2362,7 @@ module.exports = {
   upsertReview, getProductReviews, getRatingsMap, getRecentReviews, adminListReviews, adminSetReviewStatus, hasUserBought,
   getWishlist, getWishlistIds, addToWishlist, removeFromWishlist,
   getAddresses, getAddress, createAddress, updateAddress, deleteAddress,
-  createOrderTx, getOrder, getUserOrders, getOrderForGuest, markOrderPaid, markOrderFailedTx, stmtSetAuthority,
-  expireStaleOrders, cleanupExpired, backupNow,
+  createOrderTx, getOrder, getOrderByIdempotency, getUserOrders, getOrderForGuest, markOrderPaid, markOrderFailedTx, stmtSetAuthority, setPaymentDetails,
+  expireStaleOrders, getStaleOrdersToReconcile, bumpReconcileTries, cleanupExpired, backupNow,
   otp: { get: stmtOtpGet, upsert: stmtOtpUpsert, bumpAttempts: stmtOtpBumpAttempts, del: stmtOtpDelete, ipBump: stmtIpBump, ipGet: stmtIpGet }
 };

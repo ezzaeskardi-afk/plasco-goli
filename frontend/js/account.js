@@ -457,9 +457,16 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
   const alertPass = document.getElementById('alertPass');
   const btnRemovePass = document.getElementById('btnRemovePass');
   const passHint = document.getElementById('passHint');
+  const fieldCurPass = document.getElementById('fieldCurPass');
+  const curPass = document.getElementById('curPass');
 
   function syncPassUi(hasPassword) {
     btnRemovePass.classList.toggle('hidden', !hasPassword);
+    // رمزِ فعلی فقط وقتی معنا دارد که رمزی وجود داشته باشد. سرور هم همین را
+    // می‌گوید، اینجا فقط فرم را با آن هم‌قدم می‌کنیم.
+    fieldCurPass.classList.toggle('hidden', !hasPassword);
+    curPass.required = hasPassword;
+    if (!hasPassword) curPass.value = '';
     passHint.textContent = hasPassword
       ? 'رمز عبور فعال است ✅ — موقع ورود می‌تونید «ورود با رمز عبور» رو انتخاب کنید.'
       : 'اگه رمز بذارید، دفعه‌های بعد می‌تونید بدون منتظر پیامک موندن وارد بشید.';
@@ -474,7 +481,10 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
     try {
       const r = await PG.api('/auth/password/set', {
         method: 'POST',
-        body: JSON.stringify({ password: document.getElementById('newPass').value })
+        body: JSON.stringify({
+          password: document.getElementById('newPass').value,
+          currentPassword: curPass.value
+        })
       });
       formPassword.reset();
       syncPassUi(true);
@@ -492,11 +502,24 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
   });
 
   btnRemovePass.addEventListener('click', async () => {
+    // برداشتنِ رمز هم رمزِ فعلی می‌خواهد. فیلدِ فرم را قرض می‌گیریم تا کاربر
+    // مجبور نشود دو جای مختلف رمز بزند؛ اگر خالی بود همان فیلد را نشان می‌دهیم.
+    if (!curPass.value) {
+      curPass.focus();
+      alertPass.innerHTML = '<div class="alert alert-error"><svg><use href="#i-alert"/></svg><span>برای برداشتن رمز، اول رمز فعلی را در کادر بالا وارد کنید</span></div>';
+      return;
+    }
     if (!confirm('رمز حذف شود؟ (بعدش فقط با کد پیامکی می‌تونید وارد شید)')) return;
     try {
-      await PG.api('/auth/password/remove', { method: 'POST' });
+      await PG.api('/auth/password/remove', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: curPass.value })
+      });
+      alertPass.innerHTML = '';
+      formPassword.reset();
       syncPassUi(false);
       PG.toast('رمز حذف شد', 'info');
+      loadSessions();
     } catch (err) {
       PG.toast(err.message, 'error');
     }

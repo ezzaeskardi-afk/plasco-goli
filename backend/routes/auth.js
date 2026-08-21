@@ -314,13 +314,45 @@ router.post('/has-password', hasPasswordLimiter, asyncHandler(async (req, res) =
    عوض‌کردنِ رمز همه‌ی نشست‌های **دیگر** را می‌کشد. این کارِ استانداردی است و
    دلیلش سرراست است: آدم معمولاً وقتی رمزش را عوض می‌کند که نگران است کسی
    به حسابش دسترسی دارد. اگر نشستِ آن کس زنده بماند، تغییرِ رمز فقط یک حسِ
-   امنیتِ کاذب داده — مهاجم هنوز تو است. */
-router.post('/password/set', asyncHandler(async (req, res) => {
+   امنیتِ کاذب داده — مهاجم هنوز تو است.
+
+   **چرا رمزِ فعلی پرسیده می‌شود:** تا پیش از این، داشتنِ نشست به‌تنهایی برای
+   گذاشتنِ رمزِ تازه کافی بود. یعنی هر کسی که یک بار به حسابِ باز دست پیدا
+   می‌کرد — گوشیِ قفل‌نشده روی میز، لپ‌تاپِ مشترک، کوکیِ دزدیده‌شده — می‌توانست
+   رمز را عوض کند و همان لحظه با destroyOtherSessions صاحبِ اصلی را از همه‌ی
+   دستگاه‌هایش بیرون بیندازد. دسترسیِ موقت تبدیل می‌شد به تصاحبِ دائمیِ حساب،
+   و صاحبش حتی راهِ برگشتِ سریع نداشت.
+
+   با پرسیدنِ رمزِ فعلی، آن پنجره بسته می‌شود: کسی که فقط نشست را دارد و رمز را
+   نمی‌داند، نمی‌تواند قفل را عوض کند. برای کاربری که هنوز رمز نگذاشته (فقط با
+   پیامک وارد می‌شود) چیزی پرسیده نمی‌شود — رمزِ فعلی‌ای وجود ندارد که بپرسیم،
+   و خودِ ورودِ با پیامک همان لحظه هویت را ثابت کرده است. */
+const passwordSetLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, max: 10, skipSuccess: true,
+  message: 'تلاش‌های زیاد؛ چند دقیقه بعد دوباره تلاش کنید'
+});
+
+router.post('/password/set', passwordSetLimiter, asyncHandler(async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'برای ادامه باید وارد حساب‌تان شوید' });
   const password = String(req.body?.password || '');
   if (password.length < 6 || password.length > 100) {
     return res.status(400).json({ error: 'رمز عبور باید حداقل ۶ کاراکتر باشد' });
   }
+
+  const current = stmtUserById.get(req.session.userId);
+  if (!current) return res.status(401).json({ error: 'برای ادامه باید وارد حساب‌تان شوید' });
+
+  if (current.password_hash) {
+    const currentPassword = String(req.body?.currentPassword || '');
+    if (!currentPassword) {
+      return res.status(400).json({ error: 'برای تغییر رمز، اول رمز فعلی را وارد کنید', needCurrent: true });
+    }
+    if (!(await verifyPassword(currentPassword, current.password_hash))) {
+      log.warn('Wrong current password on change attempt', { userId: current.id, ip: req.ip });
+      return res.status(401).json({ error: 'رمز فعلی اشتباه است', needCurrent: true });
+    }
+  }
+
   const user = setUserPassword(req.session.userId, await hashPassword(password));
   const killed = destroyOtherSessions(req.session.userId, req.sessionID);
   if (killed) log.info('Other sessions revoked after password change', { userId: req.session.userId, killed });
@@ -350,13 +382,34 @@ router.get('/sessions', (req, res) => {
 // سر جاشان باشند، کسی که بعداً رمز را بازمی‌گذارد مطمئن نیست که هیچ
 // نشستِ قدیمیِ بی‌رمز هنوز زنده نمانده باشد. همان رفتار /password/set:
 // همه‌ی نشست‌های دیگر را می‌کشد و رویداد را لاگ می‌کند.
-router.post('/password/remove', (req, res) => {
+//
+// اینجا هم مثل /password/set رمزِ فعلی پرسیده می‌شود، و دلیلش حتی سرراست‌تر
+// است: برداشتنِ رمز یعنی پایین‌آوردنِ یک سدِ امنیتی. کسی که نشستِ دزدیده را
+// دارد نباید بتواند قفلِ حساب را بردارد و بعد بقیه‌ی دستگاه‌ها را هم بیرون
+// بیندازد. اگر کاربر رمزش را فراموش کرده، راهِ درست ورودِ با پیامک است، نه
+// حذفِ رمز از داخلِ نشستی که معلوم نیست مالِ کیست.
+router.post('/password/remove', passwordSetLimiter, asyncHandler(async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'ابتدا وارد شوید' });
+
+  const current = stmtUserById.get(req.session.userId);
+  if (!current) return res.status(401).json({ error: 'ابتدا وارد شوید' });
+
+  if (current.password_hash) {
+    const currentPassword = String(req.body?.currentPassword || '');
+    if (!currentPassword) {
+      return res.status(400).json({ error: 'برای برداشتن رمز، اول رمز فعلی را وارد کنید', needCurrent: true });
+    }
+    if (!(await verifyPassword(currentPassword, current.password_hash))) {
+      log.warn('Wrong current password on remove attempt', { userId: current.id, ip: req.ip });
+      return res.status(401).json({ error: 'رمز فعلی اشتباه است', needCurrent: true });
+    }
+  }
+
   const user = setUserPassword(req.session.userId, null);
   const killed = destroyOtherSessions(req.session.userId, req.sessionID);
   log.info('User removed password and revoked other sessions', { userId: req.session.userId, killed });
   res.json({ ok: true, user: publicUser(user), revoked: killed });
-});
+}));
 
 router.get('/me', (req, res) => {
   if (!req.session.userId) return res.json({ user: null });

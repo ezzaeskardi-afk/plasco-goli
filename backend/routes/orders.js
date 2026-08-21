@@ -1,8 +1,8 @@
 const express = require('express');
 const {
-  getPublicProduct, createOrderTx, getOrder, getUserOrders,
-  markOrderPaid, markOrderFailedTx, stmtSetAuthority, getAddress,
-  getShippingQuote, userCancelOrderTx, userRequestReturn, getSetting, quoteCoupon, getUserPhone,
+  getPublicProduct, createOrderTx, getOrder, getOrderByIdempotency, getUserOrders,
+  markOrderPaid, markOrderFailedTx, getAddress,
+  getShippingQuote, userCancelOrderTx, userRequestReturn, getSetting, quoteCoupon, getUserPhone, setPaymentDetails,
   getOrderForGuest
 } = require('../lib/db');
 const { requireAuth, asyncHandler, rateLimit } = require('../lib/middleware');
@@ -35,6 +35,15 @@ router.post('/', requireAuth, rateLimit({ windowMs: 60000, max: 10, message: 'ت
   }
 
   const { addressId } = req.body || {};
+  const idempotencyKey = String(req.get('Idempotency-Key') || '').trim();
+  if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) {
+    return res.status(400).json({ error: 'کلید یکتای سفارش معتبر نیست؛ صفحه را دوباره باز کنید' });
+  }
+  const previous = getOrderByIdempotency(req.session.userId, idempotencyKey);
+  if (previous) {
+    // درخواست تکراری همان سفارش قبلی را برمی‌گرداند؛ موجودی و درگاه دوباره لمس نمی‌شوند.
+    return res.json({ orderId: previous.id, paymentUrl: previous.paymentUrl || null, testMode: String(previous.authority || '').startsWith('TEST-'), repeated: true, status: previous.status });
+  }
   const cart = req.session.cart || [];
   if (!cart.length) return res.status(400).json({ error: 'سبد خرید خالی است' });
 
@@ -65,7 +74,7 @@ router.post('/', requireAuth, rateLimit({ windowMs: 60000, max: 10, message: 'ت
   // رزرو موجودی + ثبت سفارش، اتمی. اگر موجودی کم باشد همین‌جا برمی‌گردد.
   let orderId;
   try {
-    orderId = createOrderTx(req.session.userId, items, address, grandTotal, shippingFee, couponCode, discount);
+    orderId = createOrderTx(req.session.userId, items, address, grandTotal, shippingFee, couponCode, discount, idempotencyKey);
   } catch (err) {
     if (err.code === 'STOCK_SHORTAGE') {
       const lines = err.shortages.map(s => `«${s.title}» (موجودی: ${s.available})`).join('، ');
@@ -89,7 +98,7 @@ router.post('/', requireAuth, rateLimit({ windowMs: 60000, max: 10, message: 'ت
     return res.status(502).json({ error: 'اتصال به درگاه پرداخت برقرار نشد؛ سفارش ثبت نشد. دوباره تلاش کنید.' });
   }
 
-  stmtSetAuthority.run(payment.authority, orderId);
+  setPaymentDetails(payment.authority, payment.paymentUrl, orderId);
 
   // بعد از شروع پرداخت، سبد و کد تخفیف نشسته روی سشن خالی می‌شوند.
   req.session.cart = [];
@@ -137,6 +146,12 @@ router.get('/payment-callback',
     notifyAdminNewOrder(order).catch(e => log.error('Admin order notification failed', e));
     notifyCustomerOrderStatus(getOrder(order.id), getUserPhone(order.userId))
       .catch(e => log.error('Customer paid-SMS failed', e));
+  } else if (verification.retriable) {
+    // نرسیدن به درگاه ≠ پرداخت‌نشدن. مشتری همین الان از صفحه‌ی بانک برگشته، پس
+    // احتمالِ اینکه واقعاً پول داده باشد بالاست. سفارش را **باطل نمی‌کنیم**؛
+    // در حالت pending_payment می‌ماند و کارِ دوره‌ای (lib/reconcile.js) چند دقیقه
+    // بعد از خودِ درگاه می‌پرسد و تکلیفش را روشن می‌کند.
+    log.warn(`Payment verification unreachable for order ${order.id}; left pending for reconciliation`, { reason: verification.error });
   } else {
     markOrderFailedTx(order.id);
     log.warn(`Payment verification failed for order ${order.id}`);

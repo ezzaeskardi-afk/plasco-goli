@@ -207,7 +207,15 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
         addressId = address.id;
       }
 
-      const order = await PG.api('/orders', { method: 'POST', body: JSON.stringify({ addressId }) });
+      // کلید در برابر دوبارکلیک، retry شبکه و refresh امن است. تا وقتی همین
+      // تلاش ادامه دارد ثابت می‌ماند؛ سرور هم سفارش تکراری نمی‌سازد.
+      const idempotencyKey = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`)
+        .replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 128).padEnd(16, '0');
+      const order = await PG.api('/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ addressId })
+      });
       // دکمه را برنمی‌گردانیم؛ صفحه در حال رفتن به درگاه است
       location.href = order.paymentUrl;
     } catch (err) {
