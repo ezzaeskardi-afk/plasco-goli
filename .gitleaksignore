@@ -1,0 +1,2 @@
+# Add only reviewed, line-specific Gitleaks fingerprints here.
+# Never add a broad path or a real secret.

@@ -31,10 +31,31 @@ function streamFor(name) {
   return s.stream;
 }
 
+function safeValue(value, depth = 0) {
+  if (depth > 4) return '[truncated]';
+  if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack };
+  if (typeof value === 'string') return value.replace(/[\\r\\n\\t]/g, ' ').slice(0, 1000);
+  if (Array.isArray(value)) return value.slice(0, 30).map((v) => safeValue(v, depth + 1));
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [key, item] of Object.entries(value).slice(0, 80)) {
+      if (/password|secret|token|cookie|authorization|api[_-]?key|merchant|authority|otp|address|postal|phone|mobile/i.test(key)) {
+        out[key] = '[redacted]';
+      } else {
+        out[key] = safeValue(item, depth + 1);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
 function line(level, msg, extra) {
   const time = new Date().toISOString();
-  const rest = extra ? ' ' + JSON.stringify(extra) : '';
-  return `${time} [${level}] ${msg}${rest}\n`;
+  const cleanMsg = String(msg ?? '').replace(/[\\r\\n\\t]/g, ' ').slice(0, 1000);
+  const cleanExtra = extra === undefined ? undefined : safeValue(extra);
+  const rest = cleanExtra === undefined ? '' : ' ' + JSON.stringify(cleanExtra);
+  return `${time} [${level}] ${cleanMsg}${rest}\\n`;
 }
 
 function info(msg, extra) {
@@ -62,7 +83,12 @@ function accessLog(req, res, ms) {
   if (res.statusCode >= 400 || ms > 1000) {
     // req.id همان کدی است که در هدر X-Request-Id به کاربر هم داده شده؛ با آن
     // می‌شود شکایت یک مشتری را مستقیم به همین خط لاگ وصل کرد.
-    streamFor('access').write(line('HTTP', `${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`, { ip: req.ip, rid: req.id }));
+    const pathOnly = String(req.originalUrl || req.path || '').split('?')[0].slice(0, 300);
+    streamFor('access').write(line('HTTP', `${req.method} ${pathOnly} ${res.statusCode} ${ms}ms`, {
+      ip: req.ip,
+      rid: req.id,
+      userAgent: String(req.get('user-agent') || '').slice(0, 160)
+    }));
   }
 }
 
@@ -74,4 +100,4 @@ function cleanupOldLogs() {
   }
 }
 
-module.exports = { info, warn, error, accessLog, cleanupOldLogs, LOG_DIR };
+module.exports = { info, warn, error, accessLog, cleanupOldLogs, LOG_DIR, safeValue };

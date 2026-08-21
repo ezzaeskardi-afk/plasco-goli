@@ -1,0 +1,19 @@
+title = "Polasco Goli secret scanning"
+
+[extend]
+useDefault = true
+
+# فقط خروجی‌های تولیدشده و فایل‌های داده‌ی محلی نادیده گرفته می‌شوند.
+# فایل‌های محیطی واقعی عمداً نادیده گرفته نمی‌شوند تا اگر اشتباهاً track شدند،
+# اسکن آن را گزارش کند.
+[allowlist]
+description = "Generated local data and tool metadata"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)backend/data/''',
+  '''(^|/)backend/logs/''',
+  '''(^|/)\.freebuff/'''
+]
+commits = []
+regexes = []
+stopwords = []

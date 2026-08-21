@@ -9,7 +9,10 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "prod": "pm2 start ecosystem.config.js",
-    "test": "node test-smoke.js"
+    "test": "node test-smoke.js",
+    "test:all": "node test-all.js",
+    "logs:summary": "node tools/log-summary.js",
+    "security:gitleaks": "gitleaks detect --redact --config ../gitleaks.toml --source .."
   },
   "engines": {
     "node": ">=22.5"
