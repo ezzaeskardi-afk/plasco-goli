@@ -1679,10 +1679,31 @@ a.cart-row-title:hover{color:var(--teal);}
    ولی متن راهنما و لیبل راست‌چین بمانند. */
 .field .input-phone{letter-spacing:.06em;font-size:16px;font-variant-numeric:tabular-nums;}
 .field .input-otp{
-  text-align:center;font-size:26px;font-weight:800;
-  letter-spacing:.42em;text-indent:.42em;   /* text-indent فاصله‌ی آخر را جبران می‌کند تا واقعاً وسط بماند */
-  padding:14px 16px;font-variant-numeric:tabular-nums;
+  position:relative;z-index:2;width:100%;height:var(--otp-size,52px);padding:0;
+  text-align:center;font-size:24px;font-weight:800;letter-spacing:.42em;text-indent:.42em;
+  font-variant-numeric:tabular-nums;background:transparent;border-color:transparent;
+  color:transparent;caret-color:var(--gold);cursor:text;
 }
+.field .input-otp:focus{background:transparent;border-color:transparent;box-shadow:none;outline:none;}
+/* OTP orbit: چهارخانه‌ی کد با حلقه‌ی چرخان؛ بدون وابستگی خارجی و با رنگ‌بندی verdict */
+.otp-orbit{--otp-size:52px;position:relative;display:flex;justify-content:center;align-items:center;min-height:var(--otp-size);padding:0 4px;}
+.otp-orbit-ring{position:absolute;inset:0;border:1px solid rgba(28,201,173,.12);border-radius:999px;opacity:0;transform:scale(.72);pointer-events:none;}
+.otp-slots{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;pointer-events:none;direction:ltr;}
+.otp-slot{width:var(--otp-size);height:var(--otp-size);display:flex;align-items:center;justify-content:center;border:1.5px solid var(--line-control);border-radius:16px;background:var(--surface-2);color:var(--ink);font-size:23px;font-weight:900;line-height:1;box-shadow:0 9px 24px -18px rgba(0,0,0,.8);transition:transform .35s cubic-bezier(.2,.85,.25,1),border-color .25s ease,background .25s ease,box-shadow .25s ease;}
+.otp-slot.is-current{border-color:var(--gold);box-shadow:0 0 0 4px rgba(245,185,90,.1),0 10px 26px -18px rgba(245,185,90,.7);}
+.otp-slot.is-filled{border-color:rgba(28,201,173,.65);background:rgba(28,201,173,.12);transform:translateY(-3px);}
+.otp-orbit.is-focused .otp-orbit-ring{opacity:1;animation:otpRingIn .6s ease-out both;}
+.otp-orbit.is-complete .otp-slot{border-color:var(--teal);}
+.otp-orbit.is-complete .otp-orbit-ring{opacity:1;border-color:rgba(28,201,173,.35);animation:otpOrbit .9s cubic-bezier(.22,.75,.24,1) both;}
+.otp-orbit.is-success .otp-slot{background:rgba(28,201,173,.24);box-shadow:0 0 0 2px rgba(28,201,173,.18),0 0 28px -8px var(--teal);}
+.otp-orbit.is-error .otp-slot{border-color:var(--coral);background:rgba(255,106,77,.12);}
+.otp-orbit.otp-verdict-pulse .otp-slot{animation:otpVerdict .55s ease both;}
+.otp-orbit.otp-verdict-pulse .otp-slot:nth-child(2){animation-delay:.04s}.otp-orbit.otp-verdict-pulse .otp-slot:nth-child(3){animation-delay:.08s}.otp-orbit.otp-verdict-pulse .otp-slot:nth-child(4){animation-delay:.12s}.otp-orbit.otp-verdict-pulse .otp-slot:nth-child(5){animation-delay:.16s}
+@keyframes otpRingIn{from{transform:scale(.72);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes otpOrbit{0%{transform:scale(.7) rotate(0deg);opacity:.25}60%{transform:scale(1.04) rotate(300deg);opacity:.9}100%{transform:scale(1) rotate(360deg);opacity:1}}
+@keyframes otpVerdict{0%{transform:translateY(-3px) scale(1)}45%{transform:translateY(-3px) scale(1.12)}100%{transform:translateY(-3px) scale(1)}}
+@media (max-width:520px){.otp-orbit{--otp-size:46px}.otp-slots{gap:6px}.otp-slot{border-radius:13px;font-size:20px}}
+@media (prefers-reduced-motion:reduce){.otp-orbit.is-focused .otp-orbit-ring,.otp-orbit.is-complete .otp-orbit-ring,.otp-orbit.otp-verdict-pulse .otp-slot{animation:none}.otp-slot{transition:none}}
 .field-hint{font-size:11.5px;color:var(--ink-dim);margin:7px 0 0;}
 #codeExpiry{font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink-soft);}
 #codeExpiry.expired{color:var(--gold);}

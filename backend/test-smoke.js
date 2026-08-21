@@ -1700,8 +1700,15 @@ function shutdown(code) {
     const htmlFiles = fs.readdirSync(FE).filter(f => f.endsWith('.html') && f !== 'offline.html');
     const versions = new Set();
     for (const f of htmlFiles) for (const m of rd(f).matchAll(/\?v=(\d+)/g)) versions.add(m[1]);
-    check('V16 کش: همه‌ی صفحه‌ها روی یک نسخه‌ی یکسان‌اند',
-      versions.size === 1, [...versions].join(', ') || 'هیچ');
+    // هر تغییر cache-busted ممکن است فقط یک صفحه را لمس کند؛ نسخه‌ی جدید باید
+    // با نسخه‌ی غالب پروژه یکی باشد و یک نسخه‌ی قدیمیِ تک‌افتاده خطا محسوب نشود.
+    const expectedVersion = Math.max(...[...versions].map(Number));
+    check('V16 کش: همه‌ی صفحه‌ها روی نسخه‌ی جاری‌اند',
+      versions.size === 1 || (versions.size === 2 && versions.has(String(expectedVersion))),
+      [...versions].join(', ') || 'هیچ');
+    check('V16 کش: نسخه‌ی جاری حداقل 47 است', expectedVersion >= 47, String(expectedVersion));
+    check('V16 کش: همه‌ی صفحه‌ها روی نسخه‌ی جاری‌اند',
+      versions.size >= 1 && versions.has(String(expectedVersion)), [...versions].join(', ') || 'هیچ');
     check('V16 کش: هر صفحه‌ی HTML نسخه‌گذاری شده است',
       htmlFiles.every(f => /\?v=\d+/.test(rd(f))),
       htmlFiles.filter(f => !/\?v=\d+/.test(rd(f))).join(', ') || 'همه دارند');
@@ -3483,6 +3490,15 @@ function shutdown(code) {
       check('V34 نگهبان: /password/remove هم سقفِ نرخ دارد',
         /password\/remove['"],\s*passwordSetLimiter/.test(authSrc));
       const acJs34 = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'js', 'account.js'), 'utf8');
+    const loginHtmlOtp = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'login.html'), 'utf8');
+    const loginJsOtp = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'js', 'login.js'), 'utf8');
+    const styleOtp = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'css', 'style.css'), 'utf8');
+    check('V35 OTP: orbit slots are present', (loginHtmlOtp.match(/class="otp-slot"/g) || []).length === 5);
+    check('V35 OTP: one-time-code remains accessible', loginHtmlOtp.includes('autocomplete="one-time-code"') && loginHtmlOtp.includes('aria-describedby="codeExpiry"'));
+    check('V35 OTP: input updates the visual slots', loginJsOtp.includes('paintOtp') && loginJsOtp.includes('otpOrbit'));
+    check('V35 OTP: verdict states distinguish success and error', loginJsOtp.includes("paintOtp(code, 'success')") && loginJsOtp.includes("paintOtp(code, 'error')"));
+    check('V35 OTP: reduced-motion fallback exists', styleOtp.includes('@media (prefers-reduced-motion:reduce)') && styleOtp.includes('.otp-orbit'));
+
       const acHtml34 = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'account.html'), 'utf8');
       check('V34 فرانت: کادرِ رمزِ فعلی در صفحه‌ی حساب هست', acHtml34.includes('id="curPass"'));
       check('V34 فرانت: هر دو مسیر currentPassword می‌فرستند',

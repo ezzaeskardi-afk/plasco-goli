@@ -42,6 +42,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnResend = document.getElementById('btnResend');
   const resendWrap = document.getElementById('resendWrap');
   const codeInput = document.getElementById('code');
+  const otpOrbit = document.getElementById('otpOrbit');
+  const otpSlots = [...document.querySelectorAll('.otp-slot')];
 
   let currentPhone = '';
 
@@ -75,6 +77,26 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const isValidPhone = (s) => /^09\d{9}$/.test(s);
+
+  function paintOtp(value, verdict = '') {
+    const digits = foldDigits(value).slice(0, 5);
+    otpSlots.forEach((slot, index) => {
+      slot.textContent = digits[index] || '';
+      slot.classList.toggle('is-filled', Boolean(digits[index]));
+      slot.classList.toggle('is-current', index === digits.length && digits.length < 5);
+    });
+    if (otpOrbit) {
+      otpOrbit.dataset.valueLength = String(digits.length);
+      otpOrbit.classList.toggle('is-complete', digits.length === 5);
+      otpOrbit.classList.toggle('is-success', verdict === 'success');
+      otpOrbit.classList.toggle('is-error', verdict === 'error');
+      if (verdict) {
+        otpOrbit.classList.remove('otp-verdict-pulse');
+        void otpOrbit.offsetWidth;
+        otpOrbit.classList.add('otp-verdict-pulse');
+      }
+    }
+  }
 
   function showAlert(host, message, kind = 'error') {
     host.innerHTML = `<div class="alert alert-${kind}"><svg><use href="#i-alert"/></svg><span>${PG.esc(message)}</span></div>`;
@@ -287,7 +309,12 @@ document.addEventListener('DOMContentLoaded', () => {
   codeInput.addEventListener('input', () => {
     const folded = foldDigits(codeInput.value).slice(0, 5);
     if (folded !== codeInput.value) codeInput.value = folded;
+    paintOtp(folded);
   });
+
+  codeInput.addEventListener('focus', () => otpOrbit?.classList.add('is-focused'));
+  codeInput.addEventListener('blur', () => otpOrbit?.classList.remove('is-focused'));
+  paintOtp('');
 
   codeInput.addEventListener('paste', (e) => {
     const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
@@ -319,6 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({ phone: currentPhone, code })
       });
       // ورود موفق → وضعیت ماندگار دیگر لازم نیست
+      paintOtp(code, 'success');
       clearState();
       stopTick();
       PG.toast('با موفقیت وارد شدید', 'success');
@@ -331,6 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
         location.href = next;
       }
     } catch (err) {
+      paintOtp(code, 'error');
       showAlert(alertCode, humanError(err));
       codeInput.select();
     } finally {
