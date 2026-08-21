@@ -61,13 +61,13 @@ function line(level, msg, extra) {
 function info(msg, extra) {
   const l = line('INFO', msg, extra);
   streamFor('app').write(l);
-  console.log(msg);
+  if (process.env.LOG_CONSOLE !== 'false') console.log(String(msg ?? '').replace(/[\\r\\n\\t]/g, ' ').slice(0, 1000));
 }
 
 function warn(msg, extra) {
   const l = line('WARN', msg, extra);
   streamFor('app').write(l);
-  console.warn(`[WARN] ${msg}`);
+  if (process.env.LOG_CONSOLE !== 'false') console.warn(`[WARN] ${String(msg ?? '').replace(/[\\r\\n\\t]/g, ' ').slice(0, 1000)}`);
 }
 
 function error(msg, err) {
@@ -75,7 +75,7 @@ function error(msg, err) {
   const l = line('ERROR', msg, detail);
   streamFor('app').write(l);
   streamFor('error').write(l);
-  console.error(`[ERROR] ${msg}`, err?.message || '');
+  if (process.env.LOG_CONSOLE !== 'false') console.error(`[ERROR] ${String(msg ?? '').replace(/[\\r\\n\\t]/g, ' ').slice(0, 1000)}`, err?.message || '');
 }
 
 // لاگ درخواست‌های HTTP (خطاها و درخواست‌های کند برای عیب‌یابی کافی‌اند)

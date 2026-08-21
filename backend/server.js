@@ -65,6 +65,14 @@ app.use(express.json({ limit: '64kb' })); // بدنه‌ی بزهکارانه‌
 const HTTPS_MODE = process.env.COOKIE_SECURE === 'true';
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
+function requireProductionSecret(name, { minLength = 1 } = {}) {
+  const value = String(process.env[name] || '');
+  if (IS_PRODUCTION && value.length < minLength) {
+    throw new Error(`${name} must be configured in production and be at least ${minLength} characters`);
+  }
+  return value;
+}
+
 // ---------- هشِ استایلِ درون‌خطیِ صفحه‌ی آفلاین ----------
 // همه‌ی استایل‌های درون‌خطیِ سایت به style.css منتقل شدند تا 'unsafe-inline'
 // از style-src برداشته شود — به‌جز offline.html. آن صفحه وقتی نشان داده می‌شود
@@ -224,11 +232,11 @@ app.get('/healthz', (req, res) => {
 
 // SESSION_SECRET: اگر تنظیم نشده بود، یک secret تصادفی برای این اجرا ساخته می‌شود
 // (امن‌تر از secret ثابتِ داخل کد؛ ولی برای production حتماً در .env بگذارید)
-const sessionSecret = process.env.SESSION_SECRET || (() => {
+const sessionSecret = (() => {
+  const configured = String(process.env.SESSION_SECRET || '');
+  if (IS_PRODUCTION) return requireProductionSecret('SESSION_SECRET', { minLength: 32 });
+  if (configured) return configured;
   const generated = crypto.randomBytes(32).toString('hex');
-  if (IS_PRODUCTION) {
-    throw new Error('SESSION_SECRET must be set in production; refusing to start with an ephemeral secret');
-  }
   log.warn('SESSION_SECRET is not set in .env - generated a temporary one (users must log in again after each restart)');
   return generated;
 })();
@@ -894,8 +902,9 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 // ---------- چک‌لیست بوت برای پروداکشن ----------
 // هیچ‌کدام سرور را نمی‌خواباند؛ فقط بلند و واضح هشدار می‌دهد.
 if (process.env.NODE_ENV === 'production') {
-  if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
-    log.warn('[PROD] SESSION_SECRET should be at least 32 chars');
+  if (process.env.COOKIE_SECURE !== 'true') {
+    log.warn('[PROD] COOKIE_SECURE must be true in production; refusing insecure session cookies');
+    process.exitCode = 1;
   }
   if (!process.env.ZARINPAL_MERCHANT_ID) log.warn('[PROD] Payment gateway is in TEST mode (no ZARINPAL_MERCHANT_ID)');
   if (!HTTPS_MODE) log.warn('[PROD] COOKIE_SECURE is off - the session cookie will also travel over plain HTTP; turn it on as soon as the domain has SSL');

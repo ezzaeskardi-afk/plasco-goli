@@ -12,7 +12,8 @@
     "test": "node test-smoke.js",
     "test:all": "node test-all.js",
     "logs:summary": "node tools/log-summary.js",
-    "security:gitleaks": "gitleaks detect --redact --config ../gitleaks.toml --source .."
+    "security:gitleaks": "gitleaks detect --redact --config ../gitleaks.toml --source ..",
+    "test:secrets": "node tests/secrets.js"
   },
   "engines": {
     "node": ">=22.5"
