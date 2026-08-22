@@ -8,7 +8,7 @@
 // چرا صفحه‌ها کش نمی‌شوند: در یک فروشگاه، نشان‌دادن نسخه‌ی کهنه یعنی مشتری
 // قیمت قدیمی یا کالای ناموجود را می‌بیند و سر همان زنگ می‌زند. سرعت به این
 // قیمت نمی‌ارزد.
-const CACHE = 'pg-static-v7';   // v7: نصبِ SW با cache:'reload' از HTTP cache کهنه عبور می‌کند
+const CACHE = 'pg-static-v8';   // v8: cachePolicy آیکون‌ها از no-cache به ۵-دقیقه‌ای تغییر کرد
 
 const OFFLINE_URL = '/offline.html';
 const STATIC = [

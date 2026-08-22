@@ -756,11 +756,13 @@ app.use(express.static(FRONTEND_DIR, {
     if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
     // سرویس‌ورکر و manifest استثنا: اگر کهنه کش شوند، مشتری با منطق کشِ قدیمی
     // گیر می‌افتد و خودش راهی برای بیرون آمدن ندارد.
-    // icons.svg و favicon.svg هم بدون ?v= لود می‌شوند؛ immutable نبودنشان
-    // یعنی تغییر آیکون‌ها فوراً به کاربر برسد.
-    else if (p.endsWith('/sw.js') || p.endsWith('manifest.json') || p.endsWith('manifest.webmanifest')
-      || p.endsWith('/assets/icons.svg') || p.endsWith('/assets/favicon.svg')) {
+    else if (p.endsWith('/sw.js') || p.endsWith('manifest.json') || p.endsWith('manifest.webmanifest')) {
       res.setHeader('Cache-Control', 'no-cache');
+    }
+    // icons.svg و favicon.svg بدون ?v= لود می‌شوند. کش کوتاه ۵ دقیقه‌ای
+    // جای no-cache: جلوگیری از ۳۰۴ بیهوده در هر جابه‌جایی صفحه.
+    else if (p.endsWith('/assets/icons.svg') || p.endsWith('/assets/favicon.svg')) {
+      res.setHeader('Cache-Control', 'public, max-age=300');
     }
     else if (/\.(css|js|woff2?|svg)$/i.test(p)) {
       res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');

@@ -50,11 +50,16 @@ function cachePolicy(pathname) {
   if (p.endsWith('.html')) return 'no-cache';
   // سرویس‌ورکر و manifest هرگز نباید بلندمدت کش شوند: اگر sw.js کهنه بماند،
   // مشتری تا مدت‌ها با نسخه‌ی قدیمی منطق کش گیر می‌کند و راه بیرون آمدن ندارد.
-  // icons.svg و favicon.svg هم بدون ?v= لود می‌شوند؛ اگر immutable بمانند،
-  // هر تغییری در آیکون‌ها تا ۳۰ روز به کاربر نمی‌رسد.
-  if (p === '/sw.js' || p.endsWith('manifest.json') || p.endsWith('manifest.webmanifest')
-      || p === '/assets/icons.svg' || p === '/assets/favicon.svg') {
+  if (p === '/sw.js' || p.endsWith('manifest.json') || p.endsWith('manifest.webmanifest')) {
     return 'no-cache';
+  }
+  // icons.svg و favicon.svg بدون ?v= لود می‌شوند. قبلاً no-cache بودند یعنی هر
+  // بار جابه‌جایی بین صفحه‌ها یک ۳۰۴ بیهوده انجام می‌شد (حدود ۵۰–۸۰ میلی‌ثانیه).
+  // حالا ۵ دقیقه کش می‌شوند — سرویس‌ورکر با cache:'reload' روی install همان
+  // لحظه‌ی دیپلوی نسخه‌ی تازه را می‌گیرد، پس کاربر قدیمی نهایتاً ۵ دقیقه بعد از
+  // دیپلوی آیکونِ تازه را می‌بیند. در عمل خیلی زودتر چون SW ماشه‌اش update است.
+  if (p === '/assets/icons.svg' || p === '/assets/favicon.svg') {
+    return 'public, max-age=300';
   }
   // این‌ها با ?v= نسخه‌بندی می‌شوند (یا نامشان تصادفی است) پس امن است
   if (/\.(css|js|mjs|woff2?|svg|map)$/.test(p)) return 'public, max-age=2592000, immutable';
