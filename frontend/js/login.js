@@ -41,9 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const phoneDisplay = document.getElementById('phoneDisplay');
   const btnResend = document.getElementById('btnResend');
   const resendWrap = document.getElementById('resendWrap');
-  const codeInput = document.getElementById('code');
-  const otpOrbit = document.getElementById('otpOrbit');
-  const otpSlots = [...document.querySelectorAll('.otp-slot')];
+  const codeInput = document.getElementById('code') || null; // قدیمی/پشتیبان
+  const otpBoxes = document.getElementById('otpBoxes');
+  const otpDigits = otpBoxes ? [...otpBoxes.querySelectorAll('.otp-digit')] : [];
 
   let currentPhone = '';
 
@@ -78,22 +78,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const isValidPhone = (s) => /^09\d{9}$/.test(s);
 
+  // هر ۵ اینپوت یک‌رقمی را می‌خواند و کد کامل را برمی‌گرداند
+  function getOtpValue() {
+    return otpDigits.map(d => d.value).join('');
+  }
+
+  function setOtpDigits(str) {
+    const digits = foldDigits(str).slice(0, 5);
+    otpDigits.forEach((d, i) => { d.value = digits[i] || ''; });
+  }
+
   function paintOtp(value, verdict = '') {
     const digits = foldDigits(value).slice(0, 5);
-    otpSlots.forEach((slot, index) => {
-      slot.textContent = digits[index] || '';
-      slot.classList.toggle('is-filled', Boolean(digits[index]));
-      slot.classList.toggle('is-current', index === digits.length && digits.length < 5);
+    otpDigits.forEach((d, index) => {
+      d.value = digits[index] || '';
+      d.classList.toggle('has-value', Boolean(digits[index]));
     });
-    if (otpOrbit) {
-      otpOrbit.dataset.valueLength = String(digits.length);
-      otpOrbit.classList.toggle('is-complete', digits.length === 5);
-      otpOrbit.classList.toggle('is-success', verdict === 'success');
-      otpOrbit.classList.toggle('is-error', verdict === 'error');
+    if (otpBoxes) {
+      otpBoxes.classList.toggle('is-complete', digits.length === 5);
+      otpBoxes.classList.toggle('is-success', verdict === 'success');
+      otpBoxes.classList.toggle('is-error', verdict === 'error');
       if (verdict) {
-        otpOrbit.classList.remove('otp-verdict-pulse');
-        void otpOrbit.offsetWidth;
-        otpOrbit.classList.add('otp-verdict-pulse');
+        // لرزش (shake) دوباره‌اجرا شود
+        otpBoxes.classList.remove('is-error');
+        void otpBoxes.offsetWidth;
+        otpBoxes.classList.add('is-error');
       }
     }
   }
@@ -221,6 +230,8 @@ document.addEventListener('DOMContentLoaded', () => {
     stepCode.classList.remove('hidden');
     setStep('code');
     startCountdown();
+    // فوکوس روی اولین باکسِ خالی کد
+    requestAnimationFrame(() => focusFirstEmpty());
   }
 
   async function requestOtp(phone) {
@@ -238,8 +249,8 @@ document.addEventListener('DOMContentLoaded', () => {
       codeExpiresAt: Date.now() + ttl * 1000
     });
     goToCodeStep(phone);
-    codeInput.value = '';
-    codeInput.focus();
+    setOtpDigits('');
+    otpDigits[0]?.focus();
     return res;
   }
 
@@ -305,26 +316,56 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ---------- مرحله‌ی کد ----------
-  // چسباندن کل متن پیامک هم کار کند: از هر متنی فقط ۵ رقم اول برداشته می‌شود
-  codeInput.addEventListener('input', () => {
-    const folded = foldDigits(codeInput.value).slice(0, 5);
-    if (folded !== codeInput.value) codeInput.value = folded;
-    paintOtp(folded);
+  // تایپ در هر باکس: فقط یک رقم، و پرش خودکار به باکس بعدی
+  otpDigits.forEach((digit, i) => {
+    digit.addEventListener('input', () => {
+      const folded = foldDigits(digit.value).slice(0, 1);
+      if (folded !== digit.value) digit.value = folded;
+      digit.classList.toggle('has-value', Boolean(digit.value));
+      if (digit.value) {
+        if (i < otpDigits.length - 1) otpDigits[i + 1].focus();
+        else if (getOtpValue().length === 5) formCode.requestSubmit();
+      }
+    });
+
+    digit.addEventListener('keydown', (e) => {
+      // Backspace در باکسِ خالی → برگشت به باکس قبلی
+      if (e.key === 'Backspace' && !digit.value && i > 0) {
+        e.preventDefault();
+        otpDigits[i - 1].focus();
+        otpDigits[i - 1].value = '';
+        otpDigits[i - 1].classList.remove('has-value');
+      }
+      // فلش‌های چپ/راست بین باکس‌ها
+      if (e.key === 'ArrowLeft' && i > 0) { e.preventDefault(); otpDigits[i - 1].focus(); }
+      if (e.key === 'ArrowRight' && i < otpDigits.length - 1) { e.preventDefault(); otpDigits[i + 1].focus(); }
+    });
+
+    digit.addEventListener('paste', (e) => {
+      const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+      const digits = foldDigits(text);
+      if (digits.length >= 5) {
+        e.preventDefault();
+        setOtpDigits(digits.slice(0, 5));
+        otpDigits[4].focus();
+        formCode.requestSubmit();
+      } else if (digits.length) {
+        // چسباندن یک رقم در همین باکس
+        e.preventDefault();
+        digit.value = digits[0];
+        digit.classList.add('has-value');
+        if (i < otpDigits.length - 1) otpDigits[i + 1].focus();
+      }
+    });
   });
 
-  codeInput.addEventListener('focus', () => otpOrbit?.classList.add('is-focused'));
-  codeInput.addEventListener('blur', () => otpOrbit?.classList.remove('is-focused'));
+  // اولین باکسِ خالی را موقع ورود به مرحلهٔ کد فوکوس کن
+  const focusFirstEmpty = () => {
+    const idx = otpDigits.findIndex(d => !d.value);
+    (otpDigits[idx === -1 ? otpDigits.length - 1 : idx] || otpDigits[0])?.focus();
+  };
+  if (otpBoxes) otpBoxes.addEventListener('click', focusFirstEmpty);
   paintOtp('');
-
-  codeInput.addEventListener('paste', (e) => {
-    const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
-    const digits = foldDigits(text);
-    if (digits.length >= 5) {
-      e.preventDefault();
-      codeInput.value = digits.slice(0, 5);
-      formCode.requestSubmit();
-    }
-  });
 
   let verifying = false;
 
@@ -332,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     if (verifying) return;
     clearAlert(alertCode);
-    const code = foldDigits(codeInput.value);
+    const code = getOtpValue();
     if (code.length !== 5) {
       return showAlert(alertCode, 'کد ۵ رقمی را کامل وارد کنید');
     }
@@ -361,7 +402,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       paintOtp(code, 'error');
       showAlert(alertCode, humanError(err));
-      codeInput.select();
+      setOtpDigits('');
+      otpDigits[0]?.focus();
+      otpDigits[0]?.select?.();
     } finally {
       verifying = false;
       btn.disabled = false;

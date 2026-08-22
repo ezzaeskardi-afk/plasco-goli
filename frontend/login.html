@@ -13,7 +13,7 @@
 <link rel="preload" href="assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=55">
+<link rel="stylesheet" href="css/style.css?v=56">
 </head>
 <body class="auth-page" data-no-bottom-nav>
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -141,17 +141,17 @@
           <form id="formCode" novalidate>
             <div class="field otp-field">
               <label for="code">کد تایید</label>
-              <div class="otp-orbit" id="otpOrbit" data-count="5">
-                <div class="otp-slots" aria-hidden="true">
-                  <span class="otp-slot" data-slot="0"></span>
-                  <span class="otp-slot" data-slot="1"></span>
-                  <span class="otp-slot" data-slot="2"></span>
-                  <span class="otp-slot" data-slot="3"></span>
-                  <span class="otp-slot" data-slot="4"></span>
-                </div>
-                <input id="code" type="tel" inputmode="numeric" autocomplete="one-time-code"
-                       maxlength="5" dir="ltr" class="input-otp" required
-                       aria-describedby="codeExpiry">
+              <div class="otp-boxes" id="otpBoxes" data-count="5" role="group" aria-label="کد تایید">
+                <input class="otp-digit" type="tel" inputmode="numeric" autocomplete="one-time-code"
+                       maxlength="1" dir="ltr" inputmode="numeric" aria-label="رقم اول کد" aria-describedby="codeExpiry">
+                <input class="otp-digit" type="tel" inputmode="numeric" autocomplete="one-time-code"
+                       maxlength="1" dir="ltr" inputmode="numeric" aria-label="رقم دوم کد" aria-describedby="codeExpiry">
+                <input class="otp-digit" type="tel" inputmode="numeric" autocomplete="one-time-code"
+                       maxlength="1" dir="ltr" inputmode="numeric" aria-label="رقم سوم کد" aria-describedby="codeExpiry">
+                <input class="otp-digit" type="tel" inputmode="numeric" autocomplete="one-time-code"
+                       maxlength="1" dir="ltr" inputmode="numeric" aria-label="رقم چهارم کد" aria-describedby="codeExpiry">
+                <input class="otp-digit" type="tel" inputmode="numeric" autocomplete="one-time-code"
+                       maxlength="1" dir="ltr" inputmode="numeric" aria-label="رقم پنجم کد" aria-describedby="codeExpiry">
               </div>
               <p class="field-hint" id="codeExpiry" aria-live="polite"></p>
             </div>
@@ -205,8 +205,8 @@
   </div>
 </main>
 
-<script src="js/common.js?v=55" defer></script>
-<script src="js/login.js?v=55" defer></script>
+<script src="js/common.js?v=56" defer></script>
+<script src="js/login.js?v=56" defer></script>
 
 </body>
 </html>
