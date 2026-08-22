@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   getPublicProducts, getPublicProduct, queryProducts, getCatalogSignature, getCatalogFacets,
-  getRatingsMap, getProductReviews, upsertReview, addStockAlert, getUserPhone
+  getRatingsMap, getProductReviews, upsertReview, addStockAlert, getUserPhone, wholesaleInfo
 } = require('../lib/db');
 const { etagJson, validate, V, requireAuth, rateLimit } = require('../lib/middleware');
 
@@ -64,7 +64,9 @@ function serializeProduct(p, ratings = null) {
     // گالری چندعکسه و جدول مشخصات (نسخه‌ی ۷)
     images: parseJsonArr(p.images), specs: parseJsonArr(p.specs),
     // امتیاز نظرات تأییدشده — کارت‌ها و صفحه‌ی محصول ستاره نشان می‌دهند
-    rating: (ratings && ratings[p.id]) || { count: 0, avg: 0 }
+    rating: (ratings && ratings[p.id]) || { count: 0, avg: 0 },
+    // قیمت‌گذاری عمده (B2B) — null یعنی این کالا عمده‌فروشی ندارد
+    wholesale: wholesaleInfo(p)
   };
 }
 

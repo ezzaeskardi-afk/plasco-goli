@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>خرید عمده | پلاسکو گلی</title>
+<meta name="description" content="درخواست قیمت و خرید عمده لوازم پلاستیکی خانه از پلاسکو گلی. برای فروشگاه‌ها، مراکز پخش و خرید سازمانی.">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#0B1411">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="preload" href="/assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
+<link rel="stylesheet" href="/css/style.css?v=54">
+</head>
+<body>
+<a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
+
+<header class="site">
+  <div class="container nav-row">
+    <a href="/index.html" class="logo" aria-label="پلاسکو گلی — صفحه اصلی">
+      <span class="logo-badge"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="لوگوی پلاسکو گلی" width="48" height="48" decoding="async"></span>
+      <span>پلاسکو گلی<small>فروشگاه لوازم پلاستیکی خانه</small></span>
+    </a>
+
+    <div class="header-actions">
+      <a class="icon-btn" href="/login.html" data-auth-link="icon" aria-label="ورود به حساب">
+        <svg><use href="#i-user"/></svg>
+      </a>
+      <a class="icon-btn" href="/cart.html" aria-label="سبد خرید">
+        <svg><use href="#i-cart"/></svg>
+        <span class="cart-count is-empty" id="cartCount" data-n="0">۰</span>
+      </a>
+      <button class="icon-btn menu-toggle" id="menuOpen" aria-label="باز کردن منو">
+        <svg><use href="#i-menu"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="mobile-drawer" id="drawer">
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <span class="logo logo-sm">
+        <span class="logo-badge logo-badge-sm"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="" width="48" height="48" decoding="async"></span>
+        پلاسکو گلی
+      </span>
+      <button class="icon-btn drawer-close" id="menuClose" aria-label="بستن منو"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <span class="drawer-label">صفحات</span>
+    <a href="/index.html"><svg><use href="#i-home"/></svg> خانه</a>
+    <a href="/products.html"><svg><use href="#i-package"/></svg> محصولات</a>
+    <a href="/wholesale.html"><svg><use href="#i-box"/></svg> خرید عمده</a>
+    <a href="/cart.html"><svg><use href="#i-cart"/></svg> سبد خرید</a>
+    <a href="/login.html" data-auth-link="text"><svg><use href="#i-user"/></svg> <span data-auth-label>ورود / ثبت‌نام</span></a>
+    <span class="drawer-label">راهنما</span>
+    <a href="/terms.html"><svg><use href="#i-note"/></svg> قوانین و راهنمای خرید</a>
+  </div>
+</div>
+
+<main id="main">
+  <div class="container page-head">
+    <nav class="breadcrumb"><a href="/index.html">خانه</a><span class="sep">/</span><span>خرید عمده</span></nav>
+  </div>
+
+  <section class="sec-pt20">
+    <div class="container ws-layout">
+      <aside class="ws-aside">
+        <span class="eyebrow"><span class="dot"></span> عمده‌فروشی</span>
+        <h1>خرید عمده و سازمانی</h1>
+        <p class="ws-lead">
+          برای فروشگاه‌ها، مراکز پخش، عمده‌خرها و خرید سازمانی قیمت ویژه داریم.
+          کافی است فرم را پر کنید؛ کارشناس ما در اولین فرصت با شما تماس می‌گیرد و
+          قیمت عمده را اعلام می‌کند.
+        </p>
+        <ul class="ws-points">
+          <li><svg><use href="#i-tag"/></svg> قیمت پلکانی: هرچه تعداد بیشتر، قیمت واحد کمتر</li>
+          <li><svg><use href="#i-truck"/></svg> ارسال بار به سراسر کشور</li>
+          <li><svg><use href="#i-shield"/></svg> ضمانت اصالت جنس و بازگشت کالا</li>
+          <li><svg><use href="#i-phone"/></svg> مشاوره‌ی صادقانه قبل از خرید</li>
+        </ul>
+      </aside>
+
+      <form class="ws-card" id="wsForm" novalidate>
+        <div class="ws-card-head">
+          <h2><svg><use href="#i-box"/></svg> درخواست قیمت عمده</h2>
+          <p>در چند ثانیه درخواست بدهید؛ بقیه‌اش با ما.</p>
+        </div>
+        <div id="wsAlert" role="alert" aria-live="polite"></div>
+
+        <div class="field">
+          <label for="wsName">نام و نام خانوادگی *</label>
+          <input id="wsName" name="name" type="text" maxlength="80" autocomplete="name" required>
+        </div>
+        <div class="field">
+          <label for="wsPhone">شماره موبایل *</label>
+          <input id="wsPhone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" dir="ltr" placeholder="۰۹۱۲۳۴۵۶۷۸۹" required>
+        </div>
+        <div class="field">
+          <label for="wsProduct">نام کالا(ها)</label>
+          <input id="wsProduct" name="productTitle" type="text" maxlength="120" placeholder="مثلاً: سطل شیاردار ۳ لیتر، تشت و لگن">
+          <input id="wsProductId" name="productId" type="hidden">
+        </div>
+        <div class="field">
+          <label for="wsQty">تعداد تقریبی</label>
+          <input id="wsQty" name="quantity" type="number" min="1" inputmode="numeric" dir="ltr" placeholder="مثلاً ۱۰۰">
+        </div>
+        <div class="field">
+          <label for="wsNote">توضیح (اختیاری)</label>
+          <textarea id="wsNote" name="note" rows="3" maxlength="500" placeholder="رنگ، سایز، زمان تحویل و هر نکته‌ای که به کارمان می‌آید"></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">
+          <svg><use href="#i-check-circle"/></svg> <span>ثبت درخواست</span>
+        </button>
+        <p class="ws-fine">با ثبت درخواست، شماره‌ی شما فقط برای تماس درباره‌ی همین درخواست استفاده می‌شود.</p>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="container footer-grid">
+    <div class="footer-about">
+      <div class="logo">
+        <span class="logo-badge"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt="لوگوی پلاسکو گلی" width="48" height="48" decoding="async"></span>
+        <span class="txt-white">پلاسکو گلی</span>
+      </div>
+      <p>فروشگاه محله‌ای لوازم پلاستیکی خانه؛ جنس اصل، قیمت منصفانه، مشاوره‌ی صادقانه.</p>
+      <div class="footer-social">
+        <a href="#" aria-label="اینستاگرام"><svg><use href="#i-instagram"/></svg></a>
+        <a href="#" aria-label="تلگرام"><svg><use href="#i-telegram"/></svg></a>
+        <a href="https://wa.me/989113567409" target="_blank" rel="noopener" aria-label="واتساپ"><svg><use href="#i-whatsapp"/></svg></a>
+        <a href="tel:09113567409" aria-label="تماس"><svg><use href="#i-phone"/></svg></a>
+      </div>
+    </div>
+    <div>
+      <h4>فروشگاه</h4>
+      <ul><li><a href="/index.html">خانه</a></li><li><a href="/products.html">محصولات</a></li><li><a href="/wholesale.html">خرید عمده</a></li><li><a href="/terms.html">قوانین و راهنمای خرید</a></li></ul>
+    </div>
+    <div>
+      <h4>ارتباط با ما</h4>
+      <ul><li><a href="tel:09113567409" dir="ltr">۰۹۱۱-۳۵۶-۷۴۰۹</a></li><li><a href="/index.html#contact">ساری، بلوار کشاورز، قبل از مسجد صاحب‌الزمان</a></li></ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <span id="year"></span>
+    <span>ساخته‌شده با ❤ برای پلاسکو گلی</span>
+  </div>
+</footer>
+
+<a class="fab" href="tel:09113567409">
+  <svg><use href="#i-phone"/></svg>
+  <span class="fab-label">تماس با فروشگاه</span>
+</a>
+<script src="/js/common.js?v=54" defer></script>
+<script src="/js/wholesale.js?v=54" defer></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 const express = require('express');
-const { getPublicProduct, getShippingQuote, quoteCoupon } = require('../lib/db');
+const { getPublicProduct, getShippingQuote, quoteCoupon, wholesaleInfo } = require('../lib/db');
 
 const router = express.Router();
 
@@ -20,6 +20,10 @@ function buildCartResponse(req) {
       // همان قاعده‌ای که serializeProduct در routes/products.js دارد، تا سبد و
       // کارت محصول هیچ‌وقت دو عدد متفاوت نشان ندهند.
       const oldPrice = Number(product.old_price) > Number(product.price) ? Number(product.old_price) : 0;
+      // عمده‌فروشی: اگر تعداد به حد نصاب رسیده باشد، قیمت واحد ارزان‌تر می‌شود.
+      const wholesale = wholesaleInfo(product, entry.qty);
+      const unitPrice = wholesale && wholesale.applies ? wholesale.unitPrice : product.price;
+      const wholesaleSavings = wholesale && wholesale.applies ? (product.price - unitPrice) * entry.qty : 0;
       return {
         productId: product.id,
         title: product.title,
@@ -35,8 +39,12 @@ function buildCartResponse(req) {
         // سقف واقعیِ همین قلم؛ فرانت با همین عدد دکمه‌ی «+» را قفل می‌کند
         // و دیگر لازم نیست کاربر با خطا خوردن بفهمد که به سقف رسیده.
         maxQty: qtyCap(product),
-        subtotal: product.price * entry.qty,
-        savings: oldPrice ? (oldPrice - product.price) * entry.qty : 0
+        // قیمتی که واقعاً حساب می‌شود (ممکن است قیمت عمده باشد)
+        unitPrice,
+        wholesale,
+        subtotal: unitPrice * entry.qty,
+        wholesaleSavings,
+        savings: oldPrice > unitPrice ? (oldPrice - unitPrice) * entry.qty : 0
       };
     })
     .filter(Boolean);

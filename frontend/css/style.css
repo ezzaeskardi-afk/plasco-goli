@@ -1097,6 +1097,15 @@ a.cart-row-title:hover{color:var(--teal);}
 .cart-row-price{font-size:13.5px;color:var(--ink-soft);margin-top:4px;}
 .cart-row-price s{opacity:.6;margin-inline-end:2px;}
 .cart-row-x{white-space:nowrap;}
+/* قیمت عمده در سبد: عدد جدید برجسته و برچسب تخفیف عمده */
+.cart-row-price .ws-price{color:var(--gold);font-weight:900;}
+.cart-row-ws{
+  display:inline-flex;align-items:center;gap:5px;margin-top:6px;
+  font-size:11.5px;font-weight:700;color:var(--gold);
+  background:rgba(245,185,90,.1);border:1px dashed rgba(245,185,90,.4);
+  border-radius:8px;padding:4px 9px;
+}
+.cart-row-ws svg{width:14px;height:14px;}
 .cart-row-stock{
   display:inline-block;margin-top:6px;font-size:11.5px;font-weight:700;
   color:var(--gold);
@@ -2392,6 +2401,21 @@ body.qv-lock{overflow:hidden;}
 .pd-qty button:hover{color:#2BD9BC;}
 .pd-qty span{min-width:34px;text-align:center;font-weight:800;font-size:15px;}
 .pd-buy-row .buy-btn{padding:12px 24px;font-size:14px;}
+/* تخفیف عمده (B2B) — بندِ برجسته بین بخش خرید و مزایا */
+.pd-wholesale{
+  margin-top:16px;padding:12px 16px;border-radius:var(--radius-sm);
+  background:linear-gradient(135deg, rgba(245,185,90,.14), rgba(245,185,90,.05));
+  border:1px dashed rgba(245,185,90,.45);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  font-size:13px;color:var(--ink);line-height:1.9;
+}
+.pd-wholesale svg{width:20px;height:20px;color:var(--gold);flex:none;}
+.pd-wholesale b{color:var(--gold);font-weight:900;}
+.pd-wholesale a{
+  margin-inline-start:auto;color:#2BD9BC;font-weight:800;font-size:12.5px;
+  white-space:nowrap;text-decoration:none;border-bottom:1px solid transparent;
+}
+.pd-wholesale a:hover{color:var(--gold);border-bottom-color:var(--gold);}
 .pd-perks{
   list-style:none;padding:0;margin:6px 0 0;
   display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;
@@ -3842,3 +3866,48 @@ table.ad-table tbody tr:last-child td{border-bottom:0;}
 .crm-tag-editor .crm-tag{cursor:pointer;border:1px solid transparent;}
 .crm-tag-editor .crm-tag.on{border-color:#2BD9BC;}
 .crm-tag-editor .crm-tag:not(.on){opacity:.45;}
+
+/* ============================================================
+   صفحه‌ی خرید عمده (B2B)
+   ============================================================ */
+.ws-layout{
+  display:grid;grid-template-columns:1fr minmax(340px, 440px);
+  gap:clamp(28px,5vw,64px);align-items:start;max-width:1080px;margin-inline:auto;
+}
+.ws-aside h1{font-size:clamp(24px,3vw,36px);margin:14px 0 12px;line-height:1.5;}
+.ws-lead{color:var(--ink-soft);line-height:2;font-size:14.5px;margin-bottom:22px;}
+.ws-points{list-style:none;padding:0;margin:0;display:grid;gap:14px;}
+.ws-points li{display:flex;gap:11px;align-items:flex-start;font-size:14px;color:var(--ink);}
+.ws-points svg{width:20px;height:20px;color:var(--gold);flex:none;margin-top:2px;}
+.ws-card{
+  background:var(--surface);border:1px solid var(--line);border-top:2px solid var(--teal);
+  border-radius:var(--radius-lg);padding:28px;box-shadow:var(--shadow);
+}
+.ws-card .field{margin-bottom:16px;}
+.ws-card-head{margin-bottom:20px;}
+.ws-card-head h2{display:flex;align-items:center;gap:9px;font-size:20px;margin:0 0 6px;}
+.ws-card-head h2 svg{width:22px;height:22px;color:var(--teal);}
+.ws-card-head p{color:var(--ink-soft);font-size:13px;margin:0;}
+.ws-fine{font-size:11.5px;color:var(--ink-dim);text-align:center;margin:14px 0 0;line-height:1.8;}
+@media(max-width:900px){.ws-layout{grid-template-columns:1fr;}}
+@media(max-width:560px){.ws-card{padding:22px 18px;}}
+
+/* ============================================================
+   عمده‌فروشی در پنل ادمین
+   ============================================================ */
+.ws-request{
+  display:flex;align-items:center;gap:12px;padding:13px 15px;
+  border:1px solid var(--line);border-radius:12px;margin-bottom:9px;
+  background:var(--surface);
+}
+.ws-request.new{border-color:rgba(245,185,90,.5);background:rgba(245,185,90,.06);}
+.ws-request .grow{flex:1;min-width:0;}
+.ws-request b{display:block;font-size:14px;margin-bottom:3px;}
+.ws-request small{display:block;font-size:11.5px;color:var(--ink-soft);line-height:1.8;}
+.ws-request .ws-qty{flex:none;text-align:center;}
+.ws-request .ws-qty b{font-size:16px;color:var(--gold);margin:0;}
+.ws-request .ws-qty small{font-size:10px;}
+.ws-status{flex:none;font-size:11px;font-weight:800;padding:4px 11px;border-radius:99px;}
+.ws-status.new{background:var(--gold-tint);color:var(--gold);}
+.ws-status.contacted{background:var(--teal-tint);color:#2BD9BC;}
+.ws-status.done{background:rgba(237,246,241,.08);color:var(--ink-soft);}

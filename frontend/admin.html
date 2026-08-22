@@ -10,7 +10,7 @@
 <link rel="preload" href="assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=53">
+<link rel="stylesheet" href="css/style.css?v=54">
 </head>
 <body class="admin-body">
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -54,6 +54,7 @@
         <button data-view="crm"><svg><use href="#i-note"/></svg> CRM مشتریان <span class="nav-count" id="navCrm">—</span></button>
         <button data-view="reviews"><svg><use href="#i-quote"/></svg> نظرات <span class="nav-count" id="navReviews">—</span></button>
         <button data-view="coupons"><svg><use href="#i-tag"/></svg> تخفیف‌ها</button>
+        <button data-view="wholesale"><svg><use href="#i-box"/></svg> عمده‌فروشی <span class="nav-count" id="navWholesale">—</span></button>
         <button data-view="report"><svg><use href="#i-chart"/></svg> گزارش‌ها</button>
         <button data-view="config"><svg><use href="#i-settings"/></svg> تنظیمات</button>
         <button data-view="log"><svg><use href="#i-history"/></svg> رویدادها</button>
@@ -487,6 +488,21 @@
         <div id="couponsHost"></div>
       </section>
 
+      <!-- ============ درخواست‌های خرید عمده (B2B) ============ -->
+      <section class="admin-view hidden" id="viewWholesale">
+        <div class="ad-head">
+          <div>
+            <h1>درخواست‌های عمده‌فروشی</h1>
+            <p>درخواست‌هایی که مشتری از صفحه‌ی «خرید عمده» فرستاده. وضعیت را عوض کنید یا اسپم را حذف کنید.</p>
+          </div>
+          <div class="ad-head-actions">
+            <button class="btn btn-ghost" id="wsReload"><svg><use href="#i-refresh"/></svg> تازه‌سازی</button>
+          </div>
+        </div>
+        <div class="ad-result-bar" id="wsResultBar"></div>
+        <div id="wsHost"></div>
+      </section>
+
       <!-- ============ نظرات محصولات ============ -->
       <section class="admin-view hidden" id="viewReviews">
         <div class="ad-head">
@@ -709,6 +725,16 @@
           <input id="pmOldPrice" type="number" min="0" step="1000" dir="ltr" placeholder="خالی = بدون تخفیف" aria-describedby="pmOldPriceHint">
           <small class="ad-hint" id="pmOldPriceHint">اگر پر شود، روی کارت محصول خط‌خورده و درصد تخفیف نمایش داده می‌شود. باید از قیمت فعلی بیشتر باشد.</small>
         </div>
+        <div class="ad-field">
+          <label for="pmWsMin">حد نصاب عمده (تعداد)</label>
+          <input id="pmWsMin" type="number" min="0" step="1" dir="ltr" placeholder="۰ = خاموش">
+          <small class="ad-hint">از این تعداد به بالا، تخفیف عمده اعمال می‌شود.</small>
+        </div>
+        <div class="ad-field">
+          <label for="pmWsDiscount">درصد تخفیف عمده</label>
+          <input id="pmWsDiscount" type="number" min="0" max="90" step="1" dir="ltr" placeholder="۰ = خاموش">
+          <small class="ad-hint">مثلاً ۱۵ یعنی ۱۵٪ ارزان‌تر از قیمت واحد.</small>
+        </div>
         <div class="ad-field full">
           <label for="pmDesc">توضیحات</label>
           <textarea id="pmDesc" rows="3" maxlength="500"></textarea>
@@ -810,7 +836,7 @@
   </div>
 </div>
 
-<script src="js/common.js?v=53" defer></script>
-<script src="js/admin.js?v=53" defer></script>
+<script src="js/common.js?v=54" defer></script>
+<script src="js/admin.js?v=54" defer></script>
 </body>
 </html>

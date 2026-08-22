@@ -27,7 +27,8 @@ const {
   getPendingStockAlerts, markStockAlertsNotified,
   crmGetSummary, crmSearchCustomers, crmGetCustomer,
   crmListTags, crmCreateTag, crmDeleteTag, crmSetUserTags,
-  crmAddNote, crmDeleteNote, crmAddTask, crmToggleTask, crmDeleteTask
+  crmAddNote, crmDeleteNote, crmAddTask, crmToggleTask, crmDeleteTask,
+  listWholesaleRequests, countNewWholesaleRequests, setWholesaleRequestStatus, deleteWholesaleRequest
 } = require('../lib/db');
 const { rateLimit, asyncHandler } = require('../lib/middleware');
 const { isAdminPhone, normalizePhone, isValidIranPhone } = require('../lib/phone');
@@ -139,7 +140,10 @@ router.get('/stats', (req, res) => {
 
 // همه‌ی داده‌های داشبورد در یک درخواست: آمار + نمودار + برترین‌ها + هشدارها
 router.get('/overview', (req, res) => {
-  res.json(getAdminOverview());
+  const ov = getAdminOverview();
+  // تعداد درخواست‌های عمده‌ی دیده‌نشده برای بجِ سایدبار
+  ov.newWholesaleRequests = countNewWholesaleRequests();
+  res.json(ov);
 });
 
 // نمودار فروش با بازه‌ی دلخواه (۷ تا ۹۰ روز)
@@ -304,6 +308,30 @@ router.delete('/crm/tags/:id', (req, res) => {
 router.put('/crm/customers/:id/tags', (req, res) => {
   if (!crmSetUserTags(req.params.id, req.body?.tagIds)) return res.status(404).json({ error: 'مشتری پیدا نشد' });
   note(req, 'crm_tags_set', `#${req.params.id}`);
+  res.json({ ok: true });
+});
+
+// ---------- درخواست‌های خرید عمده (B2B) ----------
+router.get('/wholesale/requests', (req, res) => {
+  res.json({ requests: listWholesaleRequests(300) });
+});
+
+router.patch('/wholesale/requests/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const status = String(req.body?.status || '');
+  if (!['new', 'contacted', 'done'].includes(status)) {
+    return res.status(400).json({ error: 'وضعیت معتبر نیست' });
+  }
+  if (!setWholesaleRequestStatus(id, status)) return res.status(404).json({ error: 'درخواست پیدا نشد' });
+  note(req, 'wholesale_status', `#${id}`, status);
+  res.json({ ok: true });
+});
+
+// حذف درخواست (اسپم/تکراری) — برگشت‌ناپذیر است
+router.delete('/wholesale/requests/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!deleteWholesaleRequest(id)) return res.status(404).json({ error: 'درخواست پیدا نشد' });
+  note(req, 'wholesale_delete', `#${id}`);
   res.json({ ok: true });
 });
 
@@ -862,6 +890,18 @@ function cleanProductInput(body, { partial = false } = {}) {
     }
     out.old_price = Number.isFinite(oldPrice) && oldPrice > 0 ? Math.round(oldPrice) : 0;
   }
+
+  // قیمت‌گذاری عمده (B2B): حد نصاب تعداد + درصد تخفیف عمده. صفر/خالی = خاموش.
+  const wholesaleMinQty = Number(body.wholesaleMinQty ?? body.wholesale_min_qty ?? 0);
+  const wholesaleDiscount = Number(body.wholesaleDiscount ?? body.wholesale_discount ?? 0);
+  if (!Number.isFinite(wholesaleMinQty) || wholesaleMinQty < 0 || wholesaleMinQty > 1_000_000) {
+    errors.push('حد نصاب تعداد عمده معتبر نیست');
+  }
+  if (!Number.isFinite(wholesaleDiscount) || wholesaleDiscount < 0 || wholesaleDiscount > 90) {
+    errors.push('درصد تخفیف عمده باید بین ۰ تا ۹۰ باشد');
+  }
+  out.wholesale_min_qty = Number.isFinite(wholesaleMinQty) && wholesaleMinQty > 0 ? Math.round(wholesaleMinQty) : 0;
+  out.wholesale_discount = Number.isFinite(wholesaleDiscount) && wholesaleDiscount > 0 ? Math.round(wholesaleDiscount) : 0;
   out.badge = String(body.badge ?? '').trim().slice(0, 30);
 
   // آیکون فقط از مجموعه‌ی اسپرایت خودمان (جلوی تزریق شناسه‌ی دلخواه را می‌گیرد).
@@ -940,7 +980,9 @@ router.put('/products/:id', (req, res) => {
     icon: req.body?.icon ?? existing.icon,
     image: req.body?.image === undefined ? existing.image : req.body.image,
     images: req.body?.images === undefined ? parseArr(existing.images) : req.body.images,
-    specs: req.body?.specs === undefined ? parseArr(existing.specs) : req.body.specs
+    specs: req.body?.specs === undefined ? parseArr(existing.specs) : req.body.specs,
+    wholesale_min_qty: req.body?.wholesaleMinQty ?? req.body?.wholesale_min_qty ?? existing.wholesale_min_qty ?? 0,
+    wholesale_discount: req.body?.wholesaleDiscount ?? req.body?.wholesale_discount ?? existing.wholesale_discount ?? 0
   };
   const { errors, product } = cleanProductInput(merged);
   if (errors.length) return res.status(400).json({ error: errors.join('؛ ') });

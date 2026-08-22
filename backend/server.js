@@ -28,6 +28,7 @@ const ordersRoute = require('./routes/orders');
 const wishlistRoute = require('./routes/wishlist');
 const adminRoute = require('./routes/admin');
 const shopRoute = require('./routes/shop');
+const wholesaleRoute = require('./routes/wholesale');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -406,6 +407,7 @@ app.use('/api/auth', authRoute);
 app.use('/api/addresses', addressesRoute);
 app.use('/api/orders', ordersRoute);
 app.use('/api/wishlist', wishlistRoute);
+app.use('/api/wholesale', wholesaleRoute);
 app.use('/api/admin', adminRoute);
 app.use('/api/shop', shopRoute);
 

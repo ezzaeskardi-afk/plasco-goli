@@ -80,6 +80,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
+    // تخفیف عمده (B2B) — سرور با wholesaleInfo حسابش کرده و فقط وقتی حد نصاب
+    // و درصد تعریف شده باشد این بلاک را نشان می‌دهیم.
+    const wsEl = document.getElementById('pdWholesale');
+    if (wsEl) {
+      const ws = p.wholesale;
+      if (ws && ws.minQty > 0 && ws.discount > 0) {
+        wsEl.innerHTML = `
+          <svg aria-hidden="true"><use href="#i-box"/></svg>
+          <span>خرید عمده: از <b>${PG.money(ws.minQty)} عدد</b>، هر عدد <b>${PG.money(ws.unitPrice)} تومان</b> (${PG.money(ws.discount)}٪ تخفیف)</span>
+          <a href="/wholesale.html?product=${encodeURIComponent(p.id)}">درخواست قیمت عمده</a>`;
+        wsEl.hidden = false;
+      } else {
+        wsEl.hidden = true;
+      }
+    }
+
     // ---------- گالری ----------
     // کاور و عکس‌های اضافه یک لیست یکتا می‌شوند. اگر مدیر کاور نگذاشته باشد ولی
     // گالری پر باشد، عکس اولِ گالری کاور می‌شود؛ قبلاً در این حالت عکس اصلی همان

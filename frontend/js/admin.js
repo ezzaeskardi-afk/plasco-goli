@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ============================================================
   // ناوبری بخش‌ها (با هش آدرس، تا رفرش همان‌جا بماند)
   // ============================================================
-  const VIEWS = ['dash', 'orders', 'stock', 'people', 'crm', 'reviews', 'coupons', 'report', 'config', 'log', 'errors'];
+  const VIEWS = ['dash', 'orders', 'stock', 'people', 'crm', 'reviews', 'coupons', 'wholesale', 'report', 'config', 'log', 'errors'];
   const LOADED = new Set();
 
   function show(view) {
@@ -331,6 +331,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       $('navPeople').textContent = money(s.total_users);
       $('navReviews').textContent = money(s.pending_reviews || 0);
       $('navReviews').classList.toggle('urgent', (s.pending_reviews || 0) > 0);
+      $('navWholesale').textContent = money(d.newWholesaleRequests || 0);
+      $('navWholesale').classList.toggle('urgent', (d.newWholesaleRequests || 0) > 0);
     } catch (e) {
       $('dashKpis').innerHTML = `<div class="alert alert-error span-all"><svg><use href="#i-alert"/></svg><span>${esc(e.message)}</span></div>`;
     }
@@ -1229,6 +1231,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ۰ در دیتابیس یعنی «تخفیفی نیست»؛ در فرم خالی نشان می‌دهیم نه صفر،
     // وگرنه مدیر فکر می‌کند قیمت قبلی صفر ثبت شده است.
     $('pmOldPrice').value = p?.oldPrice || p?.old_price ? (p.oldPrice || p.old_price) : '';
+    // عمده‌فروشی: ۰ یعنی خاموش؛ در فرم خالی نشان می‌دهیم نه صفر
+    $('pmWsMin').value = (p?.wholesale_min_qty ?? p?.wholesaleMinQty) ? (p.wholesale_min_qty ?? p.wholesaleMinQty) : '';
+    $('pmWsDiscount').value = (p?.wholesale_discount ?? p?.wholesaleDiscount) ? (p.wholesale_discount ?? p.wholesaleDiscount) : '';
     $('pmStock').value = p?.stock ?? '';
     $('pmDesc').value = p?.description || '';
     $('pmIcon').value = p?.icon || 'i-package';
@@ -1272,6 +1277,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       price: Number($('pmPrice').value),
       // رشته‌ی خالی را عمداً به ۰ تبدیل می‌کنیم؛ سرور ۰ را «بدون تخفیف» می‌فهمد
       oldPrice: $('pmOldPrice').value.trim() === '' ? 0 : Number($('pmOldPrice').value),
+      wholesaleMinQty: $('pmWsMin').value.trim() === '' ? 0 : Number($('pmWsMin').value),
+      wholesaleDiscount: $('pmWsDiscount').value.trim() === '' ? 0 : Number($('pmWsDiscount').value),
       stock: Number($('pmStock').value),
       description: $('pmDesc').value.trim(),
       icon: $('pmIcon').value,
@@ -2237,6 +2244,75 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // ============================================================
+  // درخواست‌های خرید عمده (B2B)
+  // ============================================================
+  const WS_STATUS = { new: 'جدید', contacted: 'تماس گرفته شد', done: 'انجام شد' };
+  async function loadWholesale() {
+    $('wsHost').innerHTML = skel(3);
+    try {
+      const { requests } = await PG.api('/admin/wholesale/requests');
+      $('wsResultBar').textContent = `${money(requests.length)} درخواست`;
+      if (!requests.length) {
+        $('wsHost').innerHTML = emptyBox('i-box', 'هنوز درخواست عمده‌ای نیامده است');
+        return;
+      }
+      $('wsHost').innerHTML = requests.map(r => `
+        <div class="ws-request ${r.status}" data-id="${r.id}">
+          <div class="grow">
+            <b>${esc(r.name)} <bdo dir="ltr">${esc(r.phone)}</bdo></b>
+            <small>${r.product_title ? `${esc(r.product_title)} · ` : ''}${r.quantity ? `تعداد ${money(r.quantity)} · ` : ''}${r.note ? esc(r.note) + ' · ' : ''}${new Date(r.created_at).toLocaleString('fa-IR')}</small>
+          </div>
+          <span class="ws-status ${r.status}">${WS_STATUS[r.status] || r.status}</span>
+          <button class="btn btn-ghost btn-sm ws-contact${r.status === 'new' ? '' : ' hidden'}">تماس گرفتم</button>
+          <button class="btn btn-outline btn-sm ws-done${r.status === 'done' ? ' hidden' : ''}">انجام شد</button>
+          <button class="btn btn-ghost btn-sm ws-del txt-danger" aria-label="حذف"><svg><use href="#i-trash"/></svg></button>
+        </div>`).join('');
+    } catch (e) {
+      $('wsHost').innerHTML = `<div class="alert alert-error"><svg><use href="#i-alert"/></svg><span>${esc(e.message)}</span></div>`;
+    }
+  }
+
+  async function wsSetStatus(id, status, btn) {
+    btn.disabled = true;
+    try {
+      await PG.api(`/admin/wholesale/requests/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      PG.toast('به‌روز شد', 'success');
+      loadWholesale();
+      if (LOADED.has('dash')) loadDash();
+    } catch (err) { PG.toast(err.message, 'error'); btn.disabled = false; }
+  }
+
+  $('wsHost').addEventListener('click', async (e) => {
+    const card = e.target.closest('.ws-request');
+    if (!card) return;
+    const id = Number(card.dataset.id);
+
+    const contact = e.target.closest('.ws-contact');
+    if (contact) { await wsSetStatus(id, 'contacted', contact); return; }
+
+    const done = e.target.closest('.ws-done');
+    if (done) { await wsSetStatus(id, 'done', done); return; }
+
+    const del = e.target.closest('.ws-del');
+    if (del) {
+      if (!del.dataset.armed) {
+        del.dataset.armed = '1';
+        del.textContent = 'مطمئنی؟';
+        setTimeout(() => { if (del.isConnected) { del.dataset.armed = ''; del.innerHTML = '<svg><use href="#i-trash"/></svg>'; } }, 3500);
+        return;
+      }
+      del.disabled = true;
+      try {
+        await PG.api(`/admin/wholesale/requests/${id}`, { method: 'DELETE' });
+        PG.toast('درخواست حذف شد', 'info');
+        loadWholesale();
+        if (LOADED.has('dash')) loadDash();
+      } catch (err) { PG.toast(err.message, 'error'); del.disabled = false; }
+    }
+  });
+
+  $('wsReload').addEventListener('click', () => loadWholesale());
+
   // کدهای تخفیف
   // ============================================================
   async function loadCoupons() {
@@ -2425,6 +2501,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     orders: loadOrders,
     stock: () => { loadStock(); loadCats(); },
     people: loadPeople, crm: loadCrm, reviews: loadReviews, coupons: loadCoupons,
+    wholesale: loadWholesale,
     report: () => { loadReport(); loadMonthly(); },
     config: loadConfig, log: loadLog, errors: loadErrors
   };

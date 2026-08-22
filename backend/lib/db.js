@@ -432,6 +432,20 @@ CREATE TABLE IF NOT EXISTS crm_tasks (
 );
 CREATE INDEX IF NOT EXISTS idx_crm_tasks_user ON crm_tasks(user_id, done, due_at);
 CREATE INDEX IF NOT EXISTS idx_crm_tasks_open  ON crm_tasks(done, due_at);
+
+-- درخواست‌های خرید عمده (B2B) — مشتری فرم پر می‌کند، ادمین در پنل پیگیری می‌کند
+CREATE TABLE IF NOT EXISTS wholesale_requests (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL,
+  phone         TEXT NOT NULL,
+  product_id    INTEGER,
+  product_title TEXT NOT NULL DEFAULT '',
+  quantity      INTEGER NOT NULL DEFAULT 0,
+  note          TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'new',   -- new | contacted | done
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_wsr_status ON wholesale_requests(status, id DESC);
 `);
 
 // ستون‌های جدید محصول: گالری چندعکسه و جدول مشخصات (هر دو JSON)
@@ -458,6 +472,10 @@ if (!productCols.includes('published')) db.exec('ALTER TABLE products ADD COLUMN
 // خالی یعنی دستی ساخته شده. با همین یک ستون، یک وارداتِ اشتباه با یک کوئری
 // (DELETE FROM products WHERE import_batch = '...') کامل برمی‌گردد.
 if (!productCols.includes('import_batch')) db.exec("ALTER TABLE products ADD COLUMN import_batch TEXT NOT NULL DEFAULT ''");
+// قیمت‌گذاری عمده (B2B): اگر تعداد خرید از wholesale_min_qty بگذرد،
+// wholesale_discount درصد تخفیف می‌گیرد. صفر یعنی عمده‌فروشی برای این کالا خاموش است.
+if (!productCols.includes('wholesale_min_qty')) db.exec('ALTER TABLE products ADD COLUMN wholesale_min_qty INTEGER NOT NULL DEFAULT 0');
+if (!productCols.includes('wholesale_discount')) db.exec('ALTER TABLE products ADD COLUMN wholesale_discount INTEGER NOT NULL DEFAULT 0');
 db.exec('CREATE INDEX IF NOT EXISTS idx_products_published ON products(published, id DESC)');
 
 // نرمال‌سازی متن فارسی برای جستجو — «ي» عربی، «ك» عربی، نیم‌فاصله و... یکدست می‌شوند
@@ -653,6 +671,17 @@ function getProducts() { return stmtAllProducts.all(); }
 function getProduct(id) { return stmtProductById.get(Number(id)); }
 function getPublicProducts() { return stmtPublicProducts.all(); }
 function getPublicProduct(id) { return stmtPublicProductById.get(Number(id)); }
+
+// قیمت‌گذاری عمده (B2B): اگر کالا حد نصاب و درصد تخفیف داشته باشد، قیمت واحدِ
+// پس از تخفیف عمده را می‌دهد. null یعنی عمده‌فروشی برای این کالا تعریف نشده.
+// وقتی qty داده شود، applies هم می‌گوید که با این تعداد واقعاً عمده حساب می‌شود یا نه.
+function wholesaleInfo(product, qty = null) {
+  const minQty = Number(product?.wholesale_min_qty) || 0;
+  const discount = Number(product?.wholesale_discount) || 0;
+  if (minQty <= 0 || discount <= 0 || discount >= 100) return null;
+  const unitPrice = Math.max(0, Math.round((Number(product.price) || 0) * (100 - discount) / 100));
+  return { minQty, discount, unitPrice, applies: qty == null ? true : qty >= minQty };
+}
 
 // ---------- امضای کاتالوگ (برای ETag) ----------
 // یک رشته‌ی کوتاه که با هر تغییر واقعیِ کاتالوگ عوض می‌شود:
@@ -1140,6 +1169,30 @@ function crmToggleTask(id, done) {
   return serializeCrmTask(stmtCrmTaskById.get(Number(id)));
 }
 function crmDeleteTask(id) { return stmtCrmTaskDelete.run(Number(id)).changes > 0; }
+
+// ---- درخواست‌های خرید عمده (B2B) ----
+const stmtWholesaleAdd = db.prepare(
+  'INSERT INTO wholesale_requests (name, phone, product_id, product_title, quantity, note) VALUES (?, ?, ?, ?, ?, ?)');
+const stmtWholesaleList = db.prepare('SELECT * FROM wholesale_requests ORDER BY id DESC LIMIT ?');
+const stmtWholesaleCountNew = db.prepare("SELECT COUNT(*) AS n FROM wholesale_requests WHERE status = 'new'");
+const stmtWholesaleSetStatus = db.prepare('UPDATE wholesale_requests SET status = ? WHERE id = ?');
+
+function addWholesaleRequest({ name, phone, productId = null, productTitle = '', quantity = 0, note = '' }) {
+  const info = stmtWholesaleAdd.run(name, phone, productId, productTitle, quantity, note);
+  return Number(info.lastInsertRowid);
+}
+function listWholesaleRequests(limit = 200) {
+  return stmtWholesaleList.all(limit);
+}
+function countNewWholesaleRequests() {
+  return Number(stmtWholesaleCountNew.get().n);
+}
+function setWholesaleRequestStatus(id, status) {
+  return stmtWholesaleSetStatus.run(status, Number(id)).changes > 0;
+}
+function deleteWholesaleRequest(id) {
+  return db.prepare('DELETE FROM wholesale_requests WHERE id = ?').run(Number(id)).changes > 0;
+}
 
 // ---- خلاصه‌ی داشبورد CRM ----
 const stmtCrmSummary = db.prepare(`SELECT
@@ -2044,26 +2097,30 @@ function getShippingQuote(itemsTotal) {
 const stmtAdminUpdateProduct = db.prepare(`UPDATE products SET
   title=@title, title_norm=@title_norm, title_fold=@title_fold, category=@category, description=@description,
   price=@price, old_price=@old_price, stock=@stock, badge=@badge, icon=@icon, image=@image,
-  images=@images, specs=@specs, updated_at=datetime('now')
+  images=@images, specs=@specs,
+  wholesale_min_qty=@wholesale_min_qty, wholesale_discount=@wholesale_discount,
+  updated_at=datetime('now')
   WHERE id=@id`);
 function adminUpdateProduct(p) {
   return stmtAdminUpdateProduct.run({
     ...p, icon: p.icon || 'i-package', old_price: Number(p.old_price) || 0,
     title_norm: normFaText(p.title), title_fold: foldFaText(p.title),
-    images: JSON.stringify(p.images || []), specs: JSON.stringify(p.specs || [])
+    images: JSON.stringify(p.images || []), specs: JSON.stringify(p.specs || []),
+    wholesale_min_qty: Number(p.wholesale_min_qty) || 0, wholesale_discount: Number(p.wholesale_discount) || 0
   }).changes > 0;
 }
 
 const stmtNextProductId = db.prepare('SELECT COALESCE(MAX(id),0)+1 AS next FROM products');
 const stmtAdminInsertProduct = db.prepare(`INSERT INTO products
-  (id, category, icon, image, images, specs, title, title_norm, title_fold, description, price, old_price, badge, stock, published, import_batch)
-  VALUES (@id, @category, @icon, @image, @images, @specs, @title, @title_norm, @title_fold, @description, @price, @old_price, @badge, @stock, @published, @import_batch)`);
+  (id, category, icon, image, images, specs, title, title_norm, title_fold, description, price, old_price, badge, stock, published, import_batch, wholesale_min_qty, wholesale_discount)
+  VALUES (@id, @category, @icon, @image, @images, @specs, @title, @title_norm, @title_fold, @description, @price, @old_price, @badge, @stock, @published, @import_batch, @wholesale_min_qty, @wholesale_discount)`);
 function adminCreateProduct(p) {
   const id = stmtNextProductId.get().next;
   stmtAdminInsertProduct.run({
     ...p, id, icon: p.icon || 'i-package', old_price: Number(p.old_price) || 0,
     title_norm: normFaText(p.title), title_fold: foldFaText(p.title),
     images: JSON.stringify(p.images || []), specs: JSON.stringify(p.specs || []),
+    wholesale_min_qty: Number(p.wholesale_min_qty) || 0, wholesale_discount: Number(p.wholesale_discount) || 0,
     // پیش‌فرضِ ۱ عمدی است: محصولی که مدیر با دست در پنل می‌سازد، مثل همیشه فوراً
     // روی سایت می‌آید. فقط جایی که آگاهانه `published:0` بفرستد پیش‌نویس می‌شود.
     published: p.published === 0 || p.published === false ? 0 : 1,
@@ -2598,7 +2655,7 @@ module.exports = {
   getProducts, getProduct, upsertProductsTx,
   // نسخه‌های عمومی — پیش‌نویس‌ها را نشان نمی‌دهند (ستون published)
   getPublicProducts, getPublicProduct, setProductPublished, getDraftSummary, batchHasOrders, deleteBatch,
-  queryProducts, getCatalogSignature, getCatalogFacets, getCategories,
+  queryProducts, getCatalogSignature, getCatalogFacets, getCategories, wholesaleInfo,
   reserveStock, releaseStock,
   findOrCreateUser, stmtUserById, updateUserName,
   setUserPassword, getUserByPhone,
@@ -2627,5 +2684,6 @@ module.exports = {
   crmGetSummary, crmSearchCustomers, crmGetCustomer,
   crmListTags, crmCreateTag, crmDeleteTag, crmSetUserTags,
   crmAddNote, crmDeleteNote, crmAddTask, crmToggleTask, crmDeleteTask,
+  addWholesaleRequest, listWholesaleRequests, countNewWholesaleRequests, setWholesaleRequestStatus, deleteWholesaleRequest,
   otp: { get: stmtOtpGet, upsert: stmtOtpUpsert, bumpAttempts: stmtOtpBumpAttempts, del: stmtOtpDelete, ipBump: stmtIpBump, ipGet: stmtIpGet }
 };

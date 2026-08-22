@@ -167,9 +167,14 @@ function paintCart(cart) {
       <div class="cart-row-body">
         <a class="cart-row-title" href="product.html?id=${item.productId}">${PG.esc(item.title)}</a>
         <div class="cart-row-price">
-          ${item.oldPrice ? `<s>${PG.money(item.oldPrice)}</s> ` : ''}${PG.money(item.price)} تومان
+          ${item.wholesale && item.wholesale.applies
+            ? `<s>${PG.money(item.price)}</s> <b class="ws-price">${PG.money(item.unitPrice)}</b> تومان`
+            : `${item.oldPrice ? `<s>${PG.money(item.oldPrice)}</s> ` : ''}${PG.money(item.price)} تومان`}
           <span class="cart-row-x">× ${PG.money(item.qty)}</span>
         </div>
+        ${item.wholesale && item.wholesale.applies
+          ? `<span class="cart-row-ws"><svg aria-hidden="true"><use href="#i-box"/></svg> تخفیف عمده اعمال شد — ${PG.money(item.wholesale.discount)}٪ (از ${PG.money(item.wholesale.minQty)} عدد)</span>`
+          : ''}
         ${stockNote}
       </div>
       <div class="cart-row-end">
