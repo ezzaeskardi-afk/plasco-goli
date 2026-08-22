@@ -13,6 +13,8 @@
     "test:all": "node test-all.js",
     "check": "node test-all.js && node bench-load.js 200 3998 0 0",
     "bench": "node bench-load.js",
+    "bench:read": "node bench-read.js",
+    "cluster": "CLUSTER_ENABLED=true node server.js",
     "logs:summary": "node tools/log-summary.js",
     "security:gitleaks": "gitleaks detect --redact --config ../gitleaks.toml --source ..",
     "test:secrets": "node tests/secrets.js"

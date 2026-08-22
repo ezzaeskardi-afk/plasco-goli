@@ -3,8 +3,21 @@ require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const cluster = require('cluster');
 const express = require('express');
 const session = require('express-session');
+
+// ---------- Cluster Mode ----------
+// اگر CLUSTER_ENABLED=true باشد و این فایل مستقیم اجرا شده باشد (نه توسط worker)،
+// ابتدا master راه‌اندازی می‌شود و workerها را fork می‌کند.
+// هر worker دوباره همین فایل را اجرا می‌کند ولی cluster.isWorker=true است
+// و از این بلوک رد می‌شود.
+const { isClusterEnabled, runMaster } = require('./lib/cluster');
+if (isClusterEnabled() && cluster.isPrimary) {
+  runMaster(__filename);
+  // master فقط کارهای بالا را انجام می‌دهد و منتظر خروج workerها می‌ماند
+  // worker از پایین فایل اجرا می‌شود
+}
 
 const log = require('./lib/logger');
 const {
@@ -14,6 +27,9 @@ const {
 } = require('./lib/db');
 const { SqliteSessionStore } = require('./lib/session-store');
 const { rateLimit } = require('./lib/middleware');
+const { rateLimitSqlite } = require('./lib/rate-limit-sqlite');
+const { productsCache, productDetailCache, categoriesCache, relatedCache, facetsCache, settingsCache, invalidateProducts, invalidateCategories, invalidateAll } = require('./lib/cache');
+const CLUSTER = isClusterEnabled();
 const { boolEnv, boundedIntEnv, validateProductionConfig, newRequestId, validateRuntimeConfig } = require('./lib/security-config');
 const { staticCompress, compressJson, sendHtml } = require('./lib/static-compress');
 const { webpNegotiate } = require('./lib/webp-negotiate');
@@ -275,9 +291,18 @@ app.use(session({
 // ۴۰۰ نفرِ همزمان (کمپین، عید) سقفِ یک IP مشترک را می‌خورند و همه ۴۲۹ می‌گیرند.
 // keyBy:'user' یعنی کاربرِ واردشده سهمیه‌ی خودش را دارد؛ مهمان (بدون ورود) هم
 // مثل قبل با IP شمرده می‌شود، پس سیلِ رباتِ مهمان هنوز محدود می‌ماند.
-app.use('/api', rateLimit({ windowMs: 60 * 1000, max: boundedIntEnv('API_RATE_LIMIT', 300, 1, 10000), keyBy: 'user' }));
+const apiLimiter = CLUSTER
+  ? rateLimitSqlite({ windowMs: 60 * 1000, max: boundedIntEnv('API_RATE_LIMIT', 300, 1, 10000), keyBy: 'user' })
+  : rateLimit({ windowMs: 60 * 1000, max: boundedIntEnv('API_RATE_LIMIT', 300, 1, 10000), keyBy: 'user' });
+app.use('/api', apiLimiter);
 
-const writeLimiter = rateLimit({
+const writeLimiterBase = CLUSTER
+  ? rateLimitSqlite({
+      windowMs: 60 * 1000, max: boundedIntEnv('WRITE_RATE_LIMIT', 300, 1, 2000),
+      keyBy: 'user',
+      message: 'تعداد درخواست‌ها زیاد است؛ یک دقیقه صبر کنید و دوباره تلاش کنید'
+    })
+  : rateLimit({
   // درخواست‌های نوشتاریِ واقعی باید محدود باشند؛ endpointهای حساس limiter مستقل دارند.
   // سقف پیش‌فرض طوری است که چند عملیات عادیِ یک کاربر در یک دقیقه را نگیرد.
   windowMs: 60 * 1000, max: boundedIntEnv('WRITE_RATE_LIMIT', 300, 1, 2000),
@@ -286,7 +311,7 @@ const writeLimiter = rateLimit({
 });
 app.use('/api', (req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
-  return writeLimiter(req, res, next);
+  return writeLimiterBase(req, res, next);
 });
 
 // پاسخ‌های JSON بزرگ (مثل لیست محصولات) فشرده ارسال شوند
