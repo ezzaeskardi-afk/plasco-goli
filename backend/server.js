@@ -23,7 +23,7 @@ const log = require('./lib/logger');
 const {
   initDb, expireStaleOrders, cleanupExpired, backupNow, getPublicProducts, getPublicProduct,
   bumpVisit, cleanupOldVisits, getProductReviews, getSetting, getShippingQuote,
-  closeDb, getDbHealth, getCategories, getCatalogSignature, checkpointWal
+  closeDb, getDbHealth, getCategories, getCatalogSignature, checkpointWal, getTopProducts
 } = require('./lib/db');
 const { SqliteSessionStore } = require('./lib/session-store');
 const { rateLimit } = require('./lib/middleware');
@@ -666,8 +666,68 @@ function renderSeoPage(fileName) {
     }
   };
 }
-app.get('/', renderSeoPage('index.html'));
-app.get('/index.html', renderSeoPage('index.html'));
+// ---------- صفحه‌ی اصلی با ItemList تزریقی ----------
+// نتایج غنی گوگل (ListItem برای محصولات پرفروش) فقط وقتی ساخته می‌شوند که
+// کاتالوگ عوض شده باشد — همان امضایی که ETag و sitemap هم از آن استفاده می‌کنند.
+let homeItemListCache = { sig: '', html: '' };
+function buildItemList(base) {
+  const top = getTopProducts(10);
+  if (!top.length) return '';
+  // برای هر محصول به اطلاعات کامل نیاز داریم (image, price)
+  const full = top.map(t => getPublicProduct(t.id)).filter(Boolean);
+  if (!full.length) return '';
+  const items = full.map((p, i) => ({
+    '@type': 'ListItem',
+    position: i + 1,
+    url: `${base}/product/${p.id}`,
+    name: p.title,
+    image: p.image ? base + encodeURI(p.image) : undefined,
+    offers: {
+      '@type': 'Offer',
+      price: Number(p.price) * 10,
+      priceCurrency: 'IRR',
+      availability: Number(p.stock) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'
+    }
+  }));
+  const dump = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
+  return dump({
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    '@id': `${base}/#top-products`,
+    name: 'محصولات پرفروش پلاسکو گلی',
+    description: 'پرفروش‌ترین لوازم پلاستیکی خانه در فروشگاه پلاسکو گلی',
+    numberOfItems: items.length,
+    itemListOrder: 'https://schema.org/ItemListUnordered',
+    itemListElement: items
+  });
+}
+function renderHomepage(req, res) {
+  const base = siteBase(req);
+  const file = path.join(FRONTEND_DIR, 'index.html');
+  try {
+    const mtimeMs = fs.statSync(file).mtimeMs;
+    const sig = getCatalogSignature();
+    const cacheKey = `index|${base}|${sig}`;
+    const hit = seoPageCache.get(cacheKey);
+    if (!hit || hit.mtimeMs !== mtimeMs) {
+      const raw = fs.readFileSync(file, 'utf-8').split(PLACEHOLDER_HOST).join(base);
+      // ItemList فقط وقتی تزریق می‌شود که کاتالوگ عوض شده باشد
+      if (sig !== homeItemListCache.sig) {
+        homeItemListCache.html = buildItemList(base);
+        homeItemListCache.sig = sig;
+      }
+      const html = raw.replace('<!--pg-itemlist-->', homeItemListCache.html);
+      if (seoPageCache.size >= SEO_CACHE_MAX) seoPageCache.delete(seoPageCache.keys().next().value);
+      seoPageCache.set(cacheKey, { html, mtimeMs });
+    }
+    res.setHeader('Cache-Control', 'no-cache');
+    return sendHtml(req, res, seoPageCache.get(cacheKey).html);
+  } catch (e) {
+    return res.sendFile(file);
+  }
+}
+app.get('/', renderHomepage);
+app.get('/index.html', renderHomepage);
 app.get('/terms.html', renderSeoPage('terms.html'));
 app.get('/products.html', renderSeoPage('products.html'));
 

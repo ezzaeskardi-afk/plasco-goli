@@ -11,7 +11,7 @@
     "prod": "pm2 start ecosystem.config.js",
     "test": "node test-smoke.js",
     "test:all": "node test-all.js",
-    "check": "node test-all.js && node bench-load.js 200 3998 0 0",
+    "check": "node test-all.js && node test-seo.js && node bench-load.js 200 3998 0 0",
     "bench": "node bench-load.js",
     "bench:read": "node bench-read.js",
     "cluster": "CLUSTER_ENABLED=true node server.js",
