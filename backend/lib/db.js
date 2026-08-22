@@ -56,8 +56,10 @@ const db = new DatabaseSync(DB_FILE);
 // دیسک مجازیِ مانت‌شده — فعال کردنش «disk I/O error» می‌دهد.
 // در آن حالت به‌جای بالا نیامدنِ کل سایت، به journal معمولی برمی‌گردیم:
 // کمی کندتر است ولی کاملاً سالم و بی‌خطر.
+let walActive = false;
 try {
   db.exec('PRAGMA journal_mode = WAL;');   // خواندن و نوشتن هم‌زمان بدون قفل شدن
+  walActive = true;
 } catch (e) {
   try {
     db.exec('PRAGMA journal_mode = DELETE;');
@@ -69,6 +71,25 @@ try {
 db.exec('PRAGMA synchronous = NORMAL;'); // تعادل سرعت/ایمنی (با WAL امن است)
 db.exec('PRAGMA busy_timeout = 5000;');
 db.exec('PRAGMA foreign_keys = ON;');
+
+// ---------- تنظیمات کارایی ----------
+// cache_size منفی یعنی کیلوبایتِ حافظه. ۶۴ مگابایت یعنی دیتابیسِ یک فروشگاهِ این
+// ابعاد (کاتالوگ، تنظیمات، ایندکس‌ها) معمولاً یکجا در RAM می‌ماند و خواندن‌های
+// تکراری دیگر به دیسک نمی‌روند — بزرگ‌ترین بردِ ارزان برای مسیرهای داغ.
+db.exec('PRAGMA cache_size = -65536;');   // 64 MiB
+// مرتب‌سازی و GROUP BY (فیلترها، گزارش‌ها، داشبورد) به‌جای فایل موقتِ روی دیسک
+// در RAM انجام شوند. کوئری‌های این سایت کوچک‌اند؛ خطرِ سرریز حافظه عملاً نیست.
+db.exec('PRAGMA temp_store = MEMORY;');
+// WAL که از این آستانه بزرگ‌تر شود، خودِ SQLite در کامیتِ بعدی checkpoint می‌کند
+// و جلوی رشد بی‌رویه‌ی فایل -wal را می‌گیرد (۱۰۰۰ صفحه × ۴KB ≈ ۴MB).
+if (walActive) db.exec('PRAGMA wal_autocheckpoint = 1000;');
+// خواندن با memory-map روی دیسک محلی به‌طور محسوس سریع‌تر است، ولی روی درایو
+// شبکه یا پوشه‌ی همگام‌شونده خطا می‌دهد. فقط وقتی فعالش می‌کنیم که WAL بالا آمده
+// باشد (یعنی فایل‌سیستم سالم است) و اگر هم خطا داد، بی‌صدا به حالت عادی برمی‌گردیم.
+if (walActive) {
+  try { db.exec('PRAGMA mmap_size = 67108864;'); } // 64 MiB
+  catch (e) { db.exec('PRAGMA mmap_size = 0;'); }
+}
 
 // ---------- کشِ prepared statement ----------
 // node:sqlite هر بار db.prepare() را از نو کامپایل می‌کند؛ کوئری‌هایی که در هر
@@ -2636,6 +2657,17 @@ function checkIntegrity() { return quickCheck(); }
 // اگر checkpoint هم نشد اصلاً مهم نیست: WAL ماندگار است و در اجرای بعدی
 // خودکار بازپخش می‌شود، پس در هیچ حالتی داده‌ای از دست نمی‌رود.
 let closed = false;
+
+// checkpoint سبک در زمان اجرا — بدون توقفِ خواننده/نویسنده. WAL که بی‌رویه بزرگ
+// شود (مثلاً checkpoint خودکار به هر دلیل گیر کند) از این راه ادغام می‌شود.
+// PASSIVE هرگز قفل نمی‌کند و فایل را کوتاه نمی‌کند؛ روی پوشه‌های همگام‌شونده هم
+// بی‌خطر است (برخلاف TRUNCATE). اگر مشغول بود، بی‌صدا صرف‌نظر می‌کند.
+function checkpointWal() {
+  if (closed) return false;
+  try { db.exec('PRAGMA wal_checkpoint(PASSIVE);'); return true; }
+  catch (e) { return false; }
+}
+
 function closeDb(log = console) {
   if (closed) return;
   closed = true;
@@ -2650,7 +2682,7 @@ function closeDb(log = console) {
 }
 
 module.exports = {
-  db, DATA_DIR, initDb, closeDb, getDbHealth, checkIntegrity,
+  db, DATA_DIR, initDb, closeDb, getDbHealth, checkIntegrity, checkpointWal,
   flushVisits,
   getProducts, getProduct, upsertProductsTx,
   // نسخه‌های عمومی — پیش‌نویس‌ها را نشان نمی‌دهند (ستون published)

@@ -10,7 +10,7 @@ const log = require('./lib/logger');
 const {
   initDb, expireStaleOrders, cleanupExpired, backupNow, getPublicProducts, getPublicProduct,
   bumpVisit, cleanupOldVisits, getProductReviews, getSetting, getShippingQuote,
-  closeDb, getDbHealth, getCategories, getCatalogSignature
+  closeDb, getDbHealth, getCategories, getCatalogSignature, checkpointWal
 } = require('./lib/db');
 const { SqliteSessionStore } = require('./lib/session-store');
 const { rateLimit } = require('./lib/middleware');
@@ -865,6 +865,7 @@ setInterval(() => {
     const n = expireStaleOrders();
     if (n > 0) log.info(`${n} order(s) that never reached the gateway expired; stock released`);
     cleanupExpired();
+    checkpointWal(); // WAL را سبک ادغام می‌کند تا فایل -wal بی‌رویه بزرگ نشود
   } catch (e) { log.error('Periodic cleanup failed', e); }
 
   if (reconcileRunning) return;
