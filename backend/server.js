@@ -690,7 +690,7 @@ function buildItemList(base) {
     }
   }));
   const dump = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
-  return dump({
+  return `<script type="application/ld+json" data-pg-ld="itemlist">${dump({
     '@context': 'https://schema.org',
     '@type': 'ItemList',
     '@id': `${base}/#top-products`,
@@ -699,7 +699,7 @@ function buildItemList(base) {
     numberOfItems: items.length,
     itemListOrder: 'https://schema.org/ItemListUnordered',
     itemListElement: items
-  });
+  })}</script>`;
 }
 function renderHomepage(req, res) {
   const base = siteBase(req);
