@@ -1737,8 +1737,8 @@ a.cart-row-title:hover{color:var(--teal);}
 }
 .otp-digit:focus{
   outline:none;
-  border-color:var(--gold);
-  box-shadow:0 0 0 4px rgba(245,185,90,.18),0 0 22px -4px var(--gold);
+  border-color:var(--teal);
+  box-shadow:0 0 0 4px rgba(28,201,173,.2),0 0 22px -4px var(--teal);
   transform:translateY(-2px);
 }
 .otp-digit:not(:placeholder-shown){
