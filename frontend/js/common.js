@@ -664,8 +664,10 @@ const PG = (function () {
     }
   }
 
-  // آیکون قلب در هدر (کنار سبد خرید) — روی همه‌ی صفحات یکسان تزریق می‌شود
+  // آیکون قلب در هدر (کنار سبد خرید) — روی همه‌ی صفحاتِ فروشگاه تزریق می‌شود
   function initHeaderWishIcon() {
+    // پنل ادمین هدرِ خودش را دارد؛ قلبِ فروشگاه این‌جا بی‌ربط است
+    if (document.body.classList.contains('admin-body')) return;
     const actions = document.querySelector('.header-actions');
     if (!actions || actions.querySelector('.wish-link')) return;
     const cartLink = actions.querySelector('a[href*="cart"]');
@@ -679,6 +681,8 @@ const PG = (function () {
 
   // ---------- نوار ناوبری پایین موبایل (مثل اپ‌های فروشگاهی) ----------
   function initBottomNav() {
+    // پنل ادمین ناوبریِ خودش را دارد؛ نوارِ مشتری این‌جا اضافه است
+    if (document.body.classList.contains('admin-body')) return;
     // صفحه‌های تمام‌صفحه (مثل ورود) نوار پایین نمی‌خواهند — تمرکز فقط روی فرم
     if (document.body.hasAttribute('data-no-bottom-nav')) return;
     if (document.querySelector('.bottom-nav')) return;
@@ -814,6 +818,8 @@ const PG = (function () {
 
   // نوار اطلاعیه/تعطیلی بالای سایت — متنش از پنل ← تنظیمات می‌آید
   async function initShopBar() {
+    // نوار اطلاعیه برای بازدیدکننده‌ی فروشگاه است؛ ادمین همان متن را در تنظیمات می‌بیند
+    if (document.body.classList.contains('admin-body')) return;
     if (document.body.classList.contains('auth-page')) return; // صفحه‌ی ورود، تمام‌صفحه است
     let info;
     try { info = await api('/shop/info'); } catch (e) { return; }

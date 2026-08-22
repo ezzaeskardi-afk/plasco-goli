@@ -10,7 +10,7 @@
 <link rel="preload" href="assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=52">
+<link rel="stylesheet" href="css/style.css?v=53">
 </head>
 <body class="admin-body">
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -647,7 +647,7 @@
 
       <label class="field-label">کالاها *</label>
       <div id="moRows"></div>
-      <button type="button" class="btn btn-outline btn-sm" id="moAddRow" class="mt-4">
+      <button type="button" class="btn btn-outline btn-sm mt-4" id="moAddRow">
         <svg><use href="#i-plus"/></svg> افزودن کالا
       </button>
 
@@ -718,7 +718,7 @@
           <div class="ad-img-row">
             <span class="ad-img-big" id="pmThumb"><svg><use href="#i-package"/></svg></span>
             <div class="stack-8">
-              <label class="btn btn-outline btn-sm" for="pmFile" class="cur-pointer"><svg><use href="#i-plus"/></svg> انتخاب عکس</label>
+              <label class="btn btn-outline btn-sm cur-pointer" for="pmFile"><svg><use href="#i-plus"/></svg> انتخاب عکس</label>
               <input id="pmFile" type="file" accept="image/jpeg,image/png,image/webp" class="hidden">
               <button type="button" class="btn btn-ghost btn-sm hidden" id="pmRemoveImg"><svg><use href="#i-trash"/></svg> حذف عکس</button>
               <small class="muted-sub fs-11">JPG / PNG / WebP — حداکثر ۲ مگابایت</small>
@@ -729,7 +729,7 @@
           <label>عکس‌های بیشتر (گالری — حداکثر ۸ عکس)</label>
           <div class="pm-gallery" id="pmGallery"></div>
           <div class="row-10-center mt-8">
-            <label class="btn btn-outline btn-sm" for="pmFileMore" class="cur-pointer"><svg><use href="#i-plus"/></svg> افزودن عکس به گالری</label>
+            <label class="btn btn-outline btn-sm cur-pointer" for="pmFileMore"><svg><use href="#i-plus"/></svg> افزودن عکس به گالری</label>
             <input id="pmFileMore" type="file" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
             <small class="muted-sub fs-11">مشتری در صفحه‌ی محصول همه را ورق می‌زند</small>
           </div>
@@ -737,7 +737,7 @@
         <div class="ad-field full">
           <label>مشخصات (اختیاری — مثلاً «گنجایش: ۳ لیتر»)</label>
           <div id="pmSpecs"></div>
-          <button type="button" class="btn btn-outline btn-sm" id="pmAddSpec" class="mt-8"><svg><use href="#i-plus"/></svg> افزودن مشخصه</button>
+          <button type="button" class="btn btn-outline btn-sm mt-8" id="pmAddSpec"><svg><use href="#i-plus"/></svg> افزودن مشخصه</button>
         </div>
         <div class="ad-field full">
           <label>آیکون (وقتی عکس ندارد نمایش داده می‌شود)</label>
@@ -802,7 +802,7 @@
       <input id="cmReason" type="text" maxlength="200" placeholder="مثلاً: انصراف مشتری / عدم موجودی">
     </div>
     <div class="ad-modal-foot">
-      <button type="button" class="btn btn-primary" id="cmConfirm" class="btn-coral">
+      <button type="button" class="btn btn-primary btn-coral" id="cmConfirm">
         <svg><use href="#i-ban"/></svg> لغو سفارش
       </button>
       <button type="button" class="btn btn-outline" id="cmDismiss">بی‌خیال</button>
@@ -810,7 +810,7 @@
   </div>
 </div>
 
-<script src="js/common.js?v=52" defer></script>
-<script src="js/admin.js?v=52" defer></script>
+<script src="js/common.js?v=53" defer></script>
+<script src="js/admin.js?v=53" defer></script>
 </body>
 </html>
