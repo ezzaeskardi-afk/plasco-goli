@@ -17,7 +17,8 @@
     "cluster": "CLUSTER_ENABLED=true node server.js",
     "logs:summary": "node tools/log-summary.js",
     "security:gitleaks": "gitleaks detect --redact --config ../gitleaks.toml --source ..",
-    "test:secrets": "node tests/secrets.js"
+    "test:secrets": "node tests/secrets.js",
+    "owasp": "node tests/owasp-scan.js"
   },
   "engines": {
     "node": ">=22.5"
