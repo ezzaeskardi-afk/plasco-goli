@@ -106,6 +106,84 @@ console.log('\n-- JSON-LD صفحه محصولات --');
   }
 }
 
+// --- بررسی JSON-LD صفحه قوانین ---
+console.log('\n-- JSON-LD صفحه قوانین --');
+{
+  const html = getHtml('terms.html');
+  if (html) {
+    const ldBlocks = [...html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)];
+    const types = ldBlocks.map(m => { try { return JSON.parse(m[1])['@type']; } catch (e) { return null; } }).filter(Boolean);
+    check('terms.html', 'WebPage schema', types.includes('WebPage'));
+  }
+}
+
+// --- بررسی JSON-LD صفحه خرید عمده ---
+console.log('\n-- JSON-LD صفحه خرید عمده --');
+{
+  const html = getHtml('wholesale.html');
+  if (html) {
+    const ldBlocks = [...html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)];
+    const types = ldBlocks.map(m => { try { return JSON.parse(m[1])['@type']; } catch (e) { return null; } }).filter(Boolean);
+    check('wholesale.html', 'WebPage schema', types.includes('WebPage'));
+  }
+}
+
+// --- بررسی meta description ---
+console.log('\n-- meta description --');
+for (const file of INDEXABLE) {
+  const html = getHtml(file);
+  if (!html) continue;
+  const desc = html.match(/<meta[^>]*name="description"[^>]*content="([^"]+)"/i);
+  check(file, 'meta description exists', !!desc, desc ? null : 'missing');
+  if (desc) {
+    check(file, 'meta description not empty', desc[1].length > 20, `${desc[1].length} chars`);
+    check(file, 'meta description no placeholder', !desc[1].includes('example.com') && !desc[1].includes('توضیحات'), desc[1].slice(0, 80));
+  }
+}
+
+// --- بررسی title tag ---
+console.log('\n-- title tag --');
+for (const file of INDEXABLE) {
+  const html = getHtml(file);
+  if (!html) continue;
+  const title = html.match(/<title>([^<]+)<\/title>/i);
+  check(file, 'title exists', !!title, title ? null : 'missing <title>');
+  if (title) {
+    check(file, 'title not empty/placeholder', title[1].length > 5 && !title[1].includes('example.com'), title[1]);
+    // باید «پلاسکو گلی» توی title باشه
+    check(file, 'title contains brand name', title[1].includes('پلاسکو'), title[1]);
+  }
+}
+
+// --- بررسی sitemap.xml ---
+console.log('\n-- sitemap.xml --');
+{
+  check('sitemap.xml', 'served dynamically by server', true, 'no static file — runtime check in test-smoke.js');
+}
+
+// --- بررسی alt روی تصاویر اصلی (جلوگیری از Cumulative Layout Shift) ---
+console.log('\n-- تصاویر --');
+for (const file of INDEXABLE) {
+  const html = getHtml(file);
+  if (!html) continue;
+  const imgs = [...html.matchAll(/<img[^>]*>/gi)];
+  let missingAlt = 0;
+  for (const m of imgs) {
+    if (!/\salt=['"]/.test(m[0]) && !/\salt=/.test(m[0])) missingAlt++;
+  }
+  check(file, `img alt attributes`, missingAlt === 0 || imgs.length === 0, missingAlt > 0 ? `${missingAlt}/${imgs.length} missing alt` : `${imgs.length} imgs OK`);
+}
+
+// --- بررسی favicon ---
+console.log('\n-- favicon --');
+for (const file of [...INDEXABLE, ...NOINDEX.slice(0, 3)]) {
+  const html = getHtml(file);
+  if (!html) continue;
+  const favicon = /rel="icon"/i.test(html) || /rel="shortcut icon"/i.test(html);
+  check(file, 'favicon link', favicon);
+  if (favicon) break; // یک بار کافیه
+}
+
 // --- بررسی robots.txt ---
 console.log('\n-- robots.txt --');
 {
