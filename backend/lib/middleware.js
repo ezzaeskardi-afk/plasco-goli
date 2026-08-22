@@ -70,6 +70,10 @@ function rateLimit({ windowMs, max, message, skipSuccess = false, keyBy = 'ip' }
       hits.set(key, rec);
     }
     rec.count += 1;
+    // سهمیه‌ی این پنجره به‌صورت هدر استاندارد هم اعلام می‌شود تا کلاینت/دیباگر
+    // بتواند رفتارش را تنظیم کند، نه اینکه فقط ۴۲۹ِ یکباره بگیرد.
+    res.setHeader('X-RateLimit-Limit', String(max));
+    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, max - rec.count)));
     if (rec.count > max) {
       res.setHeader('Retry-After', Math.ceil((rec.resetAt - now) / 1000));
       return res.status(429).json({ error: message || 'تعداد درخواست‌ها زیاد است؛ کمی بعد دوباره تلاش کنید' });

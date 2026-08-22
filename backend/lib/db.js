@@ -693,6 +693,20 @@ function getProduct(id) { return stmtProductById.get(Number(id)); }
 function getPublicProducts() { return stmtPublicProducts.all(); }
 function getPublicProduct(id) { return stmtPublicProductById.get(Number(id)); }
 
+// محصولات مرتبط (همین دسته، غیر از خودش) — موجودها اول، بعد تازه‌ترین‌ها.
+// هم برای «همچنین بخرید» روی صفحه‌ی محصول، هم برای لینک‌سازی داخلی (سئو).
+const stmtRelatedProducts = db.prepare(`
+  SELECT * FROM products
+  WHERE published = 1 AND id <> ? AND category = ?
+  ORDER BY (stock > 0) DESC, id DESC
+  LIMIT ?`);
+function getRelatedProducts(id, limit = 6) {
+  const p = getPublicProduct(id);
+  if (!p) return [];
+  const cap = Math.min(Math.max(parseInt(limit, 10) || 6, 1), 12);
+  return stmtRelatedProducts.all(Number(id), String(p.category), cap);
+}
+
 // قیمت‌گذاری عمده (B2B): اگر کالا حد نصاب و درصد تخفیف داشته باشد، قیمت واحدِ
 // پس از تخفیف عمده را می‌دهد. null یعنی عمده‌فروشی برای این کالا تعریف نشده.
 // وقتی qty داده شود، applies هم می‌گوید که با این تعداد واقعاً عمده حساب می‌شود یا نه.
@@ -2695,7 +2709,7 @@ module.exports = {
   getProducts, getProduct, upsertProductsTx,
   // نسخه‌های عمومی — پیش‌نویس‌ها را نشان نمی‌دهند (ستون published)
   getPublicProducts, getPublicProduct, setProductPublished, getDraftSummary, batchHasOrders, deleteBatch,
-  queryProducts, getCatalogSignature, getCatalogFacets, getCategories, wholesaleInfo,
+  queryProducts, getCatalogSignature, getCatalogFacets, getCategories, wholesaleInfo, getRelatedProducts,
   reserveStock, releaseStock,
   findOrCreateUser, stmtUserById, updateUserName,
   setUserPassword, getUserByPhone,

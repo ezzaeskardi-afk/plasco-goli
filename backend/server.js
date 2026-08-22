@@ -19,6 +19,7 @@ const { staticCompress, compressJson, sendHtml } = require('./lib/static-compres
 const { webpNegotiate } = require('./lib/webp-negotiate');
 const { isLive: paymentLive } = require('./lib/payment');
 const { reconcileStaleOrders } = require('./lib/reconcile');
+const { metricsMiddleware } = require('./lib/metrics');
 
 const productsRoute = require('./routes/products');
 const cartRoute = require('./routes/cart');
@@ -190,6 +191,9 @@ app.use((req, res, next) => {
   res.on('finish', () => log.accessLog(req, res, Date.now() - start));
   next();
 });
+
+// متریک درخواست/تأخیر برای پنل «کارایی سرور» (درون‌حافظه، بدون وابستگی)
+app.use(metricsMiddleware);
 
 // ---------- نبض سرویس ----------
 // آدرس سبکی که مانیتورینگ (UptimeRobot، پروب داکر/کوبرنتیز، یا حتی یک اسکریپت

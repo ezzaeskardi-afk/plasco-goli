@@ -288,7 +288,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           tone: s.pending_reviews ? 'gold' : '', jump: 'reviews',
           sub: s.pending_reviews ? 'تا تأیید نکنید روی سایت نمی‌رود' : 'صف خالی است' }),
         kpi({ label: 'بازدید امروز سایت', num: money(s.today_visits || 0), unit: 'بازدید', icon: 'i-eye', tone: 'blue',
-          sub: 'شمارش صفحه‌ها، بدون ردیابی شخصی' })
+          sub: 'شمارش صفحه‌ها، بدون ردیابی شخصی' }),
+        kpi({ label: 'کارایی سرور', num: money(d.metrics ? d.metrics.slowRequests : 0), unit: 'درخواست کند', icon: 'i-database',
+          tone: (d.metrics && d.metrics.slowRequests > 0) ? 'coral' : '',
+          sub: d.metrics ? `p95: ${money(d.metrics.p95Ms)}ms · ${money(d.metrics.totalRequests)} درخواست` : '' })
       ].join('');
 
       drawChart($('chartHost'), d.series);

@@ -37,6 +37,7 @@ const { imageSizeFromBuffer } = require('../lib/imagesize');
 const { stripImageMetadata } = require('../lib/image-clean');
 const { queueVariants } = require('../lib/image-encode');
 const { errorDigest } = require('../lib/error-digest');
+const { snapshot: metricsSnapshot } = require('../lib/metrics');
 
 const log = require('../lib/logger');
 
@@ -143,7 +144,15 @@ router.get('/overview', (req, res) => {
   const ov = getAdminOverview();
   // تعداد درخواست‌های عمده‌ی دیده‌نشده برای بجِ سایدبار
   ov.newWholesaleRequests = countNewWholesaleRequests();
+  // کارایی سرور (درخواست/تأخیر) برای کارت داشبورد
+  ov.metrics = metricsSnapshot();
   res.json(ov);
+});
+
+// کارایی سرور — متریک درخواست/تأخیر (فقط ادمین؛ مسیر /orders نیست پس requireAdmin اعمال شده)
+router.get('/metrics', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(metricsSnapshot());
 });
 
 // نمودار فروش با بازه‌ی دلخواه (۷ تا ۹۰ روز)

@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   getPublicProducts, getPublicProduct, queryProducts, getCatalogSignature, getCatalogFacets,
-  getRatingsMap, getProductReviews, upsertReview, addStockAlert, getUserPhone, wholesaleInfo
+  getRatingsMap, getProductReviews, upsertReview, addStockAlert, getUserPhone, wholesaleInfo, getRelatedProducts
 } = require('../lib/db');
 const { etagJson, validate, V, requireAuth, rateLimit } = require('../lib/middleware');
 
@@ -190,6 +190,18 @@ router.get('/:id', (req, res) => {
   if (etagJson(req, res, `p${product.id}-${String(product.updated_at).replace(/\D/g, '')}-${product.stock}-r${r.count}.${r.avg}`, { maxAge: 30 })) return;
 
   res.json({ product: serializeProduct(product, ratings) });
+});
+
+// ---------- محصولات مرتبط (همچنین بخرید) ----------
+router.get('/:id/related', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'شناسه‌ی محصول معتبر نیست' });
+  const related = getRelatedProducts(id, 6);
+  const ratings = getRatingsMap();
+  // امضا = شناسه‌ها + موجودی‌ها تا با هر تغییرِ این قفسه کش مرورگر باطل شود
+  const sig = `rel${id}-${related.map(p => `${p.id}.${p.stock}`).join(',')}`;
+  if (etagJson(req, res, sig, { maxAge: 60 })) return;
+  res.json({ products: related.map(p => serializeProduct(p, ratings)) });
 });
 
 // ---------- نظرات یک محصول ----------

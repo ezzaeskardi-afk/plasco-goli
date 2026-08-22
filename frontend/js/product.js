@@ -414,14 +414,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.head.appendChild(el);
   }
 
-  // محصولات هم‌دسته (حداکثر ۴ تا)
-  // فقط همین چند کالا از سرور خواسته می‌شود، نه کل کاتالوگ. ۵ تا می‌گیریم
-  // چون ممکن است خودِ همین محصول هم بین‌شان باشد و کنار گذاشته شود.
+  // محصولات مرتبط (هم‌دسته، غیر از خودش) — سرور موجودها را اول می‌گذارد تا
+  // «همچنین بخرید» هیچ‌وقت با کالای ناموجود شروع نشود.
   async function loadRelated(p) {
     try {
-      const res = await PG.api(`/products?category=${encodeURIComponent(p.category)}&limit=5&sort=newest`);
-      const products = res.products || [];
-      const related = products.filter(x => x.id !== p.id).slice(0, 4);
+      const res = await PG.api(`/products/${encodeURIComponent(p.id)}/related`);
+      const related = (res.products || []).slice(0, 4);
       if (!related.length) return;
       document.getElementById('pdRelated').innerHTML = related.map(renderRelatedCard).join('');
       document.getElementById('pdRelatedWrap').classList.remove('hidden');
