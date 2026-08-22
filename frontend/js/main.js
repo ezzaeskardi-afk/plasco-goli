@@ -42,40 +42,47 @@ document.addEventListener('DOMContentLoaded', async () => {
   // اسکلت لودینگ تا رسیدن پاسخ سرور
   grid.innerHTML = skeletonHtml();
 
-  // فقط دسته‌ها و بازه‌ی قیمت را می‌گیریم — چند بایت، به‌جای دانلود کل کاتالوگ
-  try {
-    const facets = await PG.api('/products/facets');
-    // facets آیتم‌ها را به شکل {category, n} می‌دهد و رویداد pg:cats به شکل {name} —
-    // هر دو را می‌پذیریم تا این تفاوت بی‌سروصدا لیست دسته‌ها را خالی نکند
-    CATEGORIES = (facets.categories || [])
-      .map(c => (typeof c === 'string' ? c : (c.category || c.name)))
-      .filter(Boolean);
-    // شمارشِ هر دسته را هم برمی‌داریم (اگر سرور داده باشد) تا دکمه‌ی پایینِ
-      // بخش عددِ درست بگوید. جمعِ دسته‌ها = کلِ کاتالوگِ منتشرشده.
-    CAT_COUNTS = new Map();
-    for (const c of (facets.categories || [])) {
-      if (c && typeof c === 'object' && Number.isFinite(c.n)) {
-        CAT_COUNTS.set(c.category || c.name, c.n);
-      }
-    }
-    CATALOG_TOTAL = [...CAT_COUNTS.values()].reduce((a, b) => a + b, 0);
-    buildFilterPills(CATEGORIES);
-  } catch (e) { /* بدون قرص‌های دسته هم ویترین باید بالا بیاید */ }
-  syncAllProductsCta();
-  initFilterToolbar();
-
-  // اگر از صفحه‌ی دیگری با ?cat= یا ?q= آمدیم، همان فیلتر اعمال شود
+  // اگر از صفحه‌ی دیگری با ?cat= یا ?q= آمدیم، همان فیلتر را از همین اول
+  // می‌خوانیم تا درخواستِ محصولات با فیلترِ درست برود و منتظر facets نماند.
   const params = new URLSearchParams(location.search);
   const cat = params.get('cat');
   const q = params.get('q');
-  if (cat && CATEGORIES.includes(cat)) ACTIVE_CAT = cat;
+  if (cat) ACTIVE_CAT = cat;
   if (q) {
     SEARCH_QUERY = q;
     const input = document.getElementById('siteSearch');
     if (input) input.value = q;
   }
-  syncPills();
+
+  // دو درخواستِ مستقل همزمان می‌روند: facets (قرص‌های دسته و بازه‌ی قیمت) و
+  // اولین صفحه‌ی محصولات. قبلاً محصولات `await facets` می‌شد، یعنی ویترین یک
+  // رفت‌وبرگشتِ کامل دیرتر بالا می‌آمد.
+  const facetsP = PG.api('/products/facets')
+    .then((facets) => {
+      // facets آیتم‌ها را به شکل {category, n} می‌دهد و رویداد pg:cats به شکل {name} —
+      // هر دو را می‌پذیریم تا این تفاوت بی‌سروصدا لیست دسته‌ها را خالی نکند
+      CATEGORIES = (facets.categories || [])
+        .map(c => (typeof c === 'string' ? c : (c.category || c.name)))
+        .filter(Boolean);
+      // شمارشِ هر دسته را هم برمی‌داریم (اگر سرور داده باشد) تا دکمه‌ی پایینِ
+      // بخش عددِ درست بگوید. جمعِ دسته‌ها = کلِ کاتالوگِ منتشرشده.
+      CAT_COUNTS = new Map();
+      for (const c of (facets.categories || [])) {
+        if (c && typeof c === 'object' && Number.isFinite(c.n)) {
+          CAT_COUNTS.set(c.category || c.name, c.n);
+        }
+      }
+      CATALOG_TOTAL = [...CAT_COUNTS.values()].reduce((a, b) => a + b, 0);
+      buildFilterPills(CATEGORIES);
+      syncPills();
+      syncAllProductsCta();
+    })
+    .catch(() => { /* بدون قرص‌های دسته هم ویترین باید بالا بیاید */ });
+
+  initFilterToolbar();
+  syncAllProductsCta();
   await renderGrid();
+  await facetsP; // قرص‌ها اگر هنوز نرسیده‌اند، بدون مسدود کردنِ گرید صبر می‌کنند
   // دیتای ساخت‌یافته از همان صفحه‌ی اول ساخته می‌شود (گوگل به کل کاتالوگ نیاز ندارد)
   injectProductSchema(PAGE_ITEMS);
   if (cat || q) document.getElementById('products')?.scrollIntoView();
@@ -479,7 +486,7 @@ async function renderGrid(opts = {}) {
   updateResultCount(TOTAL, meta.fuzzy);
 
   const oldCount = grid.querySelectorAll('.product-card').length;
-  grid.innerHTML = PAGE_ITEMS.map(renderProductCard).join('');
+  grid.innerHTML = PAGE_ITEMS.map((p, i) => renderProductCard(p, i)).join('');
   syncLoadMore();
   PG.syncWishHearts();
   // کارت‌های تازه‌آمده پلکانی وارد می‌شوند؛ اگر «نمایش بیشتر» زده شده
@@ -688,18 +695,24 @@ let RECENT_ITEMS = []; // برای «نمای سریع»؛ این‌ها در PA
   const items = await PG.recentProducts({ limit: 4 });
   if (!items.length) return;          // همه‌شان حذف شده بودند
   RECENT_ITEMS = items;
-  document.getElementById('recentGrid').innerHTML = items.map(renderProductCard).join('');
+  // بخش «اخیراً دیده‌اید» همیشه پایینِ صفحه است؛ همه‌ی کارت‌هایش lazy می‌مانند
+  document.getElementById('recentGrid').innerHTML = items.map((p) => renderProductCard(p, 99)).join('');
   wrap.hidden = false;
   PG.syncWishHearts();
 })();
 
-function renderProductCard(p) {
+function renderProductCard(p, index = 99) {
   const outOfStock = typeof p.stock === 'number' && p.stock <= 0;
   // آستانه از تنظیمات پنل می‌آید نه عدد ثابت؛ «فقط N عدد مانده» باید راست باشد
   const lowStock = typeof p.stock === 'number' && p.stock > 0 && p.stock <= PG.lowStockAt();
   const title = PG.esc(p.title);
+  // چهار کارتِ اولِ ویترین بالای تاخور دیده می‌شوند؛ به‌جای lazy، فوری لود
+  // می‌شوند (و اولین‌شان fetchpriority بالا می‌گیرد) تا تصویرِ اصلی زودتر بیاید.
+  // width/height = نسبتِ مربعیِ کارت (aspect-ratio:1/1 در CSS) برای جلوگیری از
+  // جابه‌جاییِ چیدمان پیش از رسیدنِ عکس.
   const media = p.image
-    ? `<img src="${PG.esc(PG.cardImg(p.image))}"${PG.imgSizing(p.image)} alt="${title}" loading="lazy" decoding="async">`
+    ? `<img src="${PG.esc(PG.cardImg(p.image))}"${PG.imgSizing(p.image)} alt="${title}" width="560" height="560"
+         ${index === 0 ? 'fetchpriority="high" decoding="sync"' : index < 4 ? 'decoding="sync"' : 'loading="lazy" decoding="async"'}>`
     : `<svg role="img" aria-label="${title}"><use href="#${PG.esc(p.icon)}"/></svg>`;
   return `
     <article class="product-card" data-id="${p.id}">
