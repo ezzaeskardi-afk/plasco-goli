@@ -51,6 +51,7 @@
         <button data-view="orders"><svg><use href="#i-package"/></svg> سفارش‌ها <span class="nav-count" id="navOrders">—</span></button>
         <button data-view="stock"><svg><use href="#i-warehouse"/></svg> انبار و کالا <span class="nav-count" id="navStock">—</span></button>
         <button data-view="people"><svg><use href="#i-users"/></svg> مشتری‌ها <span class="nav-count" id="navPeople">—</span></button>
+        <button data-view="crm"><svg><use href="#i-note"/></svg> CRM مشتریان <span class="nav-count" id="navCrm">—</span></button>
         <button data-view="reviews"><svg><use href="#i-quote"/></svg> نظرات <span class="nav-count" id="navReviews">—</span></button>
         <button data-view="coupons"><svg><use href="#i-tag"/></svg> تخفیف‌ها</button>
         <button data-view="report"><svg><use href="#i-chart"/></svg> گزارش‌ها</button>
@@ -298,6 +299,53 @@
 
         <div class="ad-result-bar" id="userResultBar"></div>
         <div class="ad-people" id="usersHost"></div>
+      </section>
+
+      <!-- ---------------- CRM ---------------- -->
+      <section class="admin-view hidden" id="viewCrm">
+        <div class="ad-head">
+          <div>
+            <h1>CRM مشتریان</h1>
+            <p>مدیریت ارتباط با مشتری: برچسب‌گذاری و سگمنت، یادداشت پرونده و پیگیری‌های برنامه‌ریزی‌شده. روی هر مشتری بزنید تا پرونده‌اش باز شود.</p>
+          </div>
+          <div class="ad-head-actions">
+            <button class="btn btn-outline btn-sm" id="btnCrmTag"><svg><use href="#i-plus"/></svg> برچسب جدید</button>
+          </div>
+        </div>
+
+        <div class="ad-kpis" id="crmKpis"></div>
+
+        <div class="crm-layout">
+          <div class="crm-list-pane">
+            <div class="ad-toolbar">
+              <div class="ad-search" id="crmSearchWrap">
+                <svg><use href="#i-search"/></svg>
+                <input type="search" id="crmSearch" placeholder="نام یا شماره‌ی موبایل…" autocomplete="off">
+                <button class="clear-x" type="button" id="crmSearchClear" aria-label="پاک کردن">✕</button>
+              </div>
+              <select class="ad-select" id="crmFilter" aria-label="فیلتر">
+                <option value="all">همه</option>
+                <option value="buyers">فقط خریدارها</option>
+                <option value="idle">بدون خرید</option>
+                <option value="followups">پیگیری باز</option>
+              </select>
+              <select class="ad-select" id="crmSort" aria-label="ترتیب">
+                <option value="activity">آخرین فعالیت</option>
+                <option value="spent">بیشترین خرید</option>
+                <option value="orders">بیشترین سفارش</option>
+                <option value="new">تازه‌ترین عضو</option>
+                <option value="name">حروف الفبا</option>
+              </select>
+            </div>
+            <div class="ad-chips" id="crmTagChips"></div>
+            <div class="ad-result-bar" id="crmResultBar"></div>
+            <div class="crm-list" id="crmList"></div>
+            <div class="crm-pager" id="crmPager"></div>
+          </div>
+          <div class="crm-detail-pane" id="crmDetailPane">
+            <div class="empty-state"><svg><use href="#i-note"/></svg><h3>یک مشتری را انتخاب کنید</h3></div>
+          </div>
+        </div>
       </section>
 
       <!-- ---------------- گزارش‌ها ---------------- -->
@@ -713,6 +761,28 @@
       <button class="x" type="button" id="umClose" aria-label="بستن"><svg><use href="#i-close"/></svg></button>
     </div>
     <div id="umBody"></div>
+  </div>
+</div>
+
+<!-- ================= مودال برچسب CRM ================= -->
+<div class="ad-modal" id="crmTagModal">
+  <div class="ad-modal-box" role="dialog" aria-modal="true" aria-labelledby="ctTitle">
+    <div class="ad-modal-head">
+      <h3 id="ctTitle">برچسب جدید</h3>
+      <button class="x" type="button" id="ctClose" aria-label="بستن"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="ad-field">
+      <label for="ctName">نام برچسب</label>
+      <input id="ctName" type="text" maxlength="30" placeholder="مثلاً: ویژه / عمده‌خر / پیگیری بعد">
+    </div>
+    <div class="ad-field">
+      <label for="ctColor">رنگ</label>
+      <input id="ctColor" type="color" value="#2BD9BC">
+    </div>
+    <div class="ad-modal-foot">
+      <button type="button" class="btn btn-outline" id="ctCancel">انصراف</button>
+      <button type="button" class="btn btn-primary" id="ctSave"><svg><use href="#i-save"/></svg> ساخت برچسب</button>
+    </div>
   </div>
 </div>
 

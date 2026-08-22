@@ -24,7 +24,10 @@ const {
   getProductsWithSales, getUserDetail, logAdminAction, getAdminLog,
   getSettings, setSettingsTx, backupNow, getDbHealth, checkIntegrity,
   findOrCreateUser, updateUserName, createManualOrderTx,
-  getPendingStockAlerts, markStockAlertsNotified
+  getPendingStockAlerts, markStockAlertsNotified,
+  crmGetSummary, crmSearchCustomers, crmGetCustomer,
+  crmListTags, crmCreateTag, crmDeleteTag, crmSetUserTags,
+  crmAddNote, crmDeleteNote, crmAddTask, crmToggleTask, crmDeleteTask
 } = require('../lib/db');
 const { rateLimit, asyncHandler } = require('../lib/middleware');
 const { isAdminPhone, normalizePhone, isValidIranPhone } = require('../lib/phone');
@@ -222,6 +225,86 @@ router.post('/users/:id/staff', (req, res) => {
   if (!user) return res.status(404).json({ error: 'کاربر پیدا نشد' });
   note(req, on ? 'staff_grant' : 'staff_revoke', `#${id}`);
   res.json({ ok: true, isStaff: Boolean(user.is_staff) });
+});
+
+// ---------- CRM ----------
+// مدیریت ارتباط با مشتری: برچسب/سگمنت، یادداشت پرونده و پیگیری/یادآور.
+// خطاهای اعتبارسنجی crmErr (status) را با همان کد برمی‌گردانیم؛ بقیه به هندلر سراسری می‌رود.
+function crmWrap(handler) {
+  return (req, res) => {
+    try { handler(req, res); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  };
+}
+
+// خلاصه + برچسب‌ها در یک درخواست (برای باز شدن اولیه‌ی بخش CRM)
+router.get('/crm/summary', (req, res) => {
+  res.json({ summary: crmGetSummary(), tags: crmListTags() });
+});
+
+// جستجوی مشتری‌ها با برچسب/فیلتر/مرتب‌سازی/صفحه‌بندی
+router.get('/crm/customers', crmWrap((req, res) => {
+  res.json(crmSearchCustomers({
+    q: req.query.q, tag: req.query.tag, filter: req.query.filter,
+    sort: req.query.sort, limit: req.query.limit, offset: req.query.offset
+  }));
+}));
+
+// پرونده‌ی کامل مشتری (مشخصات + سفارش‌ها + برچسب/یادداشت/پیگیری)
+router.get('/crm/customers/:id', (req, res) => {
+  const customer = crmGetCustomer(req.params.id);
+  if (!customer) return res.status(404).json({ error: 'مشتری پیدا نشد' });
+  res.json({ customer });
+});
+
+// یادداشت
+router.post('/crm/customers/:id/notes', crmWrap((req, res) => {
+  const n = crmAddNote(req.params.id, req.session.userId, req.body?.body);
+  note(req, 'crm_note_add', `#${req.params.id}`);
+  res.status(201).json({ note: n });
+}));
+router.delete('/crm/notes/:id', (req, res) => {
+  if (!crmDeleteNote(req.params.id)) return res.status(404).json({ error: 'یادداشت پیدا نشد' });
+  note(req, 'crm_note_delete', `#${req.params.id}`);
+  res.json({ ok: true });
+});
+
+// پیگیری/یادآور
+router.post('/crm/customers/:id/tasks', crmWrap((req, res) => {
+  const t = crmAddTask(req.params.id, req.session.userId, req.body?.title, req.body?.dueAt);
+  note(req, 'crm_task_add', `#${req.params.id}`);
+  res.status(201).json({ task: t });
+}));
+router.patch('/crm/tasks/:id', (req, res) => {
+  const t = crmToggleTask(req.params.id, !!req.body?.done);
+  if (!t) return res.status(404).json({ error: 'پیگیری پیدا نشد' });
+  note(req, 'crm_task_toggle', `#${req.params.id}`);
+  res.json({ task: t });
+});
+router.delete('/crm/tasks/:id', (req, res) => {
+  if (!crmDeleteTask(req.params.id)) return res.status(404).json({ error: 'پیگیری پیدا نشد' });
+  note(req, 'crm_task_delete', `#${req.params.id}`);
+  res.json({ ok: true });
+});
+
+// برچسب‌ها
+router.get('/crm/tags', (req, res) => res.json({ tags: crmListTags() }));
+router.post('/crm/tags', crmWrap((req, res) => {
+  const t = crmCreateTag(req.body?.name, req.body?.color);
+  note(req, 'crm_tag_add', t.name);
+  res.status(201).json({ tag: t });
+}));
+router.delete('/crm/tags/:id', (req, res) => {
+  if (!crmDeleteTag(req.params.id)) return res.status(404).json({ error: 'برچسب پیدا نشد' });
+  note(req, 'crm_tag_delete', `#${req.params.id}`);
+  res.json({ ok: true });
+});
+
+// برچسب‌های یک مشتری
+router.put('/crm/customers/:id/tags', (req, res) => {
+  if (!crmSetUserTags(req.params.id, req.body?.tagIds)) return res.status(404).json({ error: 'مشتری پیدا نشد' });
+  note(req, 'crm_tags_set', `#${req.params.id}`);
+  res.json({ ok: true });
 });
 
 // ---------- سفارش‌ها ----------

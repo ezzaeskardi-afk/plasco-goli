@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ============================================================
   // ناوبری بخش‌ها (با هش آدرس، تا رفرش همان‌جا بماند)
   // ============================================================
-  const VIEWS = ['dash', 'orders', 'stock', 'people', 'reviews', 'coupons', 'report', 'config', 'log', 'errors'];
+  const VIEWS = ['dash', 'orders', 'stock', 'people', 'crm', 'reviews', 'coupons', 'report', 'config', 'log', 'errors'];
   const LOADED = new Set();
 
   function show(view) {
@@ -1505,6 +1505,306 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // ============================================================
+  // ۴.۵) CRM — مدیریت ارتباط با مشتری
+  // ============================================================
+  let CRM_TAGS = [];
+  let CRM_DETAIL = null;
+  let CRM_SEL = null;
+  const CRMQ = { q: '', tag: '', filter: 'all', sort: 'activity', page: 0 };
+  const CRM_PAGE = 40;
+
+  function crmTodayIso() {
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+  function crmTagColor(name) {
+    const t = CRM_TAGS.find(x => x.name === name);
+    return t ? t.color : '#2BD9BC';
+  }
+  function crmTagPill(t) {
+    const color = t.color || crmTagColor(t.name);
+    return `<span class="crm-tag" style="background:${color}22;color:${color}"><span class="dot" style="background:${color}"></span>${esc(t.name)}</span>`;
+  }
+
+  async function loadCrm() {
+    $('crmList').innerHTML = skel(5);
+    $('crmKpis').innerHTML = '';
+    try {
+      const { summary, tags } = await PG.api('/admin/crm/summary');
+      CRM_TAGS = tags;
+      $('crmKpis').innerHTML = [
+        kpi({ label: 'کل مشتری‌ها', num: money(summary.totalCustomers), unit: 'نفر', icon: 'i-users' }),
+        kpi({ label: 'پیگیری باز', num: money(summary.openTasks), unit: 'مورد', icon: 'i-clock', tone: 'gold', sub: `${money(summary.dueTasks)} سررسیدشده` }),
+        kpi({ label: 'برچسب‌خورده', num: money(summary.tagged), unit: 'نفر', icon: 'i-tag', tone: 'blue' }),
+        kpi({ label: 'یادداشت‌ها', num: money(summary.totalNotes), unit: 'عدد', icon: 'i-note', tone: 'purple' })
+      ].join('');
+      $('navCrm').textContent = money(summary.openTasks);
+      $('navCrm').classList.toggle('urgent', summary.dueTasks > 0);
+      renderCrmTagChips();
+      await loadCrmList();
+    } catch (e) {
+      $('crmList').innerHTML = `<div class="alert alert-error"><svg><use href="#i-alert"/></svg><span>${esc(e.message)}</span></div>`;
+    }
+  }
+
+  function renderCrmTagChips() {
+    $('crmTagChips').innerHTML = [
+      `<button class="ad-chip ${!CRMQ.tag ? 'active' : ''}" data-tag="">همه</button>`,
+      ...CRM_TAGS.map(t => `<button class="ad-chip ${CRMQ.tag === t.name ? 'active' : ''}" data-tag="${esc(t.name)}">${esc(t.name)}</button>`)
+    ].join('');
+  }
+
+  async function loadCrmList() {
+    $('crmList').innerHTML = skel(5);
+    const p = new URLSearchParams({ sort: CRMQ.sort, filter: CRMQ.filter, limit: CRM_PAGE, offset: CRMQ.page * CRM_PAGE });
+    if (CRMQ.q) p.set('q', CRMQ.q);
+    if (CRMQ.tag) p.set('tag', CRMQ.tag);
+    try {
+      const d = await PG.api(`/admin/crm/customers?${p}`);
+      renderCrmList(d);
+    } catch (e) {
+      $('crmList').innerHTML = `<div class="alert alert-error"><svg><use href="#i-alert"/></svg><span>${esc(e.message)}</span></div>`;
+    }
+  }
+
+  function renderCrmList(d) {
+    const pages = Math.max(1, Math.ceil(d.total / CRM_PAGE));
+    $('crmResultBar').innerHTML = `<span><b>${money(d.total)}</b> مشتری</span>${CRMQ.tag ? `<span>برچسب: <b>${esc(CRMQ.tag)}</b></span>` : ''}`;
+    if (!d.customers.length) {
+      $('crmList').innerHTML = `<div class="empty-state"><svg><use href="#i-users"/></svg><h3>مشتری‌ای با این فیلترها نیست</h3></div>`;
+      $('crmPager').innerHTML = '';
+      return;
+    }
+    $('crmList').innerHTML = d.customers.map(c => `
+      <div class="crm-row ${CRM_SEL === c.id ? 'active' : ''}" data-id="${c.id}" role="button" tabindex="0">
+        <span class="ad-thumb round"><svg><use href="#i-user"/></svg></span>
+        <span class="grow">
+          <b>${esc(c.fullName || 'بدون نام')}</b>
+          <small><bdo dir="ltr">${esc(c.phone)}</bdo></small>
+          ${c.tags.length ? `<span class="crm-tags">${c.tags.map(n => crmTagPill({ name: n })).join('')}</span>` : ''}
+        </span>
+        <span class="crm-row-stats">
+          <b>${money(c.totalSpent)}</b>
+          <small>${money(c.paidOrders)} سفارش</small>
+        </span>
+      </div>`).join('');
+    $('crmPager').innerHTML = pages > 1 ? `
+      <button class="btn btn-outline btn-sm" id="crmPrev" ${CRMQ.page === 0 ? 'disabled' : ''}><svg><use href="#i-chevron-right"/></svg> قبلی</button>
+      <b>صفحه ${money(CRMQ.page + 1)} از ${money(pages)}</b>
+      <button class="btn btn-outline btn-sm" id="crmNext" ${CRMQ.page >= pages - 1 ? 'disabled' : ''}>بعدی <svg><use href="#i-chevron-left"/></svg></button>` : '';
+  }
+
+  async function openCrmCustomer(id) {
+    CRM_SEL = id;
+    document.querySelectorAll('.crm-row').forEach(r => r.classList.toggle('active', Number(r.dataset.id) === id));
+    $('crmDetailPane').innerHTML = skel(3);
+    try {
+      const { customer } = await PG.api(`/admin/crm/customers/${id}`);
+      CRM_DETAIL = customer;
+      renderCrmDetail(customer);
+    } catch (e) {
+      $('crmDetailPane').innerHTML = `<div class="alert alert-error"><svg><use href="#i-alert"/></svg><span>${esc(e.message)}</span></div>`;
+    }
+  }
+
+  function crmTaskRow(t) {
+    const overdue = t.dueAt && !t.done && t.dueAt < crmTodayIso();
+    return `<div class="crm-task ${t.done ? 'done' : ''} ${overdue ? 'overdue' : ''}" data-id="${t.id}">
+      <button class="icon-btn crm-task-toggle" title="${t.done ? 'باز کردن' : 'انجام شد'}" aria-label="تغییر وضعیت"><svg><use href="#${t.done ? 'i-check-circle' : 'i-check'}"/></svg></button>
+      <span class="crm-task-title">${esc(t.title)}${t.dueAt ? `<small>سررسید: ${esc(faDate(t.dueAt))}${overdue ? ' · دیر شده' : ''}</small>` : ''}</span>
+      <button class="icon-btn danger crm-task-del" title="حذف" aria-label="حذف"><svg><use href="#i-trash"/></svg></button>
+    </div>`;
+  }
+
+  function renderCrmDetail(c) {
+    const s = c.summary;
+    const tagEditor = CRM_TAGS.length
+      ? `<div class="crm-tag-editor">${CRM_TAGS.map(t => {
+          const on = c.tags.some(x => x.id === t.id);
+          return `<span class="crm-tag ${on ? 'on' : ''}" data-tagid="${t.id}" role="button" tabindex="0" style="background:${t.color}22;color:${t.color}"><span class="dot" style="background:${t.color}"></span>${esc(t.name)}</span>`;
+        }).join('')}</div>`
+      : '<small class="muted">هنوز برچسبی نساخته‌اید — از دکمهٔ «برچسب جدید» بالا بسازید.</small>';
+
+    $('crmDetailPane').innerHTML = `
+      <div class="crm-sec">
+        <div class="ad-person-top">
+          <span class="ad-thumb round"><svg><use href="#i-user"/></svg></span>
+          <span class="grow">
+            <b>${esc(c.fullName || 'بدون نام')}</b>
+            <bdo class="ap-phone" dir="ltr">${esc(c.phone)}</bdo>
+          </span>
+          <a class="btn btn-outline btn-sm" href="tel:${esc(c.phone)}"><svg><use href="#i-phone"/></svg></a>
+        </div>
+        <div class="ad-person-stats">
+          <div><b>${money(s.paidOrders)}</b><small>سفارش موفق</small></div>
+          <div><b>${money(s.totalSpent)}</b><small>تومان خرید</small></div>
+        </div>
+        <div class="crm-tags">${c.tags.length ? c.tags.map(crmTagPill).join('') : '<small class="muted">بدون برچسب</small>'}</div>
+      </div>
+
+      <div class="crm-sec">
+        <div class="crm-sec-head"><svg><use href="#i-tag"/></svg> برچسب‌ها <span class="ad-hint">برای افزودن/حذف کلیک کنید</span></div>
+        ${tagEditor}
+      </div>
+
+      <div class="crm-sec">
+        <div class="crm-sec-head"><svg><use href="#i-note"/></svg> یادداشت‌ها <span class="ad-hint">${money(c.notes.length)}</span></div>
+        <div id="crmNotesHost">${c.notes.length ? c.notes.map(n => `
+          <div class="crm-note">
+            <p>${esc(n.body)}</p>
+            <small>${esc(n.adminName || 'مدیر')} · ${esc(faFull(n.createdAt))}
+              <button class="icon-btn danger crm-del-note" data-id="${n.id}" title="حذف" aria-label="حذف یادداشت"><svg><use href="#i-trash"/></svg></button></small>
+          </div>`).join('') : '<small class="muted">یادداشتی ثبت نشده.</small>'}</div>
+        <div class="crm-add-row">
+          <textarea id="crmNoteInput" rows="2" placeholder="مثلاً: تلفنی موجودی سطل ۱۰ لیتری را پرسید…" maxlength="2000"></textarea>
+          <button class="btn btn-primary btn-sm" id="crmNoteAdd"><svg><use href="#i-save"/></svg> ثبت</button>
+        </div>
+      </div>
+
+      <div class="crm-sec">
+        <div class="crm-sec-head"><svg><use href="#i-clock"/></svg> پیگیری‌ها <span class="ad-hint">${money(c.tasks.filter(t => !t.done).length)} باز</span></div>
+        <div id="crmTasksHost">${c.tasks.length ? c.tasks.map(crmTaskRow).join('') : '<small class="muted">پیگیری‌ای ثبت نشده.</small>'}</div>
+        <div class="crm-add-row">
+          <input type="text" id="crmTaskTitle" placeholder="عنوان پیگیری…" maxlength="200">
+          <input type="date" id="crmTaskDue" class="ad-date">
+          <button class="btn btn-primary btn-sm" id="crmTaskAdd"><svg><use href="#i-plus"/></svg> افزودن</button>
+        </div>
+      </div>
+
+      <div class="crm-sec">
+        <div class="crm-sec-head"><svg><use href="#i-package"/></svg> آخرین سفارش‌ها <span class="ad-hint">${money(s.totalOrders)}</span></div>
+        ${c.orders.slice(0, 5).map(o => `
+          <div class="ad-list-row">
+            <span class="grow"><b>سفارش #${money(o.id)}</b><small>${esc(faDate(o.createdAt))} · ${money(o.items.reduce((n, i) => n + i.qty, 0))} قلم · ${badge(o.status)}</small></span>
+            <span class="val">${money(o.total)}</span>
+          </div>`).join('') || '<small class="muted">سفارشی ندارد.</small>'}
+      </div>`;
+  }
+
+  // --- رویدادهای CRM ---
+  $('crmList').addEventListener('click', (e) => {
+    const row = e.target.closest('.crm-row');
+    if (row) openCrmCustomer(Number(row.dataset.id));
+  });
+  $('crmList').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.classList.contains('crm-row')) openCrmCustomer(Number(e.target.dataset.id));
+  });
+  $('crmPager').addEventListener('click', (e) => {
+    if (e.target.closest('#crmPrev') && CRMQ.page > 0) { CRMQ.page--; loadCrmList(); }
+    else if (e.target.closest('#crmNext')) { CRMQ.page++; loadCrmList(); }
+  });
+  $('crmTagChips').addEventListener('click', (e) => {
+    const chip = e.target.closest('.ad-chip');
+    if (!chip) return;
+    CRMQ.tag = chip.dataset.tag || '';
+    CRMQ.page = 0;
+    renderCrmTagChips();
+    loadCrmList();
+  });
+  const runCrmSearch = debounce(() => { CRMQ.page = 0; loadCrmList(); }, 220);
+  $('crmSearch').addEventListener('input', (e) => {
+    CRMQ.q = e.target.value.trim();
+    $('crmSearchWrap').classList.toggle('has-value', !!CRMQ.q);
+    runCrmSearch();
+  });
+  $('crmSearchClear').addEventListener('click', () => {
+    $('crmSearch').value = ''; CRMQ.q = '';
+    $('crmSearchWrap').classList.remove('has-value');
+    CRMQ.page = 0; loadCrmList();
+  });
+  $('crmFilter').addEventListener('change', (e) => { CRMQ.filter = e.target.value; CRMQ.page = 0; loadCrmList(); });
+  $('crmSort').addEventListener('change', (e) => { CRMQ.sort = e.target.value; CRMQ.page = 0; loadCrmList(); });
+
+  $('crmDetailPane').addEventListener('click', async (e) => {
+    const tagEl = e.target.closest('.crm-tag-editor .crm-tag[data-tagid]');
+    if (tagEl) {
+      const id = Number(tagEl.dataset.tagid);
+      const has = CRM_DETAIL.tags.some(x => x.id === id);
+      const ids = has ? CRM_DETAIL.tags.filter(x => x.id !== id).map(x => x.id) : [...CRM_DETAIL.tags.map(x => x.id), id];
+      try {
+        await PG.api(`/admin/crm/customers/${CRM_SEL}/tags`, { method: 'PUT', body: JSON.stringify({ tagIds: ids }) });
+        const { customer } = await PG.api(`/admin/crm/customers/${CRM_SEL}`);
+        CRM_DETAIL = customer; renderCrmDetail(customer); loadCrmList();
+      } catch (err) { PG.toast(err.message || 'تغییر برچسب انجام نشد', 'error'); }
+      return;
+    }
+    if (e.target.closest('#crmNoteAdd')) {
+      const v = $('crmNoteInput').value.trim();
+      if (!v) { PG.toast('متن یادداشت خالی است', 'error'); return; }
+      try {
+        const { note } = await PG.api(`/admin/crm/customers/${CRM_SEL}/notes`, { method: 'POST', body: JSON.stringify({ body: v }) });
+        CRM_DETAIL.notes.unshift(note);
+        renderCrmDetail(CRM_DETAIL);
+      } catch (err) { PG.toast(err.message, 'error'); }
+      return;
+    }
+    if (e.target.closest('#crmTaskAdd')) {
+      const t = $('crmTaskTitle').value.trim();
+      if (!t) { PG.toast('عنوان پیگیری خالی است', 'error'); return; }
+      try {
+        const { task } = await PG.api(`/admin/crm/customers/${CRM_SEL}/tasks`, { method: 'POST', body: JSON.stringify({ title: t, dueAt: $('crmTaskDue').value || null }) });
+        CRM_DETAIL.tasks.push(task);
+        renderCrmDetail(CRM_DETAIL);
+      } catch (err) { PG.toast(err.message, 'error'); }
+      return;
+    }
+    const delNote = e.target.closest('.crm-del-note');
+    if (delNote) {
+      try {
+        await PG.api(`/admin/crm/notes/${delNote.dataset.id}`, { method: 'DELETE' });
+        CRM_DETAIL.notes = CRM_DETAIL.notes.filter(n => n.id !== Number(delNote.dataset.id));
+        renderCrmDetail(CRM_DETAIL);
+      } catch (err) { PG.toast(err.message, 'error'); }
+      return;
+    }
+    const toggle = e.target.closest('.crm-task-toggle');
+    if (toggle) {
+      const taskEl = toggle.closest('.crm-task');
+      const task = CRM_DETAIL.tasks.find(x => x.id === Number(taskEl.dataset.id));
+      if (!task) return;
+      try {
+        const { task: up } = await PG.api(`/admin/crm/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify({ done: !task.done }) });
+        const i = CRM_DETAIL.tasks.findIndex(x => x.id === up.id);
+        CRM_DETAIL.tasks[i] = up;
+        renderCrmDetail(CRM_DETAIL);
+      } catch (err) { PG.toast(err.message, 'error'); }
+      return;
+    }
+    const delTask = e.target.closest('.crm-task-del');
+    if (delTask) {
+      const taskEl = delTask.closest('.crm-task');
+      try {
+        await PG.api(`/admin/crm/tasks/${taskEl.dataset.id}`, { method: 'DELETE' });
+        CRM_DETAIL.tasks = CRM_DETAIL.tasks.filter(t => t.id !== Number(taskEl.dataset.id));
+        renderCrmDetail(CRM_DETAIL);
+      } catch (err) { PG.toast(err.message, 'error'); }
+      return;
+    }
+  });
+
+  // --- مودال برچسب جدید ---
+  $('btnCrmTag').addEventListener('click', () => {
+    $('ctName').value = '';
+    $('ctColor').value = '#2BD9BC';
+    openModal('crmTagModal');
+    setTimeout(() => $('ctName').focus(), 60);
+  });
+  $('ctClose').addEventListener('click', () => closeModal('crmTagModal'));
+  $('ctCancel').addEventListener('click', () => closeModal('crmTagModal'));
+  $('ctSave').addEventListener('click', async () => {
+    const name = $('ctName').value.trim();
+    if (!name) { PG.toast('نام برچسب را وارد کنید', 'error'); return; }
+    try {
+      await PG.api('/admin/crm/tags', { method: 'POST', body: JSON.stringify({ name, color: $('ctColor').value }) });
+      closeModal('crmTagModal');
+      PG.toast('برچسب ساخته شد ✅', 'success');
+      CRM_TAGS = (await PG.api('/admin/crm/tags')).tags;
+      renderCrmTagChips();
+      if (CRM_DETAIL) { const { customer } = await PG.api(`/admin/crm/customers/${CRM_SEL}`); CRM_DETAIL = customer; renderCrmDetail(customer); }
+    } catch (err) { PG.toast(err.message, 'error'); }
+  });
+
+  // ============================================================
   // ۵) گزارش‌ها
   // ============================================================
   async function loadReport() {
@@ -2124,7 +2424,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     dash: loadDash,
     orders: loadOrders,
     stock: () => { loadStock(); loadCats(); },
-    people: loadPeople, reviews: loadReviews, coupons: loadCoupons,
+    people: loadPeople, crm: loadCrm, reviews: loadReviews, coupons: loadCoupons,
     report: () => { loadReport(); loadMonthly(); },
     config: loadConfig, log: loadLog, errors: loadErrors
   };

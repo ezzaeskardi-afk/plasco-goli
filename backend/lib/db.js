@@ -393,6 +393,47 @@ CREATE TABLE IF NOT EXISTS visits (
 );
 `);
 
+// ---------- CRM (مدیریت ارتباط با مشتری) ----------
+// برچسب‌ها (سگمنت‌ها) — هر فروشگاه برچسب‌های خودش را می‌سازد: «ویژه»، «عمده‌خر»، «پیگیری بعد»…
+db.exec(`
+CREATE TABLE IF NOT EXISTS crm_tags (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  color      TEXT NOT NULL DEFAULT '#2BD9BC',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS crm_user_tags (
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  tag_id  INTEGER NOT NULL REFERENCES crm_tags(id),
+  PRIMARY KEY (user_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS idx_crm_user_tags_tag ON crm_user_tags(tag_id);
+
+-- یادداشت‌های پرونده‌ی مشتری (تایم‌لاین ارتباط‌ها)
+CREATE TABLE IF NOT EXISTS crm_notes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id),
+  admin_id   INTEGER REFERENCES users(id),
+  body       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_crm_notes_user ON crm_notes(user_id, id DESC);
+
+-- پیگیری‌ها/یادآورها — مثلاً «پس‌فردا زنگ بزن برای موجودی»
+CREATE TABLE IF NOT EXISTS crm_tasks (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id),
+  admin_id   INTEGER REFERENCES users(id),
+  title      TEXT NOT NULL,
+  due_at     TEXT,
+  done       INTEGER NOT NULL DEFAULT 0,
+  done_at    TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_crm_tasks_user ON crm_tasks(user_id, done, due_at);
+CREATE INDEX IF NOT EXISTS idx_crm_tasks_open  ON crm_tasks(done, due_at);
+`);
+
 // ستون‌های جدید محصول: گالری چندعکسه و جدول مشخصات (هر دو JSON)
 const productCols = db.prepare('PRAGMA table_info(products)').all().map(c => c.name);
 if (!productCols.includes('images')) db.exec(`ALTER TABLE products ADD COLUMN images TEXT NOT NULL DEFAULT '[]'`);
@@ -998,6 +1039,188 @@ function getUserDetail(userId) {
       firstOrderAt: paid.length ? paid[paid.length - 1].createdAt : null,
       lastOrderAt: paid.length ? paid[0].createdAt : null
     }
+  };
+}
+
+// ---------- CRM ----------
+// خطای اعتبارسنجی با کد HTTP مشخص؛ روت‌ها آن را برمی‌گردانند.
+function crmErr(msg, status = 400) { return Object.assign(new Error(msg), { status }); }
+const CRM_PAID = "('paid','shipped','delivered','return_requested')";
+
+const stmtCrmTags = db.prepare('SELECT id, name, color FROM crm_tags ORDER BY name COLLATE NOCASE');
+const stmtCrmTagByName = db.prepare('SELECT id, name, color FROM crm_tags WHERE name = ?');
+const stmtCrmTagInsert = db.prepare('INSERT INTO crm_tags (name, color) VALUES (?,?)');
+const stmtCrmTagById = db.prepare('SELECT id, name, color FROM crm_tags WHERE id = ?');
+const stmtCrmTagDelete = db.prepare('DELETE FROM crm_tags WHERE id = ?');
+const stmtCrmTagLinks = db.prepare('DELETE FROM crm_user_tags WHERE tag_id = ?');
+const stmtCrmUserTags = db.prepare(`SELECT t.id, t.name, t.color
+  FROM crm_user_tags ut JOIN crm_tags t ON t.id = ut.tag_id
+  WHERE ut.user_id = ? ORDER BY t.name COLLATE NOCASE`);
+const stmtCrmUserTagClear = db.prepare('DELETE FROM crm_user_tags WHERE user_id = ?');
+const stmtCrmUserTagAdd = db.prepare('INSERT OR IGNORE INTO crm_user_tags (user_id, tag_id) VALUES (?,?)');
+
+const stmtCrmNotes = db.prepare(`SELECT n.id, n.user_id, n.admin_id, n.body, n.created_at,
+       u.full_name AS admin_name
+  FROM crm_notes n LEFT JOIN users u ON u.id = n.admin_id
+  WHERE n.user_id = ? ORDER BY n.id DESC LIMIT 200`);
+const stmtCrmNoteInsert = db.prepare('INSERT INTO crm_notes (user_id, admin_id, body) VALUES (?,?,?)');
+const stmtCrmNoteById = db.prepare('SELECT * FROM crm_notes WHERE id = ?');
+const stmtCrmNoteDelete = db.prepare('DELETE FROM crm_notes WHERE id = ?');
+
+const stmtCrmTasks = db.prepare(`SELECT * FROM crm_tasks WHERE user_id = ?
+  ORDER BY done ASC, COALESCE(due_at,'9999-12-31') ASC, id DESC LIMIT 200`);
+const stmtCrmTaskInsert = db.prepare('INSERT INTO crm_tasks (user_id, admin_id, title, due_at) VALUES (?,?,?,?)');
+const stmtCrmTaskById = db.prepare('SELECT * FROM crm_tasks WHERE id = ?');
+const stmtCrmTaskDelete = db.prepare('DELETE FROM crm_tasks WHERE id = ?');
+const stmtCrmTaskDone = db.prepare("UPDATE crm_tasks SET done=1, done_at=datetime('now') WHERE id=?");
+const stmtCrmTaskUndone = db.prepare('UPDATE crm_tasks SET done=0, done_at=NULL WHERE id=?');
+
+function serializeCrmNote(n) {
+  return { id: n.id, userId: n.user_id, adminId: n.admin_id, body: n.body,
+    adminName: n.admin_name || 'مدیر', createdAt: n.created_at };
+}
+function serializeCrmTask(t) {
+  return { id: t.id, userId: t.user_id, title: t.title, dueAt: t.due_at,
+    done: Boolean(t.done), doneAt: t.done_at, createdAt: t.created_at };
+}
+
+// ---- برچسب‌ها ----
+function crmListTags() { return stmtCrmTags.all(); }
+function crmCreateTag(name, color) {
+  const n = String(name || '').trim().slice(0, 30);
+  if (!n) throw crmErr('نام برچسب خالی است');
+  const col = /^#[0-9a-fA-F]{6}$/.test(String(color || '')) ? String(color) : '#2BD9BC';
+  stmtCrmTagInsert.run(n, col);
+  return stmtCrmTagByName.get(n);
+}
+function crmDeleteTag(id) {
+  const t = stmtCrmTagById.get(Number(id));
+  if (!t) return false;
+  stmtCrmTagLinks.run(Number(id));
+  stmtCrmTagDelete.run(Number(id));
+  return true;
+}
+function crmSetUserTags(userId, tagIds) {
+  if (!stmtUserById.get(Number(userId))) return false;
+  const ids = [...new Set((Array.isArray(tagIds) ? tagIds : []).map(Number)
+    .filter(n => Number.isInteger(n) && n > 0))];
+  const set = transaction(() => {
+    stmtCrmUserTagClear.run(Number(userId));
+    for (const t of ids) stmtCrmUserTagAdd.run(Number(userId), t);
+  });
+  set();
+  return true;
+}
+
+// ---- یادداشت‌ها ----
+function crmAddNote(userId, adminId, body) {
+  const b = String(body || '').trim().slice(0, 2000);
+  if (!b) throw crmErr('متن یادداشت خالی است');
+  if (!stmtUserById.get(Number(userId))) throw crmErr('مشتری پیدا نشد', 404);
+  const info = stmtCrmNoteInsert.run(Number(userId), adminId || null, b);
+  const row = stmtCrmNoteById.get(info.lastInsertRowid);
+  const admin = adminId ? stmtUserById.get(Number(adminId)) : null;
+  row.admin_name = admin ? (admin.full_name || admin.phone) : 'مدیر';
+  return serializeCrmNote(row);
+}
+function crmDeleteNote(id) { return stmtCrmNoteDelete.run(Number(id)).changes > 0; }
+
+// ---- پیگیری‌ها ----
+function crmAddTask(userId, adminId, title, dueAt) {
+  const t = String(title || '').trim().slice(0, 200);
+  if (!t) throw crmErr('عنوان پیگیری خالی است');
+  if (!stmtUserById.get(Number(userId))) throw crmErr('مشتری پیدا نشد', 404);
+  const due = /^\d{4}-\d{2}-\d{2}$/.test(String(dueAt || '')) ? String(dueAt) : null;
+  const info = stmtCrmTaskInsert.run(Number(userId), adminId || null, t, due);
+  return serializeCrmTask(stmtCrmTaskById.get(info.lastInsertRowid));
+}
+function crmToggleTask(id, done) {
+  const stmt = done ? stmtCrmTaskDone : stmtCrmTaskUndone;
+  if (stmt.run(Number(id)).changes === 0) return null;
+  return serializeCrmTask(stmtCrmTaskById.get(Number(id)));
+}
+function crmDeleteTask(id) { return stmtCrmTaskDelete.run(Number(id)).changes > 0; }
+
+// ---- خلاصه‌ی داشبورد CRM ----
+const stmtCrmSummary = db.prepare(`SELECT
+  (SELECT COUNT(*) FROM users) AS customers,
+  (SELECT COUNT(DISTINCT user_id) FROM crm_user_tags) AS tagged,
+  (SELECT COUNT(*) FROM crm_tasks WHERE done=0) AS open_tasks,
+  (SELECT COUNT(*) FROM crm_tasks WHERE done=0 AND due_at IS NOT NULL AND date(due_at) <= date('now','localtime')) AS due_tasks,
+  (SELECT COUNT(*) FROM crm_notes) AS notes`);
+function crmGetSummary() {
+  const r = stmtCrmSummary.get();
+  return { totalCustomers: r.customers, tagged: r.tagged, openTasks: r.open_tasks, dueTasks: r.due_tasks, totalNotes: r.notes };
+}
+
+// ---- جستجوی مشتری‌ها با برچسب/فیلتر/مرتب‌سازی/صفحه‌بندی ----
+const CRM_SORT_SQL = {
+  spent: 'paid_total DESC',
+  orders: 'paid_orders DESC',
+  new: 'u.created_at DESC',
+  name: 'u.full_name COLLATE NOCASE ASC',
+  activity: 'last_order_at DESC'
+};
+function crmSearchCustomers(opts = {}) {
+  const where = [];
+  const args = [];
+  const q = String(opts.q || '').trim().slice(0, 60);
+  const tag = String(opts.tag || '').trim().slice(0, 30);
+  const filter = String(opts.filter || 'all');
+
+  if (q) {
+    where.push('(u.full_name LIKE ? OR u.phone LIKE ?)');
+    args.push(`%${q}%`, `%${q}%`);
+  }
+  if (tag) {
+    where.push(`EXISTS (SELECT 1 FROM crm_user_tags ut JOIN crm_tags t ON t.id = ut.tag_id
+      WHERE ut.user_id = u.id AND t.name = ?)`);
+    args.push(tag);
+  }
+  if (filter === 'buyers') {
+    where.push(`EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.status IN ${CRM_PAID})`);
+  } else if (filter === 'idle') {
+    where.push(`NOT EXISTS (SELECT 1 FROM orders o2 WHERE o2.user_id = u.id AND o2.status IN ${CRM_PAID})`);
+  } else if (filter === 'followups') {
+    where.push(`EXISTS (SELECT 1 FROM crm_tasks ct WHERE ct.user_id = u.id AND ct.done = 0)`);
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const orderSql = CRM_SORT_SQL[opts.sort] || CRM_SORT_SQL.spent;
+  const limit = Math.min(Math.max(Number(opts.limit) || 50, 1), 200);
+  const offset = Math.max(Number(opts.offset) || 0, 0);
+
+  const sql = `SELECT u.id, u.phone, u.full_name, u.is_admin, u.is_staff, u.created_at,
+      COUNT(CASE WHEN o.status IN ${CRM_PAID} THEN 1 END) AS paid_orders,
+      COALESCE(SUM(CASE WHEN o.status IN ${CRM_PAID} THEN o.total END),0) AS paid_total,
+      MAX(CASE WHEN o.status IN ${CRM_PAID} THEN o.created_at END) AS last_order_at,
+      (SELECT GROUP_CONCAT(t.name, '|') FROM crm_user_tags ut JOIN crm_tags t ON t.id = ut.tag_id
+        WHERE ut.user_id = u.id) AS tag_names
+    FROM users u LEFT JOIN orders o ON o.user_id = u.id
+    ${whereSql}
+    GROUP BY u.id
+    ORDER BY ${orderSql}, u.id DESC
+    LIMIT ? OFFSET ?`;
+  const rows = prep(sql).all(...args, limit, offset);
+  const total = prep(`SELECT COUNT(*) AS n FROM users u ${whereSql}`).get(...args).n;
+
+  const customers = rows.map(r => ({
+    id: r.id, phone: r.phone, fullName: r.full_name || '',
+    isAdmin: Boolean(r.is_admin), isStaff: Boolean(r.is_staff), createdAt: r.created_at,
+    paidOrders: r.paid_orders, totalSpent: r.paid_total, lastOrderAt: r.last_order_at,
+    tags: (r.tag_names || '').split('|').filter(Boolean)
+  }));
+  return { customers, total, limit, offset };
+}
+
+// پرونده‌ی کامل مشتری در CRM: همان نمای مشتری + برچسب/یادداشت/پیگیری
+function crmGetCustomer(id) {
+  const base = getUserDetail(Number(id));
+  if (!base) return null;
+  return {
+    ...base,
+    tags: stmtCrmUserTags.all(Number(id)),
+    notes: stmtCrmNotes.all(Number(id)).map(serializeCrmNote),
+    tasks: stmtCrmTasks.all(Number(id)).map(serializeCrmTask)
   };
 }
 
@@ -2401,5 +2624,8 @@ module.exports = {
   getAddresses, getAddress, createAddress, updateAddress, deleteAddress,
   createOrderTx, getOrder, getOrderByIdempotency, getUserOrders, getOrderForGuest, markOrderPaid, markOrderFailedTx, stmtSetAuthority, setPaymentDetails,
   expireStaleOrders, getStaleOrdersToReconcile, bumpReconcileTries, cleanupExpired, backupNow,
+  crmGetSummary, crmSearchCustomers, crmGetCustomer,
+  crmListTags, crmCreateTag, crmDeleteTag, crmSetUserTags,
+  crmAddNote, crmDeleteNote, crmAddTask, crmToggleTask, crmDeleteTask,
   otp: { get: stmtOtpGet, upsert: stmtOtpUpsert, bumpAttempts: stmtOtpBumpAttempts, del: stmtOtpDelete, ipBump: stmtIpBump, ipGet: stmtIpGet }
 };

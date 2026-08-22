@@ -3770,3 +3770,66 @@ table.ad-table tbody tr:last-child td{border-bottom:0;}
 @media (prefers-reduced-motion:reduce){
   .err-ic{animation:none;}
 }
+
+/* ============================================================
+   CRM — مدیریت ارتباط با مشتری (پنل ادمین)
+   ============================================================ */
+.crm-layout{display:grid;grid-template-columns:minmax(300px,1fr) minmax(360px,1.15fr);gap:16px;align-items:start;}
+@media (max-width:1120px){.crm-layout{grid-template-columns:1fr;}}
+.crm-list-pane,.crm-detail-pane{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--ad-radius);
+  padding:14px;min-width:0;
+}
+.crm-detail-pane{position:sticky;top:14px;max-height:calc(100vh - 28px);overflow:auto;}
+.crm-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+.crm-row{
+  display:flex;align-items:center;gap:10px;padding:11px 12px;
+  border:1px solid var(--line);border-radius:12px;cursor:pointer;
+  transition:border-color .14s,background .14s;
+}
+.crm-row:hover{border-color:var(--line-strong);}
+.crm-row.active{border-color:var(--teal);background:var(--teal-tint);}
+.crm-row .grow{flex:1;min-width:0;}
+.crm-row b{display:block;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.crm-row small{font-size:11px;color:var(--ink-soft);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.crm-row .crm-row-stats{text-align:left;flex:none;}
+.crm-row .crm-row-stats b{font-size:13px;color:#2BD9BC;}
+.crm-row .crm-row-stats small{font-size:10px;}
+.crm-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
+.crm-tag{
+  display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+  padding:2px 9px;border-radius:99px;background:var(--teal-tint);color:#2BD9BC;white-space:nowrap;
+}
+.crm-tag .dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none;}
+.crm-tag.ghost{border:1px dashed var(--line-strong);background:transparent;color:var(--ink-soft);cursor:pointer;}
+.crm-tag.ghost:hover{color:var(--ink);}
+.crm-pager{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px;}
+.crm-pager button{font-size:12px;padding:6px 12px;}
+.crm-pager b{font-size:12px;color:var(--ink-soft);}
+.crm-sec{margin-bottom:14px;}
+.crm-sec-head{display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:13.5px;font-weight:800;}
+.crm-sec-head svg{width:16px;height:16px;color:var(--teal);}
+.crm-sec-head .ad-hint{margin-inline-start:auto;font-size:11px;color:var(--ink-soft);font-weight:600;}
+.crm-note{border-inline-start:3px solid var(--teal);background:var(--teal-tint);border-radius:10px;padding:10px 12px;margin-bottom:8px;}
+.crm-note p{margin:0 0 5px;font-size:13px;line-height:1.9;white-space:pre-wrap;color:var(--ink);}
+.crm-note small{font-size:10.5px;color:var(--ink-soft);}
+.crm-task{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;}
+.crm-task.done{opacity:.55;}
+.crm-task.done .crm-task-title{text-decoration:line-through;}
+.crm-task .crm-task-title{flex:1;min-width:0;font-size:12.5px;}
+.crm-task small{font-size:10.5px;color:var(--ink-soft);flex:none;}
+.crm-task .crm-task-title small{display:block;}
+.crm-task .icon-btn{width:26px;height:26px;flex:none;}
+.crm-task .icon-btn svg{width:14px;height:14px;}
+.crm-task.overdue{border-color:var(--coral);}
+.crm-task.overdue .crm-task-title small{color:#FF9B85;}
+.crm-add-row{display:flex;gap:8px;margin-top:9px;align-items:center;}
+.crm-add-row textarea,.crm-add-row input{
+  flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--line-control);
+  border-radius:10px;color:var(--ink);font-family:inherit;font-size:12.5px;padding:9px 11px;
+}
+.crm-add-row textarea:focus,.crm-add-row input:focus{outline:none;border-color:var(--teal);}
+.crm-tag-editor{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.crm-tag-editor .crm-tag{cursor:pointer;border:1px solid transparent;}
+.crm-tag-editor .crm-tag.on{border-color:#2BD9BC;}
+.crm-tag-editor .crm-tag:not(.on){opacity:.45;}
