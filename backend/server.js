@@ -472,6 +472,9 @@ app.get('/product/:id', (req, res) => {
   const desc = `خرید ${product.title} — ${product.description} قیمت: ${Number(product.price).toLocaleString('fa-IR')} تومان.`;
   const img = product.image ? base + encodeURI(product.image) : '';
   html = html
+    // product.html (پوسته‌ی بدون محتوا) noindex است؛ اما صفحه‌ی واقعیِ محصول با
+    // آدرس تمیز /product/:id باید ایندکس شود. اینجا آن را برمی‌گردانیم.
+    .replace('<meta name="robots" content="noindex, follow">', '<meta name="robots" content="index, follow, max-image-preview:large">')
     .replace('<title>محصول | پلاسکو گلی</title>', `<title>${escHtml(title)}</title>`)
     .replace('<meta name="description" content="مشخصات کامل، قیمت و خرید آنلاین از فروشگاه پلاسکو گلی.">',
       `<meta name="description" content="${escHtml(desc)}">
@@ -481,10 +484,12 @@ app.get('/product/:id', (req, res) => {
 <meta property="og:url" content="${base}/product/${product.id}">
 <meta property="og:title" content="${escHtml(title)}">
 <meta property="og:description" content="${escHtml(desc)}">
-${img ? `<meta property="og:image" content="${escHtml(img)}">` : ''}
+${img ? `<meta property="og:image" content="${escHtml(img)}">
+<meta property="og:image:alt" content="${escHtml(title)}">` : ''}
 <meta name="twitter:card" content="${img ? 'summary_large_image' : 'summary'}">
 <meta name="twitter:title" content="${escHtml(title)}">
-${img ? `<meta name="twitter:image" content="${escHtml(img)}">` : ''}
+${img ? `<meta name="twitter:image" content="${escHtml(img)}">
+<meta name="twitter:image:alt" content="${escHtml(title)}">` : ''}
 <meta property="product:price:amount" content="${Number(product.price) * 10}">
 <meta property="product:price:currency" content="IRR">
 ${Number(product.old_price) > Number(product.price) ? `<meta property="og:price:standard_amount" content="${Number(product.old_price) * 10}">` : ''}
@@ -605,8 +610,8 @@ const seoPageCache = new Map(); // `${file}|${base}` -> { html, mtimeMs }
 // است و بیشتر از آن یعنی کسی دارد بازی می‌کند.
 const SEO_CACHE_MAX = 8;
 
-// تنها صفحه‌های ایندکس‌شدنی سایت این دوتا هستند؛ بقیه noindex اند و لازم نیست
-// از مسیر جایگزینی رد شوند.
+// صفحه‌های ایندکس‌شدنی سایت (index، terms و products) از مسیر جایگزینی رد می‌شوند؛
+// بقیه noindex اند و لازم نیست اینجا بیایند.
 function renderSeoPage(fileName) {
   return function (req, res) {
     const base = siteBase(req);
@@ -633,6 +638,7 @@ function renderSeoPage(fileName) {
 app.get('/', renderSeoPage('index.html'));
 app.get('/index.html', renderSeoPage('index.html'));
 app.get('/terms.html', renderSeoPage('terms.html'));
+app.get('/products.html', renderSeoPage('products.html'));
 
 // robots.txt داینامیک — فایل ثابت قبلی دامنه‌ی نمونه را داشت و خط Sitemap هم
 // دو بار تکرار شده بود. این نسخه همیشه دامنه‌ی واقعیِ همان درخواست را می‌نویسد،
