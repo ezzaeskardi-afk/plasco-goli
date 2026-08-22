@@ -70,6 +70,25 @@ db.exec('PRAGMA synchronous = NORMAL;'); // تعادل سرعت/ایمنی (با
 db.exec('PRAGMA busy_timeout = 5000;');
 db.exec('PRAGMA foreign_keys = ON;');
 
+// ---------- کشِ prepared statement ----------
+// node:sqlite هر بار db.prepare() را از نو کامپایل می‌کند؛ کوئری‌هایی که در هر
+// درخواست با همان متن (یا متن‌های محدود و قابل‌پیش‌بینی) اجرا می‌شوند نباید
+// هر بار پارس شوند. این کش متنِ SQL را به Statement نگاشت می‌کند و با سقفِ
+// FIFO جلوی رشدِ بی‌نهایت را می‌گیرد (در جستجوی فازی SQL پویا ساخته می‌شود).
+const STMT_CACHE_MAX = 1024;
+const stmtCache = new Map();
+function prep(sql) {
+  let s = stmtCache.get(sql);
+  if (s) return s;
+  s = db.prepare(sql);
+  if (stmtCache.size >= STMT_CACHE_MAX) {
+    const oldest = stmtCache.keys().next().value;
+    stmtCache.delete(oldest);
+  }
+  stmtCache.set(sql, s);
+  return s;
+}
+
 // ---------- تراکنش (با پشتیبانی از تراکنش تو در تو از طریق SAVEPOINT) ----------
 let txDepth = 0;
 function transaction(fn) {
@@ -627,7 +646,7 @@ function getCatalogSignature() {
 // یکی باشد؛ ترتیبِ «پرتعدادترین اول» با هر انتشار جابه‌جا می‌شد و مشتری
 // هر بار دسته را جای دیگری پیدا می‌کرد.
 function getCategories() {
-  return db.prepare(`
+  return prep(`
     SELECT p.category AS category, COUNT(*) AS n,
            COALESCE(c.icon, 'i-package') AS icon
     FROM products p LEFT JOIN categories c ON c.name = p.category
@@ -704,7 +723,7 @@ function fuzzyProductIds(q, cap = MAX_PAGE_SIZE) {
   const fq = foldFaText(q).slice(0, 60);
   if (fq.length < 2) return [];
   const qTokens = fq.split(' ').filter(t => t.length >= 2);
-  const rows = db.prepare(
+  const rows = prep(
     `SELECT id, title, title_fold, stock FROM products WHERE published = 1 LIMIT ${FUZZY_SCAN_CAP}`
   ).all();
 
@@ -787,7 +806,7 @@ function queryProducts(opts = {}) {
   const orderSql = `ORDER BY (stock > 0) DESC, ${SORT_SQL[opts.sort] || SORT_SQL.newest}`;
   const limit = Math.min(Math.max(parseInt(opts.limit, 10) || 12, 1), MAX_PAGE_SIZE);
 
-  const total = db.prepare(`SELECT COUNT(*) AS n FROM products ${whereSql}`).get(...args).n;
+  const total = prep(`SELECT COUNT(*) AS n FROM products ${whereSql}`).get(...args).n;
 
   // هیچ نتیجه‌ای نبود؟ سراغ «نزدیک‌ترین‌ها» می‌رویم تا مشتری دست‌خالی برنگردد
   if (total === 0 && rawQ) {
@@ -797,13 +816,13 @@ function queryProducts(opts = {}) {
       const w2 = [...base, `id IN (${ph})`];
       const a2 = [...baseArgs, ...ids];
       const wSql2 = `WHERE ${w2.join(' AND ')}`;
-      const total2 = db.prepare(`SELECT COUNT(*) AS n FROM products ${wSql2}`).get(...a2).n;
+      const total2 = prep(`SELECT COUNT(*) AS n FROM products ${wSql2}`).get(...a2).n;
       if (total2 > 0) {
         // ترتیب نزدیکی حفظ می‌شود (idها اعداد دیتابیس‌اند، پس داخل CASE بی‌خطرند)
         const rank = ids.map((id, i) => `WHEN ${Number(id)} THEN ${i}`).join(' ');
         const pages2 = Math.max(1, Math.ceil(total2 / limit));
         const page2 = Math.min(Math.max(parseInt(opts.page, 10) || 1, 1), pages2);
-        const rows2 = db.prepare(
+        const rows2 = prep(
           `SELECT * FROM products ${wSql2} ORDER BY (stock > 0) DESC, CASE id ${rank} END LIMIT ? OFFSET ?`
         ).all(...a2, limit, (page2 - 1) * limit);
         return {
@@ -817,7 +836,7 @@ function queryProducts(opts = {}) {
   const pages = Math.max(1, Math.ceil(total / limit));
   const page = Math.min(Math.max(parseInt(opts.page, 10) || 1, 1), pages);
 
-  const rows = db.prepare(
+  const rows = prep(
     `SELECT * FROM products ${whereSql} ${orderSql} LIMIT ? OFFSET ?`
   ).all(...args, limit, (page - 1) * limit);
 
@@ -826,7 +845,7 @@ function queryProducts(opts = {}) {
 
 // بازه‌ی قیمت و دسته‌بندی‌ها برای ساختن فیلترها بدون دانلود کل کاتالوگ
 function getCatalogFacets() {
-  const r = db.prepare(
+  const r = prep(
     'SELECT COALESCE(MIN(price),0) AS min, COALESCE(MAX(price),0) AS max FROM products WHERE published = 1'
   ).get();
   return { minPrice: r.min, maxPrice: r.max, categories: getCategories() };
@@ -1014,10 +1033,10 @@ function queryOrders({ status = 'all', q = '', from = null, to = null, limit = 4
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-  const totalRow = db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN o.status IN ${PAID_SET} THEN o.total END),0) AS sum
+  const totalRow = prep(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN o.status IN ${PAID_SET} THEN o.total END),0) AS sum
     FROM orders o JOIN users u ON u.id = o.user_id ${whereSql}`).get(...args);
 
-  const rows = db.prepare(`SELECT o.*, u.phone AS user_phone, u.full_name AS user_name
+  const rows = prep(`SELECT o.*, u.phone AS user_phone, u.full_name AS user_name
     FROM orders o JOIN users u ON u.id = o.user_id ${whereSql}
     ORDER BY o.created_at DESC, o.id DESC LIMIT ? OFFSET ?`)
     .all(...args, Math.min(Number(limit) || 40, 200), Math.max(Number(offset) || 0, 0));
@@ -1224,7 +1243,7 @@ function getMonthlySales(months = 12) {
   const cases = bounds.map((b, i) => `WHEN d >= '${b.startIso}' THEN ${i}`).join(' ');
   // مرزها مستقیم داخل SQL می‌روند نه به‌صورت پارامتر — چون خودمان ساخته‌ایمشان
   // (خروجیِ isoLocal فقط رقم و خط تیره است) و ورودیِ کاربر در آن‌ها نقشی ندارد.
-  const rows = db.prepare(`
+  const rows = prep(`
     WITH src AS (
       SELECT date(created_at,'localtime') AS d, total, user_id
       FROM orders
@@ -1377,7 +1396,6 @@ function getAdminLog(limit = 50) {
 }
 
 // ---------- تنظیمات فروشگاه ----------
-const stmtGetSetting = db.prepare('SELECT value FROM settings WHERE key = ?');
 const stmtAllSettings = db.prepare('SELECT key, value FROM settings');
 const stmtSetSetting = db.prepare(`INSERT INTO settings (key, value) VALUES (?,?)
   ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')`);
@@ -1395,18 +1413,33 @@ const SETTING_DEFAULTS = {
   promo_text: '',   // بنر تخفیف صفحه‌ی اصلی — خالی = بنر پنهان
   promo_code: ''    // کد تخفیفی که روی بنر نمایش داده می‌شود (اختیاری)
 };
-function getSettings() {
+
+// تنظیمات به‌ندرت عوض می‌شوند (فقط از پنل) ولی در هر درخواست خوانده می‌شوند:
+// shop_open در مسیر ثبت سفارش، getSettings در صفحه‌ی اول، reviews_rev در امضای
+// کاتالوگ. پس یک کش حافظه‌ای نگه می‌داریم و هر جایی که می‌نویسد باطلش می‌کند.
+// چون کل نوشتن‌ها از همین فایل می‌گذرد (setSettingsTx و bumpReviewsRev)، کش
+// هیچ‌وقت کهنه نمی‌ماند — و catalog_rev هم عمداً از این کش رد نمی‌شود و مستقیم
+// خوانده می‌شود، چون تریگرهای دیتابیس آن را می‌نویسند نه کد ما.
+let settingsCache = null;
+function readAllSettings() {
   const out = { ...SETTING_DEFAULTS };
   for (const r of stmtAllSettings.all()) out[r.key] = r.value;
   return out;
 }
+function getSettings() {
+  return settingsCache || (settingsCache = readAllSettings());
+}
 function getSetting(key) {
-  return stmtGetSetting.get(key)?.value ?? SETTING_DEFAULTS[key] ?? null;
+  return getSettings()[key] ?? null;
+}
+function invalidateSettings() {
+  settingsCache = null;
 }
 const setSettingsTx = transaction((obj) => {
   for (const [k, v] of Object.entries(obj)) {
     if (k in SETTING_DEFAULTS) stmtSetSetting.run(k, String(v));
   }
+  invalidateSettings();
   return getSettings();
 });
 
@@ -1414,6 +1447,10 @@ const setSettingsTx = transaction((obj) => {
 // شمارنده‌ی نسخه‌ی نظرات در settings — هر تغییری کش کاتالوگ را باطل می‌کند
 const stmtBumpReviewsRev = db.prepare(`INSERT INTO settings (key, value) VALUES ('reviews_rev','1')
   ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT), updated_at = datetime('now')`);
+function bumpReviewsRev() {
+  stmtBumpReviewsRev.run();
+  invalidateSettings(); // reviews_rev در کشِ تنظیمات هم هست و امضای کاتالوگ آن را می‌خواند
+}
 
 // «خریدار» کسی است که این محصول در یکی از سفارش‌های پرداخت‌شده‌اش بوده
 const stmtUserBoughtProduct = db.prepare(`SELECT 1 FROM orders
@@ -1444,7 +1481,7 @@ function serializeReview(r, publicView = true) {
 function upsertReview(userId, productId, rating, body) {
   stmtReviewUpsert.run(Number(productId), userId, Number(rating),
     String(body || '').trim().slice(0, 500), hasUserBought(userId, productId) ? 1 : 0);
-  stmtBumpReviewsRev.run(); // اگر نظر تأییدشده ویرایش شود از نمای عمومی می‌افتد → کش هم باطل
+  bumpReviewsRev(); // اگر نظر تأییدشده ویرایش شود از نمای عمومی می‌افتد → کش هم باطل
   return serializeReview(stmtMyReview.get(Number(productId), userId));
 }
 
@@ -1504,7 +1541,7 @@ function adminListReviews(status = 'all') {
 function adminSetReviewStatus(id, status) {
   const ok = stmtReviewSetStatus.run(status, Number(id)).changes > 0;
   if (!ok) return null;
-  stmtBumpReviewsRev.run();
+  bumpReviewsRev();
   return serializeReview(stmtReviewById.get(Number(id)), false);
 }
 
@@ -1520,7 +1557,7 @@ function adminSetReviewStatus(id, status) {
 // بدتر از عددِ غلط این بود که خودِ عدد، وجودِ ۱۸ محصولِ منتشرنشده را لو
 // می‌داد؛ کاتالوگی که هنوز عکس ندارد و قیمت‌هایش نهایی نیست.
 function getCategoriesFull() {
-  return db.prepare(`SELECT c.*,
+  return prep(`SELECT c.*,
       (SELECT COUNT(*) FROM products p WHERE p.category = c.name AND p.published = 1) AS n,
       (SELECT COUNT(*) FROM products p WHERE p.category = c.name) AS n_all
     FROM categories c ORDER BY c.sort, c.id`).all()
@@ -1706,7 +1743,7 @@ function quoteCoupon(codeRaw, itemsTotal, userId = null) {
   if (!code) return { ok: false, error: 'کد تخفیف را وارد کنید' };
   const c = stmtCouponByCode.get(code);
   if (!c || !c.active) return { ok: false, error: 'این کد تخفیف معتبر نیست' };
-  const today = db.prepare(`SELECT date('now','localtime') AS d`).get().d;
+  const today = prep(`SELECT date('now','localtime') AS d`).get().d;
   if (c.expires_at && c.expires_at < today) return { ok: false, error: 'مهلت استفاده از این کد تمام شده' };
   if (c.usage_limit > 0 && stmtCouponUses.get(c.code, c.created_at).n >= c.usage_limit) {
     return { ok: false, error: 'ظرفیت استفاده از این کد تکمیل شده' };
@@ -1734,7 +1771,7 @@ function serializeCoupon(c, uses = 0) {
   };
 }
 function adminListCoupons() {
-  return db.prepare('SELECT * FROM coupons ORDER BY active DESC, id DESC').all()
+  return prep('SELECT * FROM coupons ORDER BY active DESC, id DESC').all()
     .map(c => serializeCoupon(c, stmtCouponUses.get(c.code, c.created_at).n));
 }
 const stmtCouponInsert = db.prepare(`INSERT INTO coupons
@@ -1742,7 +1779,7 @@ const stmtCouponInsert = db.prepare(`INSERT INTO coupons
   VALUES (@code, @type, @value, @min_total, @max_discount, @expires_at, @usage_limit, @per_user_limit, @active)`);
 function adminCreateCoupon(c) {
   const info = stmtCouponInsert.run(c);
-  const row = db.prepare('SELECT * FROM coupons WHERE id = ?').get(info.lastInsertRowid);
+  const row = prep('SELECT * FROM coupons WHERE id = ?').get(info.lastInsertRowid);
   return serializeCoupon(row, 0);
 }
 const stmtCouponUpdate = db.prepare(`UPDATE coupons SET
@@ -1751,14 +1788,14 @@ const stmtCouponUpdate = db.prepare(`UPDATE coupons SET
   WHERE id=@id`);
 function adminUpdateCoupon(c) {
   if (stmtCouponUpdate.run(c).changes === 0) return null;
-  const row = db.prepare('SELECT * FROM coupons WHERE id = ?').get(c.id);
+  const row = prep('SELECT * FROM coupons WHERE id = ?').get(c.id);
   return serializeCoupon(row, stmtCouponUses.get(row.code, row.created_at).n);
 }
 function adminDeleteCoupon(id) {
-  return db.prepare('DELETE FROM coupons WHERE id = ?').run(Number(id)).changes > 0;
+  return prep('DELETE FROM coupons WHERE id = ?').run(Number(id)).changes > 0;
 }
 function getCouponById(id) {
-  const row = db.prepare('SELECT * FROM coupons WHERE id = ?').get(Number(id));
+  const row = prep('SELECT * FROM coupons WHERE id = ?').get(Number(id));
   return row ? serializeCoupon(row, stmtCouponUses.get(row.code, row.created_at).n) : null;
 }
 
