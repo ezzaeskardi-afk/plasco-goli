@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ============================================================
   // ناوبری بخش‌ها (با هش آدرس، تا رفرش همان‌جا بماند)
   // ============================================================
-  const VIEWS = ['dash', 'orders', 'stock', 'people', 'crm', 'reviews', 'coupons', 'wholesale', 'report', 'config', 'log', 'errors'];
+  const VIEWS = ['dash', 'orders', 'stock', 'people', 'crm', 'reviews', 'coupons', 'wholesale', 'report', 'config', 'log', 'errors', 'system'];
   const LOADED = new Set();
 
   function show(view) {
@@ -2572,6 +2572,79 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('errDays').addEventListener('change', loadErrors);
   $('errReload').addEventListener('click', loadErrors);
 
+  // ============================================================
+  // وضعیت سیستم
+  // ============================================================
+  async function loadSystem() {
+    $('sysKpis').innerHTML = '';
+    ['sysServer', 'sysDb', 'sysErrors', 'sysBackups', 'sysAdminLog'].forEach(id => $(id).innerHTML = '<div class="ad-skel skel-190"></div>');
+    try {
+      const d = await PG.api('/admin/system-status');
+      const s = d.server;
+      const m = d.metrics;
+      const h = d.health;
+      // KPIها
+      $('sysKpis').innerHTML = [
+        kpi({ label: 'آپتایم', num: money(Math.floor(s.uptime / 3600)), unit: 'ساعت', icon: 'i-clock', sub: `${money(m.totalRequests)} درخواست کل` }),
+        kpi({ label: 'حافظه RSS', num: s.memory.rssMb, unit: 'MB', icon: 'i-chart', tone: s.memory.rssMb > 500 ? 'gold' : 'teal', sub: `heap: ${money(s.memory.heapUsedMb)}MB` }),
+        kpi({ label: 'p95 تأخیر', num: money(m.p95Ms), unit: 'ms', icon: 'i-clock', tone: m.p95Ms > 500 ? 'gold' : 'teal', sub: `p99: ${money(m.p99Ms)}ms` }),
+        kpi({ label: 'خطا (۷ روز)', num: money(d.errors?.totals?.errors || 0), unit: 'خطا', icon: 'i-alert', tone: (d.errors?.totals?.errors || 0) > 10 ? 'gold' : 'teal', sub: `${money(d.errors?.totals?.groups || 0)} گروه` })
+      ].join('');
+      // کارت سرور
+      $('sysServer').innerHTML = `<h3>🖥️ سرور</h3><div class="sys-rows">
+        <div class="sys-row"><span>Node.js</span><b>${esc(s.nodeVersion)}</b></div>
+        <div class="sys-row"><span>پلتفرم</span><b>${esc(s.platform)}</b></div>
+        <div class="sys-row"><span>PID</span><b>${money(s.pid)}</b></div>
+        <div class="sys-row"><span>RSS</span><b>${money(s.memory.rssMb)} MB</b></div>
+        <div class="sys-row"><span>Heap</span><b>${money(s.memory.heapUsedMb)} / ${money(s.memory.heapTotalMb)} MB</b></div>
+        <div class="sys-row"><span>External</span><b>${money(s.memory.externalMb)} MB</b></div>
+        <div class="sys-row"><span>مسیرها</span><b>${money(m.routeCount)}</b></div>
+        <div class="sys-row"><span>درخواست کند</span><b>${money(m.slowRequests)}</b></div>
+      </div>`;
+      // کارت دیتابیس
+      $('sysDb').innerHTML = `<h3>🗄️ دیتابیس</h3><div class="sys-rows">
+        <div class="sys-row"><span>وضعیت</span><b class="${h.ok ? 'clr-ok' : 'clr-err'}">${h.ok ? '✅ سالم' : '❌ خراب'}</b></div>
+        <div class="sys-row"><span>اندازه</span><b>${money(h.sizeMb)} MB</b></div>
+        <div class="sys-row"><span>WAL</span><b>${money(h.walKb)} KB</b></div>
+        <div class="sys-row"><span>کوئری</span><b>${money(h.queryMs)} ms</b></div>
+        <div class="sys-row"><span>缓存</span><b>۶۴ MB</b></div>
+        <div class="sys-row"><span>mode</span><b>${esc(h.journalMode || 'WAL')}</b></div>
+      </div>`;
+      // لاگ خطاها
+      const errGroups = (d.errors?.groups || []).slice(0, 8);
+      $('sysErrors').innerHTML = `<h3>🚨 خطاها (۷ روز اخیر)</h3>${errGroups.length ? `<div class="sys-err-list">${errGroups.map(g => `
+        <div class="sys-err-row">
+          <span class="sys-err-count">${money(g.count)}×</span>
+          <span class="sys-err-msg">${esc(g.title)}</span>
+          <small>${esc(g.latestAt || '')}</small>
+        </div>`).join('')}</div>` : '<small class="muted">خطایی ثبت نشده ✅</small>'}`;
+      // بکاپ‌ها
+      $('sysBackups').innerHTML = `<h3>💾 بکاپ‌ها</h3>${d.backups.length ? `<div class="sys-backup-list">${d.backups.slice(0, 10).map(b => `
+        <div class="sys-backup-row">
+          <span class="grow"><b>${esc(b.name)}</b><small>${esc(faFull(b.createdAt))}</small></span>
+          <span>${money(b.sizeKb)} KB</span>
+        </div>`).join('')}</div>` : '<small class="muted">بکاپی وجود ندارد.</small>'}`;
+      // لاگ ادمین
+      const logItems = (d.adminLog || []).slice(0, 12);
+      $('sysAdminLog').innerHTML = `<h3>📝 لاگ ادمین</h3>${logItems.length ? `<div class="sys-log-list">${logItems.map(l => `
+        <div class="sys-log-row">
+          <span class="sys-log-action">${esc(l.action)}</span>
+          <span class="grow">${esc(l.target || '')}</span>
+          <small>${esc(l.by || '')} · ${esc(faFull(l.at || ''))}</small>
+        </div>`).join('')}</div>` : '<small class="muted">لاگی نیست.</small>'}`;
+    } catch (e) {
+      $('sysKpis').innerHTML = `<div class="alert alert-error"><svg><use href="#i-alert"/></svg><span>${esc(e.message)}</span></div>`;
+    }
+  }
+  $('sysReload').addEventListener('click', loadSystem);
+  $('sysBackup').addEventListener('click', async () => {
+    try {
+      const r = await PG.api('/admin/backup', { method: 'POST' });
+      PG.toast(`بکاپ ساخته شد: ${r.file}`, 'success');
+      loadSystem();
+    } catch (e) { PG.toast(e.message, 'error'); }
+  });
+
   const LOADERS = {
     dash: loadDash,
     orders: loadOrders,
@@ -2579,7 +2652,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     people: loadPeople, crm: loadCrm, reviews: loadReviews, coupons: loadCoupons,
     wholesale: loadWholesale,
     report: () => { loadReport(); loadMonthly(); },
-    config: loadConfig, log: loadLog, errors: loadErrors
+    config: loadConfig, log: loadLog, errors: loadErrors, system: loadSystem
   };
 
   // ---------- سرکشی خودکار: سفارش/مرجوعی/نظرِ تازه بدون رفرش دستی ----------

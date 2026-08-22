@@ -1192,6 +1192,52 @@ router.get('/db-health', (req, res) => {
   res.json({ health, integrity: deep });
 });
 
+// ---------- وضعیت سیستم (یکپارچه) ----------
+// تمام متریک‌ها، سلامت دیتابیس، لاگ خطاها و آمار سرور در یک درخواست.
+router.get('/system-status', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const mem = process.memoryUsage();
+  const health = getDbHealth();
+  const metrics = metricsSnapshot();
+  let errors = null;
+  try {
+    errors = errorDigest({ logDir: log.LOG_DIR, rootDir: path.join(__dirname, '..', '..'), days: 7 });
+  } catch (e) { errors = { totals: { errors: 0 }, groups: [], unavailable: e.message }; }
+  // فایل‌های بکاپ
+  let backups = [];
+  try {
+    const backupDir = path.join(__dirname, '..', '..', 'data', 'backups');
+    if (fs.existsSync(backupDir)) {
+      backups = fs.readdirSync(backupDir)
+        .filter(f => f.endsWith('.db'))
+        .map(f => {
+          const st = fs.statSync(path.join(backupDir, f));
+          return { name: f, sizeKb: Math.round(st.size / 1024), createdAt: st.mtime.toISOString() };
+        })
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, 20);
+    }
+  } catch (e) { /* ignore */ }
+  // لاگ ادمین اخیر
+  let adminLog = [];
+  try { adminLog = getAdminLog(30); } catch (e) { /* ignore */ }
+  res.json({
+    server: {
+      uptime: metrics.uptimeSeconds,
+      nodeVersion: process.version,
+      platform: `${process.platform} ${process.arch}`,
+      pid: process.pid,
+      memory: {
+        rssMb: Math.round(mem.rss / 1048576),
+        heapUsedMb: Math.round(mem.heapUsed / 1048576),
+        heapTotalMb: Math.round(mem.heapTotal / 1048576),
+        externalMb: Math.round(mem.external / 1048576)
+      }
+    },
+    metrics, health, errors, backups, adminLog
+  });
+});
+
 // ---------- آپلود عکس محصول ----------
 // بدنه‌ی خام با سقف ۲ مگابایت؛ فقط فرمت‌های تصویری شناخته‌شده
 const IMG_TYPES = {

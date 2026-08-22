@@ -10,7 +10,7 @@
 <link rel="preload" href="assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
-<link rel="stylesheet" href="css/style.css?v=62">
+<link rel="stylesheet" href="css/style.css?v=63">
 </head>
 <body class="admin-body">
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -59,6 +59,7 @@
         <button data-view="config"><svg><use href="#i-settings"/></svg> تنظیمات</button>
         <button data-view="log"><svg><use href="#i-history"/></svg> رویدادها</button>
         <button data-view="errors"><svg><use href="#i-alert"/></svg> خطاها <span class="nav-count" id="navErrors">—</span></button>
+        <button data-view="system"><svg><use href="#i-settings"/></svg> وضعیت سیستم</button>
       </nav>
       <div class="admin-side-foot">
         <button id="btnRefreshAll" title="بارگذاری دوباره‌ی همه‌چیز"><svg><use href="#i-refresh"/></svg> <span>به‌روزرسانی</span></button>
@@ -636,6 +637,28 @@
         <div class="ad-card"><div id="errHost"></div></div>
       </section>
 
+      <!-- وضعیت سیستم -->
+      <section class="admin-view hidden" id="viewSystem">
+        <div class="ad-head">
+          <div>
+            <h1>وضعیت سیستم</h1>
+            <p>متریک سرور، سلامت دیتابیس، بکاپ‌ها و لاگ ادمین.</p>
+          </div>
+          <div class="ad-head-actions">
+            <button class="btn btn-ghost" id="sysReload"><svg><use href="#i-history"/></svg> تازه‌سازی</button>
+            <button class="btn btn-primary btn-sm" id="sysBackup"><svg><use href="#i-save"/></svg> بکاپ فوری</button>
+          </div>
+        </div>
+        <div class="ad-kpis" id="sysKpis"></div>
+        <div class="sys-grid" id="sysGrid">
+          <div class="ad-card sys-card" id="sysServer"></div>
+          <div class="ad-card sys-card" id="sysDb"></div>
+          <div class="ad-card sys-card sys-card-wide" id="sysErrors"></div>
+          <div class="ad-card sys-card sys-card-wide" id="sysBackups"></div>
+          <div class="ad-card sys-card sys-card-wide" id="sysAdminLog"></div>
+        </div>
+      </section>
+
     </div>
   </div>
 </main>
@@ -836,7 +859,7 @@
   </div>
 </div>
 
-<script src="js/common.js?v=62" defer></script>
-<script src="js/admin.js?v=62" defer></script>
+<script src="js/common.js?v=63" defer></script>
+<script src="js/admin.js?v=63" defer></script>
 </body>
 </html>

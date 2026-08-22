@@ -3922,6 +3922,26 @@ table.ad-table tbody tr:last-child td{border-bottom:0;}
 .crm-tl-body b{display:block;font-size:12.5px;font-weight:600;}
 .crm-tl-body small{font-size:10.5px;color:var(--ink-soft);}
 
+/* وضعیت سیستم */
+.sys-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:16px;margin-top:16px;}
+.sys-card{padding:16px 18px;}
+.sys-card h3{font-size:14px;margin:0 0 12px;font-weight:700;}
+.sys-card-wide{grid-column:1 / -1;}
+.sys-rows{display:flex;flex-direction:column;gap:6px;}
+.sys-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px;}
+.sys-row:last-child{border-bottom:none;}
+.sys-row span{color:var(--ink-soft);}
+.sys-row b{font-weight:600;}
+.clr-ok{color:#2BD9BC !important;}
+.clr-err{color:#FF4444 !important;}
+.sys-err-list,.sys-backup-list,.sys-log-list{display:flex;flex-direction:column;gap:6px;}
+.sys-err-row,.sys-backup-row,.sys-log-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px;}
+.sys-err-row:last-child,.sys-backup-row:last-child,.sys-log-row:last-child{border-bottom:none;}
+.sys-err-count{font-weight:700;color:var(--teal);min-width:30px;text-align:center;}
+.sys-err-msg{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sys-log-action{font-weight:600;min-width:80px;color:var(--teal);}
+@media (max-width:800px){.sys-grid{grid-template-columns:1fr;}.sys-card-wide{grid-column:auto;}}
+
 /* ============================================================
    صفحه‌ی خرید عمده (B2B)
    ============================================================ */
