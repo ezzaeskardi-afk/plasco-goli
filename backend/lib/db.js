@@ -2759,6 +2759,14 @@ function quickCheck() {
   }
 }
 
+// فقط همین شکلِ دقیق «بکاپ روزانه» است: polasco-YYYY-MM-DD.db
+// عمداً سخت‌گیرانه — با الگویِ بازِ /^polasco-.*\.db$/ فایل‌های دستی مثل
+// polasco-before-fix-2026-08-02-23-55-35.db یا polasco-2026-08-22-v2.db هم
+// «روزانه» شمرده می‌شدند و چون الفبایی بعد از تاریخ‌ها می‌آیند، shift() یک
+// بکاپِ واقعی را به‌جای آن‌ها پاک می‌کرد. یعنی هر عکسِ دستی یک روز از
+// تاریخچه را می‌خورد؛ همان چیزی که کامنتِ زیر ادعا می‌کرد جلویش گرفته شده.
+const DAILY_BACKUP_RE = /^polasco-\d{4}-\d{2}-\d{2}\.db$/;
+
 async function backupNow(log = console) {
   const stamp = new Date().toISOString().slice(0, 10);
   const dest = path.join(BACKUP_DIR, `polasco-${stamp}.db`);
@@ -2779,10 +2787,8 @@ async function backupNow(log = console) {
   // فقط ۱۴ بکاپ آخر نگه داشته می‌شود — و فقط وقتی دیتابیس سالم است
   if (rotate) {
     // فقط بکاپ‌های *روزانه* می‌چرخند. عکس‌های دستی (`pre-restore-*`،
-    // `pre-recovery-*`) عمداً بیرون از شمارش‌اند: الفبایی بعد از polasco- قرار
-    // می‌گیرند، پس با شمارشِ قبلی هرگز خودشان پاک نمی‌شدند ولی جای بکاپ‌های
-    // روزانه را می‌گرفتند — یعنی هر عکسِ دستی یک روز از تاریخچه را می‌خورد.
-    const files = fs.readdirSync(BACKUP_DIR).filter(f => /^polasco-.*\.db$/.test(f)).sort();
+    // `pre-recovery-*`، `polasco-before-fix-*`، `manual-*`) بیرون از شمارش‌اند.
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => DAILY_BACKUP_RE.test(f)).sort();
     while (files.length > 14) fs.unlinkSync(path.join(BACKUP_DIR, files.shift()));
   }
   (log.info || console.log).call(log, `Database backup saved: ${path.basename(dest)}`);
@@ -2795,7 +2801,7 @@ async function backupNow(log = console) {
       fs.mkdirSync(dir2, { recursive: true });
       fs.copyFileSync(dest, path.join(dir2, path.basename(dest)));
       if (rotate) {
-        const f2 = fs.readdirSync(dir2).filter(f => /^polasco-.*\.db$/.test(f)).sort();
+        const f2 = fs.readdirSync(dir2).filter(f => DAILY_BACKUP_RE.test(f)).sort();
         while (f2.length > 14) fs.unlinkSync(path.join(dir2, f2.shift()));
       }
       (log.info || console.log).call(log, `Backup copied to secondary dir: ${dir2}`);
@@ -2918,6 +2924,7 @@ module.exports = {
   getAddresses, getAddress, createAddress, updateAddress, deleteAddress,
   createOrderTx, getOrder, getOrderByIdempotency, getUserOrders, getOrderForGuest, markOrderPaid, markOrderFailedTx, stmtSetAuthority, setPaymentDetails,
   expireStaleOrders, getStaleOrdersToReconcile, bumpReconcileTries, cleanupExpired, backupNow,
+  DAILY_BACKUP_RE,
   crmGetSummary, crmSearchCustomers, crmGetCustomer,
   crmListTags, crmCreateTag, crmDeleteTag, crmSetUserTags,
   crmAddNote, crmDeleteNote, crmAddTask, crmToggleTask, crmDeleteTask,

@@ -18,6 +18,16 @@
 // نوشتنش در SQLite یعنی یک write به‌ازای هر رمزِ غلط — دقیقاً همان چیزی که
 // مهاجم می‌خواهد. با ریستارتِ سرور پاک می‌شود و آن هم اشکالی ندارد: ریستارت
 // دستِ مدیر است، نه دستِ مهاجم.
+//
+// ...ولی این استدلال فقط در حالتِ تک‌پروسه برقرار است. اگر CLUSTER_ENABLED
+// روشن شود، هر worker یک Map جدا دارد و شمارنده‌ی «۵ تلاش» می‌شود «۵ تلاش
+// برای هر worker». با ۸ هسته یعنی ۴۰ رمز — و همان سوراخی که خطوط ۴ تا ۱۵
+// برای بستنش نوشته شده‌اند دوباره باز می‌شود، فقط این بار بی‌صدا.
+//
+// پس انتخاب شرطی است و makeSharedStore همین کار را می‌کند: در تک‌پروسه همان
+// Map (پس استدلالِ بالا دست‌نخورده می‌ماند و صفر I/O اضافه)، و در کلاستر یک
+// جدولِ SQLite مشترک. آن‌جا نگرانیِ «هر تلاش یک write» بی‌اثر است چون
+// rate limiter هم از قبل به‌ازای هر درخواست می‌نویسد.
 
 // ۵ تلاشِ ناموفق، بعدش قفل. چرا ۵ و نه ۳: آدمِ واقعی که رمزش را نصفه یادش
 // است، دو-سه بار غلط می‌زند؛ ۳ یعنی مشتریِ واقعی را زیاد قفل می‌کنیم.
@@ -29,17 +39,19 @@ const LOCK_STEPS_MS = [60e3, 5 * 60e3, 15 * 60e3, 60 * 60e3];
 // غلط زده، امروز با یک اشتباه قفل می‌شود.
 const FORGET_MS = 60 * 60e3;
 
-const attempts = new Map(); // phone → { fails, lockedUntil, level, seen }
+const { makeSharedStore } = require('./shared-state');
 
-// هرس دوره‌ای تا Map با شماره‌های قدیمی بی‌نهایت رشد نکند (نشتِ حافظه).
-// unref تا این تایمر جلوی بسته‌شدن پروسه را در تست‌ها نگیرد.
-const sweeper = setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of attempts) {
-    if (now - v.seen > FORGET_MS && now > (v.lockedUntil || 0)) attempts.delete(k);
-  }
-}, 10 * 60e3);
-if (sweeper.unref) sweeper.unref();
+// phone → { fails, lockedUntil, level, seen }
+//
+// عمرِ هر پرونده: تا وقتی که هم FORGET_MS از آخرین تلاش گذشته باشد و هم قفل
+// تمام شده باشد. چون بلندترین پله‌ی قفل (۶۰ دقیقه) با FORGET_MS برابر است،
+// max همیشه جوابِ درست را می‌دهد. هرس و سقفِ حافظه هم داخل انبارک است.
+const attempts = makeSharedStore('login-guard', {
+  ttlMs: FORGET_MS,
+  maxKeys: 50000,
+  sweepMs: 10 * 60e3,
+});
+const ttlFor = (rec) => Math.max(FORGET_MS, (rec.lockedUntil || 0) - Date.now());
 
 // آیا این حساب همین حالا قفل است؟ اگر بله، چند ثانیه مانده.
 function lockState(key) {
@@ -51,24 +63,31 @@ function lockState(key) {
 }
 
 // یک تلاشِ ناموفق را ثبت می‌کند و می‌گوید آیا حساب همین حالا قفل شد.
+//
+// خواندن-تغییر-نوشتن داخل mutate انجام می‌شود چون در کلاستر باید اتمیک باشد:
+// دو worker که هم‌زمان «۴» را می‌خوانند و هر دو «۵» می‌نویسند، یک تلاشِ
+// ناموفق را گم می‌کنند و مهاجم یک حدسِ رایگان می‌گیرد.
 function registerFail(key) {
-  const k = String(key || '');
-  const now = Date.now();
-  const rec = attempts.get(k) || { fails: 0, lockedUntil: 0, level: 0, seen: now };
-  // اگر از آخرین تلاش خیلی گذشته، شمارنده تازه شروع می‌شود
-  if (now - rec.seen > FORGET_MS) { rec.fails = 0; rec.level = 0; }
-  rec.fails += 1;
-  rec.seen = now;
-  if (rec.fails >= MAX_FAILS) {
-    const step = LOCK_STEPS_MS[Math.min(rec.level, LOCK_STEPS_MS.length - 1)];
-    rec.lockedUntil = now + step;
-    rec.level += 1;
-    rec.fails = 0; // شمارنده برای دورِ بعد صفر می‌شود، ولی level یادش می‌ماند
-    attempts.set(k, rec);
-    return { locked: true, retryAfter: Math.ceil(step / 1000) };
-  }
-  attempts.set(k, rec);
-  return { locked: false, remaining: MAX_FAILS - rec.fails };
+  let result;
+  attempts.mutate(String(key || ''), (prev) => {
+    const now = Date.now();
+    const rec = prev || { fails: 0, lockedUntil: 0, level: 0, seen: now };
+    // اگر از آخرین تلاش خیلی گذشته، شمارنده تازه شروع می‌شود
+    if (now - rec.seen > FORGET_MS) { rec.fails = 0; rec.level = 0; }
+    rec.fails += 1;
+    rec.seen = now;
+    if (rec.fails >= MAX_FAILS) {
+      const step = LOCK_STEPS_MS[Math.min(rec.level, LOCK_STEPS_MS.length - 1)];
+      rec.lockedUntil = now + step;
+      rec.level += 1;
+      rec.fails = 0; // شمارنده برای دورِ بعد صفر می‌شود، ولی level یادش می‌ماند
+      result = { locked: true, retryAfter: Math.ceil(step / 1000) };
+    } else {
+      result = { locked: false, remaining: MAX_FAILS - rec.fails };
+    }
+    return rec;
+  }, ttlFor);
+  return result;
 }
 
 // ورود موفق ⇒ پرونده پاک. کسی که رمز درست را بلد است، نباید تاوانِ

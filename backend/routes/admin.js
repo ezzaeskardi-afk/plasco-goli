@@ -33,7 +33,11 @@ const {
   crmAutoTag, crmAutoTagAll, crmGetAdvancedSummary,
   listWholesaleRequests, countNewWholesaleRequests, setWholesaleRequestStatus, deleteWholesaleRequest
 } = require('../lib/db');
-const { rateLimit, asyncHandler } = require('../lib/middleware');
+// makeRateLimit با نامِ rateLimit وارد می‌شود تا همه‌ی سقف‌های این فایل — و هر
+// سقفی که بعداً اضافه شود — خودکار در حالت cluster بین workerها مشترک باشند.
+// با importِ مستقیمِ rateLimit، شمارنده در حافظه‌ی هر worker جدا می‌ماند و سقف
+// عملاً N برابر می‌شود.
+const { makeRateLimit: rateLimit, asyncHandler } = require('../lib/middleware');
 const { isAdminPhone, normalizePhone, isValidIranPhone } = require('../lib/phone');
 const { notifyCustomerOrderStatus, notifyStockAvailable } = require('../lib/sms');
 const { imageSizeFromBuffer } = require('../lib/imagesize');

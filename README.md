@@ -2,14 +2,14 @@
 
 فروشگاه فارسی محصولات پلاستیکی با frontend ساده‌ی HTML/CSS/JavaScript و backend مبتنی بر Node.js و Express. مشتری محصول را به سبد اضافه می‌کند، با شماره موبایل وارد می‌شود، آدرس تحویل می‌دهد، سفارش ثبت می‌کند و وضعیت سفارش را از حساب کاربری یا صفحه‌ی پیگیری می‌بیند.
 
-> وضعیت فعلی: **۶۸۸ تست smoke + ۸۶ تست سئو + ۴۵ تست امنیت + ۴۷ تست OWASP = ۸۶۶ تست سبز.** CRM پیشرفته با امتیازدهی RFM، وضعیت سیستم در پنل، بنچمارک ۱۰,۰۰۰ کاربر، Cluster Mode، و اسکن خودکار OWASP Top 10.
+> وضعیت فعلی: **۷۲۲ تست smoke + ۸۶ تست سئو + ۴۵ تست امنیت + ۴۷ تست OWASP = ۹۰۰ تست سبز.** CRM پیشرفته با امتیازدهی RFM، وضعیت سیستم در پنل، بنچمارک ۱۰,۰۰۰ کاربر، Cluster Mode (سقف‌های نرخ، قفل حساب و توکن ورود بین workerها مشترک)، و اسکن خودکار OWASP Top 10.
 
 ## وضعیت فنی فعلی
 
 - Node.js `>=22.5`، Express و SQLite داخلی Node
-- **۱۵۳ تابع** در `db.js` (۲,۹۲۹ خط) — ۲۴ فایل کتابخانه + ۹ مسیر API
-- **۵۲ کامیت** در مخزن — **۱۹۶ فایل** تحت کنترل نسخه
-- تست smoke: **۶۸۸ تست** | سئو: **۸۶ تست** | امنیت: **۴۵ تست** | OWASP: **۴۷ تست**
+- **۱۵۳ تابع** در `db.js` (۲,۹۳۶ خط) — ۲۵ فایل کتابخانه + ۹ مسیر API
+- **۵۶ کامیت** در مخزن — **۱۹۷ فایل** تحت کنترل نسخه
+- تست smoke: **۷۲۲ تست** | سئو: **۸۶ تست** | امنیت: **۴۵ تست** | OWASP: **۴۷ تست**
 - بنچمارک: **۱۰,۰۰۰ کاربر همزمان — ۱۰۰٪ موفق، صفر خطا**
 - شاخهٔ اصلی: `main`
 
@@ -89,7 +89,7 @@ npm start
 ```bash
 cd backend
 
-npm test                    # ۶۸۸ تست smoke + regression
+npm test                    # ۷۲۲ تست smoke + regression
 node test-seo.js            # ۸۶ تست سئو
 node tests/security.js      # ۴۵ تست امنیت (آپلود، CSRF، rate-limit)
 node tests/owasp-scan.js    # ۴۷ تست OWASP Top 10
@@ -166,7 +166,7 @@ polasco-goli/
 │   ├── server.js              ← نقطه شروع سرور
 │   ├── package.json
 │   ├── .env.example
-│   ├── test-all.js            ← مجموعه تست (۶۸۸ تست)
+│   ├── test-all.js            ← مجموعه تست (۷۲۲ تست)
 │   ├── test-smoke.js          ← تست مسیر سایت
 │   ├── test-seo.js            ← تست سئو (۸۶ تست)
 │   ├── bench-load.js          ← بنچمارک نوشتن (خرید همزمان)
@@ -175,10 +175,11 @@ polasco-goli/
 │   ├── benchmark-report.md    ← گزارش مقایسه‌ای بنچمارک
 │   ├── SECURITY-REPORT.md     ← گزارش کامل اسکن OWASP Top 10
 │   ├── lib/
-│   │   ├── db.js              ← دیتابیس SQLite (۲,۹۲۹ خط، ۱۵۳ تابع)
+│   │   ├── db.js              ← دیتابیس SQLite (۲,۹۳۶ خط، ۱۵۳ تابع)
 │   │   ├── cache.js           ← کش درون‌حافظه با TTL
 │   │   ├── cluster.js         ← Node.js cluster (لینوکس)
 │   │   ├── rate-limit-sqlite.js ← rate-limit مشترک بین workers
+│   │   ├── shared-state.js    ← انبارکِ مشترک بین workers (قفل حساب، توکن)
 │   │   ├── metrics.js         ← متریک درخواست/تأخیر
 │   │   ├── session-store.js   ← نشست در SQLite
 │   │   ├── login-guard.js     ← قفل حساب
@@ -251,7 +252,7 @@ npm start
 
 تست‌ها:
 ```bash
-npm test                      # ۶۸۸ تست smoke
+npm test                      # ۷۲۲ تست smoke
 node test-seo.js              # ۸۶ تست سئو
 node tests/security.js        # ۴۵ تست امنیت
 node tests/owasp-scan.js      # ۴۷ تست OWASP Top 10
@@ -274,9 +275,13 @@ npm run check                 # همه تست‌ها + بنچمارک
 NODE_ENV=production
 SESSION_SECRET=<حداقل ۳۲ کاراکتر تصادفی>
 COOKIE_SECURE=true
-ADMIN_PHONE=09113567409
+ADMIN_PHONE=<شماره موبایل مدیر — ۰۹xxxxxxxxx>
 SITE_URL=https://your-domain.com
 ```
+
+> `ADMIN_PHONE` عمداً نمونه‌ی واقعی ندارد. ورود مدیر با پیامک به همین شماره
+> انجام می‌شود، پس نوشتنِ عددِ واقعی در مخزنِ عمومی یعنی اعلامِ اینکه کلیدِ
+> پنل دستِ کدام شماره است. مقدارش فقط در `.env` روی سرور بماند.
 
 سرویس‌های اختیاری:
 - `ZARINPAL_MERCHANT_ID` — درگاه پرداخت واقعی

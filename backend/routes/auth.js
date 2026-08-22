@@ -2,11 +2,14 @@ const express = require('express');
 const crypto = require('crypto');
 const { promisify } = require('util');
 const { findOrCreateUser, stmtUserById, updateUserName, ensureAdmin, setUserPassword, getUserByPhone, otp, logAdminAction } = require('../lib/db');
-const { asyncHandler, rateLimit, validate, V } = require('../lib/middleware');
+// makeRateLimit با نامِ rateLimit — سقف‌ها در حالت cluster مشترک می‌مانند.
+// این فایل حساس‌ترین سقف‌ها را دارد (پیامک، ورود با رمز)، پس اشتراک واجب است.
+const { asyncHandler, makeRateLimit: rateLimit, validate, V } = require('../lib/middleware');
 const { sendOtpSms } = require('../lib/sms');
 const { normalizeDigits, normalizePhone, isValidIranPhone, isAdminPhone } = require('../lib/phone');
 const { lockState, registerFail, registerSuccess, waitText } = require('../lib/login-guard');
 const { destroyOtherSessions, countUserSessions } = require('../lib/session-store');
+const { makeSharedStore } = require('../lib/shared-state');
 const log = require('../lib/logger');
 
 const router = express.Router();
@@ -94,29 +97,28 @@ function todayStr() { return new Date().toISOString().slice(0, 10); }
 
 // challenge token یک‌بارمصرف — جلوی ربات‌هایی که مستقیم POST می‌زنند را می‌گیرد
 // client باید اول GET /otp/challenge بزند، token بگیرد، و آن را با درخواست OTP بفرستد
-const challenges = new Map(); // token -> { ip, expiresAt }
+//
+// چرا makeSharedStore و نه Map: توکن را یک worker می‌سازد و درخواستِ بعدی
+// ممکن است به worker دیگری برسد. با Map، توکن آن‌جا پیدا نمی‌شود و کاربر
+// «درخواست نامعتبر است؛ صفحه را رفرش کنید» می‌گیرد — پیامی که هیچ کمکی هم
+// نمی‌کند چون رفرش باز همان قرعه‌کشی است. با N worker یعنی ورود با پیامک
+// (N−۱)/N بار شکست می‌خورد. در تک‌پروسه دقیقاً همان Map قبلی برگردانده می‌شود.
 const CHALLENGE_TTL_MS = 5 * 60 * 1000; // ۵ دقیقه
 // سقف تعداد توکن‌های زنده. بدون این سقف، صدا زدن پیوسته‌ی همین مسیر حافظه‌ی
 // سرور را بالا می‌برد چون هر توکن ۵ دقیقه می‌ماند.
 const MAX_CHALLENGES = 5000;
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of challenges) if (v.expiresAt <= now) challenges.delete(k);
-}, 60000).unref();
+const challenges = makeSharedStore('otp-challenge', {
+  ttlMs: CHALLENGE_TTL_MS,
+  maxKeys: MAX_CHALLENGES,
+});
 
 // این مسیر قبلاً هیچ محدودیتی نداشت؛ سقف سخاوتمندانه است ولی جلوی سیل درخواست را می‌گیرد
 const challengeLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 60, message: 'درخواست‌های زیاد؛ چند دقیقه بعد تلاش کنید' });
 
 router.get('/otp/challenge', challengeLimiter, (req, res) => {
-  if (challenges.size >= MAX_CHALLENGES) {
-    // اول منقضی‌ها را جمع کن؛ اگر باز هم پر بود قدیمی‌ترین‌ها بیرون می‌روند
-    const now = Date.now();
-    for (const [k, v] of challenges) if (v.expiresAt <= now) challenges.delete(k);
-    let drop = Math.ceil(MAX_CHALLENGES / 10);
-    for (const k of challenges.keys()) { if (drop-- <= 0) break; challenges.delete(k); }
-  }
+  // هرس و بیرون‌انداختنِ قدیمی‌ترها هر دو داخل خودِ انبارک انجام می‌شود.
   const token = crypto.randomBytes(16).toString('hex');
-  challenges.set(token, { ip: req.ip, expiresAt: Date.now() + CHALLENGE_TTL_MS });
+  challenges.set(token, { ip: req.ip });
   res.json({ token });
 });
 
@@ -133,10 +135,15 @@ router.post('/otp/request', otpIpLimiter, validate({
   challenge: V.str({ min: 16, max: 128 })
 }), asyncHandler(async (req, res) => {
   // بررسی challenge token — جلوی ربات‌هایی که مستقیم POST می‌زنند را می‌گیرد
+  //
+  // خواندن و پاک‌کردن باید یک عملِ اتمیک باشد. با `get` و بعد `delete`ِ جدا،
+  // دو درخواستِ هم‌زمان با یک توکن هر دو موفق می‌شوند (هر دو قبل از پاک‌شدن
+  // خوانده‌اند) و خاصیتِ «یک‌بارمصرف» — که کلِ دلیلِ وجودِ این توکن است —
+  // از بین می‌رود. mutate هر دو کار را داخل یک تراکنش انجام می‌دهد.
   const token = req.valid.challenge;
-  const ch = challenges.get(token);
+  let ch;
+  challenges.mutate(token, (cur) => { ch = cur; return null; });
   if (!ch) return res.status(400).json({ error: 'درخواست نامعتبر است؛ صفحه را رفرش کنید' });
-  challenges.delete(token); // یک‌بارمصرف
 
   const phone = req.valid.phone;
   if (!isValidIranPhone(phone)) {

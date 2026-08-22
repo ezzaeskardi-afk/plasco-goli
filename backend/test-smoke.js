@@ -1623,21 +1623,34 @@ function shutdown(code) {
     check('V14 بکاپ: پوشه‌ی بکاپ وجود دارد و بکاپ روزانه دارد',
       fs.existsSync(bkDir) && fs.readdirSync(bkDir).some(f => f.endsWith('.db')),
       fs.existsSync(bkDir) ? String(fs.readdirSync(bkDir).length) : 'نیست');
-    // شمارش باید *همان* الگویی باشد که چرخش با آن کار می‌کند (`/^polasco-.*\.db$/`).
+    // شمارش باید *همان* الگویی باشد که چرخش با آن کار می‌کند — پس مستقیم از
+    // خودِ ماژول خوانده می‌شود، نه کپیِ دستیِ regex. قبلاً کپی بود و همان‌جا
+    // واگرا شد: کد الگوی بازِ /^polasco-.*\.db$/ داشت، تست هم همان را کپی کرده
+    // بود، و هر دو با هم غلط بودند.
     //
-    // قبلاً اینجا هر فایل .db شمرده می‌شد و این یک هم‌ترازیِ غلط بود: عکس‌های دستی
-    // (`manual-*`، `pre-recovery-*`، `pre-restore-*`) عمداً از چرخش بیرون‌اند —
-    // نقطه‌ی نجات‌اند و نباید خودکار پاک شوند. پس تست چیزی را می‌سنجید که کد
-    // هیچ‌وقت قرار نبود تضمینش کند و اولین بکاپ دستی آن را می‌شکست. (و شکست:
-    // با بکاپِ دستیِ رفعِ اشکالِ هزینه‌ی ارسال + بکاپِ روزانه‌ی روز بعد، شد ۱۵.)
-    const bkDaily = fs.readdirSync(bkDir).filter(f => /^polasco-.*\.db$/.test(f));
+    // چرا الگوی باز غلط بود: عکس‌های دستی (`manual-*`، `pre-recovery-*`،
+    // `pre-restore-*`) عمداً از چرخش بیرون‌اند — نقطه‌ی نجات‌اند و نباید خودکار
+    // پاک شوند. ولی دو فایلِ دستی با پیشوندِ polasco- هم داشتیم
+    // (`polasco-before-fix-...` و `polasco-2026-08-22-v2.db`) که الگوی باز
+    // «روزانه» می‌شمردشان. چون sort الفبایی است و shift اولی را پاک می‌کند،
+    // این‌ها هرگز خودشان پاک نمی‌شدند ولی جای بکاپ‌های روزانه را می‌گرفتند —
+    // یعنی هر عکسِ دستی یک روز از تاریخچه را می‌خورد. (و شمارش هم شد ۱۵.)
+    const { DAILY_BACKUP_RE } = require('./lib/db');
+    check('V14 بکاپ: الگوی چرخش فقط دقیقاً polasco-YYYY-MM-DD.db را می‌گیرد',
+      DAILY_BACKUP_RE.test('polasco-2026-08-22.db')
+      && !DAILY_BACKUP_RE.test('polasco-2026-08-22-v2.db')
+      && !DAILY_BACKUP_RE.test('polasco-before-fix-2026-08-02-23-55-35.db')
+      && !DAILY_BACKUP_RE.test('manual-before-audit-fixes.db'));
+    check('V14 بکاپ: کد چرخش از همان الگوی صادرشده استفاده می‌کند',
+      /filter\(f => DAILY_BACKUP_RE\.test\(f\)\)/.test(bkSrc));
+    const bkDaily = fs.readdirSync(bkDir).filter(f => DAILY_BACKUP_RE.test(f));
     check('V14 بکاپ: تعداد بکاپ‌های روزانه از سقف ۱۴ بیشتر نشده', bkDaily.length <= 14, String(bkDaily.length));
 
     // و حالا همان چیزی که بیرون از چرخش است، سقفِ خودش را دارد.
     // چرا: «هیچ‌وقت خودکار پاک نشو» درست است، ولی یعنی هیچ‌کس هم پاکشان نمی‌کند.
     // هر عکس، هم‌اندازه‌ی کلِ دیتابیس است و این پوشه روی درایو مانت‌شده می‌نشیند.
     // بیست عدد یعنی «حواست باشد»، نه «خطا».
-    const bkManual = fs.readdirSync(bkDir).filter(f => f.endsWith('.db') && !/^polasco-.*\.db$/.test(f));
+    const bkManual = fs.readdirSync(bkDir).filter(f => f.endsWith('.db') && !DAILY_BACKUP_RE.test(f));
     check('V14 بکاپ: عکس‌های دستی روی هم انبار نشده‌اند (دیسک پر می‌شود)',
       bkManual.length <= 20, `${bkManual.length} manual`);
 
@@ -2709,6 +2722,60 @@ function shutdown(code) {
       check('V28 نامِ ناموجود: خطای روشن می‌دهد و دست به دیتابیس نمی‌زند',
         missRun.status === 1 && probe(liveDb) === 'OLD', `exit ${missRun.status}`);
 
+      // ۷) بکاپی که وسطِ نوشتن رها شده باید صریح رد شود.
+      //    SQLite تا اولین *خواندن* دست به ژورنال نمی‌زند، پس چنین فایلی موقعِ
+      //    باز شدن سالم به‌نظر می‌رسد و بعد با پیامِ خامِ «attempt to write a
+      //    readonly database» می‌ترکد — جمله‌ای که مدیرِ نیمه‌شب را دنبالِ مشکلِ
+      //    دسترسیِ فایل می‌فرستد، در حالی که واقعیت این است: این بکاپ خالی است.
+      //    یکی از بکاپ‌های واقعیِ همین پروژه (۲۰۲۶-۰۷-۲۷) دقیقاً همین بود.
+      //    این‌جا هم می‌سنجیم پیام روشن است و هم اینکه فقط خواندنِ فهرست بایتی
+      //    از خودِ بکاپ را عوض نمی‌کند.
+      //
+      //    ژورنالِ داغ را جعل نمی‌کنیم (سرآمدِ دست‌ساز را SQLite نمی‌پذیرد و تست
+      //    الکی سبز می‌شد). واقعی می‌سازیم: یک پروسه‌ی فرزند تراکنش را باز می‌کند،
+      //    آن‌قدر می‌نویسد که صفحه‌ها از کش بریزند، و بعد بی‌COMMIT کشته می‌شود.
+      {
+        const hotDb = path.join(rBack, 'polasco-2020-01-03.db');
+        fs.copyFileSync(bkOld, hotDb);
+        cs.spawnSync(process.execPath, ['-e', `
+          const { DatabaseSync } = require('node:sqlite');
+          const d = new DatabaseSync(process.argv[1]);
+          d.exec('PRAGMA journal_mode=DELETE');
+          d.exec('PRAGMA cache_size=2');
+          d.exec('BEGIN IMMEDIATE');
+          d.exec('CREATE TABLE _hot (a INTEGER, b TEXT)');
+          const ins = d.prepare('INSERT INTO _hot VALUES (?,?)');
+          for (let i = 0; i < 3000; i++) ins.run(i, 'x'.repeat(200));
+          process.abort();   // بی‌COMMIT ⇒ ژورنالِ داغ روی دیسک می‌ماند
+        `, hotDb], { encoding: 'utf8', stdio: 'ignore' });
+
+        const jrn = hotDb + '-journal';
+        const gotHot = fs.existsSync(jrn) && fs.statSync(jrn).size > 0;
+        // اگر نشد ژورنالِ داغ بسازیم، صریح رد می‌شویم — سبزِ بی‌معنی بدتر از قرمز است
+        check('V28 آماده‌سازی: ژورنالِ داغِ واقعی ساخته شد',
+          gotHot, gotHot ? '' : 'ژورنال ساخته نشد؛ بندهای زیر بی‌اعتبارند');
+
+        if (gotHot) {
+          const before = fs.readFileSync(hotDb);
+          const hotList = runTool([]);
+          check('V28 فهرست: بکاپی که ژورنالِ داغ دارد بایتی هم عوض نمی‌شود',
+            Buffer.compare(before, fs.readFileSync(hotDb)) === 0,
+            `اندازه از ${before.length} شد ${fs.statSync(hotDb).size}`);
+          check('V28 فهرست: ژورنال هم مصرف نمی‌شود (read-write بازش نمی‌کند)',
+            fs.existsSync(jrn));
+          check('V28 فهرست: به‌جای عدد، «قابلِ اعتماد نیست» گزارش می‌دهد',
+            /قابلِ اعتماد نیست/.test(hotList.stdout));
+
+          const hotRestore = runTool(['2020-01-03', '--yes']);
+          check('V28 محافظ: بازگردانی از بکاپِ نیمه‌کاره رد می‌شود',
+            hotRestore.status === 1 && /سالم نیست/.test(hotRestore.stdout),
+            `exit ${hotRestore.status}`);
+          check('V28 محافظ: و دیتابیسِ فعلی دست‌نخورده ماند',
+            probe(liveDb) === 'OLD', String(probe(liveDb)));
+        }
+        for (const f of [jrn, hotDb]) { try { fs.unlinkSync(f); } catch (e) { /* نبود */ } }
+      }
+
       try { fs.rmSync(rdir, { recursive: true, force: true }); } catch (e) { /* بی‌اهمیت */ }
 
       /* چرخشِ بکاپ: عکس‌های دستی نباید سهمِ ۱۴ روزِ بکاپِ روزانه را بخورند.
@@ -3506,6 +3573,104 @@ function shutdown(code) {
         (acJs34.match(/currentPassword/g) || []).length >= 2);
       check('V34 فرانت: کادر فقط برای کسی که رمز دارد باز می‌شود',
         /fieldCurPass\.classList\.toggle\('hidden', !hasPassword\)/.test(acJs34));
+    }
+
+    /* ================= V36: حالتِ مشترک بین cluster workers =================
+
+       چرا این بلوک لازم است: کلاستر روی ویندوز عمداً خاموش است
+       (lib/cluster.js خط ۳۷)، پس مسیرِ SQLite هرگز در اجرای عادی اجرا نمی‌شود.
+       یعنی بدون تستِ مستقیم، این نیمه‌ی کد تا روزِ استقرار روی لینوکس
+       آزمایش‌نشده می‌ماند — و آن‌جا خرابی‌اش سکوت‌آمیز است: ورودِ پیامکی
+       بی‌دلیل «صفحه را رفرش کنید» می‌دهد و قفلِ حساب N برابر ضعیف می‌شود.
+
+       پس هر دو پیاده‌سازی با یک مجموعه‌ی یکسان سنجیده می‌شوند. اگر رفتارشان
+       واگرا شود، همین‌جا لو می‌رود، نه در تولید. */
+    {
+      const ss = require('./lib/shared-state');
+      const impls = [
+        ['Map', ss._makeMapStoreForTest],
+        ['SQLite', ss._makeSqliteStoreForTest],
+      ];
+
+      for (const [label, make] of impls) {
+        const s = make(`v36-${label}`, { ttlMs: 60000, maxKeys: 0 });
+        s.clear();
+
+        s.set('tok', { ip: '1.2.3.4' });
+        check(`V36 ${label}: نوشتن و خواندن`, s.get('tok')?.ip === '1.2.3.4');
+        check(`V36 ${label}: کلیدِ ناموجود undefined است`, s.get('absent') === undefined);
+
+        // خاصیتِ یک‌بارمصرف بودنِ توکنِ challenge. باید *اتمیک* باشد وگرنه دو
+        // درخواستِ هم‌زمان هر دو موفق می‌شوند و کلِ دلیلِ وجودِ توکن از بین می‌رود.
+        let first, second = 'sentinel';
+        s.mutate('tok', (c) => { first = c; return null; });
+        s.mutate('tok', (c) => { second = c; return null; });
+        check(`V36 ${label}: مصرفِ توکن مقدارش را برمی‌گرداند`, first?.ip === '1.2.3.4');
+        check(`V36 ${label}: توکن یک‌بارمصرف است`, second === undefined);
+
+        // شمارنده‌ی قفلِ حساب: read-modify-write باید تلاش گم نکند.
+        for (let i = 0; i < 4; i++) s.mutate('cnt', (p) => ({ n: (p?.n || 0) + 1 }));
+        check(`V36 ${label}: شمارنده هیچ تلاشی را گم نمی‌کند`, s.get('cnt')?.n === 4);
+
+        check(`V36 ${label}: size فقط کلیدهای زنده را می‌شمارد`, s.size() === 1);
+        s.clear();
+        check(`V36 ${label}: clear همه را می‌برد`, s.size() === 0);
+
+        // انقضا
+        const t = make(`v36-ttl-${label}`, { ttlMs: 1, maxKeys: 0 });
+        t.clear();
+        t.set('gone', 1);
+        await sleep(20);
+        check(`V36 ${label}: کلید بعد از TTL منقضی می‌شود`, t.get('gone') === undefined);
+        t.clear();
+
+        // سقفِ تعدادِ کلید — جلوی پر کردنِ حافظه/جدول با توکنِ یک‌بارمصرف
+        const cap = make(`v36-cap-${label}`, { ttlMs: 60000, maxKeys: 10 });
+        cap.clear();
+        for (let i = 0; i < 30; i++) cap.set(`k${i}`, i);
+        check(`V36 ${label}: سقفِ تعدادِ کلید رعایت می‌شود`, cap.size() <= 10, `${cap.size()}`);
+        cap.clear();
+      }
+
+      /* ---- نگهبان‌های متنِ کد: جلوی برگشتنِ Mapهای per-process ---- */
+      const guardSrc = fs.readFileSync(path.join(__dirname, 'lib', 'login-guard.js'), 'utf8');
+      check('V36 نگهبان: قفلِ حساب از انبارکِ مشترک استفاده می‌کند',
+        /makeSharedStore\('login-guard'/.test(guardSrc) && !/new Map\(\)/.test(guardSrc));
+      check('V36 نگهبان: ثبتِ تلاشِ ناموفق اتمیک است (mutate نه get/set)',
+        /attempts\.mutate\(/.test(guardSrc));
+
+      const authSrc36 = fs.readFileSync(path.join(__dirname, 'routes', 'auth.js'), 'utf8');
+      check('V36 نگهبان: توکنِ challenge از انبارکِ مشترک می‌آید',
+        /makeSharedStore\('otp-challenge'/.test(authSrc36));
+      check('V36 نگهبان: مصرفِ توکن اتمیک است',
+        /challenges\.mutate\(token/.test(authSrc36));
+
+      // همه‌ی فایل‌های مسیر باید makeRateLimit را وارد کنند، نه rateLimitِ خام.
+      // اگر یکی از قلم بیفتد، سقفش در کلاستر N برابر می‌شود بی‌آنکه کسی بفهمد.
+      const routeFiles = ['admin.js', 'auth.js', 'orders.js', 'products.js', 'wholesale.js'];
+      const stragglers = routeFiles.filter((f) => {
+        const src = fs.readFileSync(path.join(__dirname, 'routes', f), 'utf8');
+        if (!/rateLimit\(/.test(src)) return false;          // اصلاً سقف ندارد
+        return !/makeRateLimit: rateLimit/.test(src);          // سقف دارد ولی خام وارد کرده
+      });
+      check('V36 نگهبان: همه‌ی مسیرها سقفِ کلاستر-آگاه دارند',
+        stragglers.length === 0, stragglers.join(', '));
+
+      const midSrc = fs.readFileSync(path.join(__dirname, 'lib', 'middleware.js'), 'utf8');
+      check('V36 نگهبان: makeRateLimit در تک‌پروسه همان rateLimit را می‌دهد',
+        /if \(!isClusterEnabled\(\)\) return rateLimit\(opts\);/.test(midSrc));
+
+      // سهمیه‌ی skipSuccess باید یکی کم شود، نه صفر. با ریست‌کردنِ شمارنده مهاجم
+      // می‌توانست با یک درخواستِ موفق کلِ سابقه‌ی تلاش‌های ناموفقش را پاک کند.
+      //
+      // کامنت‌ها برداشته می‌شوند: خودِ توضیحِ «قبلاً چه غلط بود» همان الگو را
+      // دارد و تست را الکی رد می‌کرد. (همان تله‌ی تستِ V14 پاکسازی.)
+      const rlSrc = fs.readFileSync(path.join(__dirname, 'lib', 'rate-limit-sqlite.js'), 'utf8');
+      const rlCode = rlSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      check('V36 نگهبان: skipSuccess در SQLite یکی کم می‌کند نه ریست',
+        /SET count = count - 1/.test(rlCode) && !/SET count = 1\b/.test(rlCode));
+      check('V36 نگهبان: پس‌دادنِ سهمیه به همان پنجره محدود است',
+        /AND window_start = \?/.test(rlCode));
     }
 
   } catch (err) {

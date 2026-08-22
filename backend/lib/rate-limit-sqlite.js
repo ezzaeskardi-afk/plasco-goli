@@ -37,8 +37,20 @@ const stmtUpsert = db.prepare(`
   INSERT INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)
   ON CONFLICT(key) DO UPDATE SET count = count + 1
 `);
-const stmtReset = db.prepare(
-  `UPDATE rate_limits SET count = 1, window_start = ? WHERE key = ?`
+// پس‌دادنِ سهمیه بعد از یک درخواستِ موفق (skipSuccess).
+//
+// اینجا قبلاً `SET count = 1` بود و آن یک حفره‌ی واقعی می‌ساخت: شمارنده را
+// صفر می‌کرد، نه یکی کم. یعنی مهاجم می‌توانست ۲۹ رمز غلط بزند، بعد یک
+// درخواستِ موفقِ بی‌ضرر روی همان مسیر بفرستد و کل سابقه‌اش پاک شود —
+// عملاً سقفِ بی‌نهایت. نسخه‌ی درون‌حافظه‌ای همیشه `count -= 1` می‌کرد؛
+// این حالا با آن یکی است.
+//
+// شرطِ `window_start = ?` معادلِ همان `hits.get(key) === mine` در نسخه‌ی
+// حافظه‌ای است: اگر در این فاصله پنجره‌ی تازه‌ای شروع شده باشد، از سهمیه‌ی
+// پنجره‌ی جدید کم نمی‌کنیم.
+const stmtGiveBack = db.prepare(
+  `UPDATE rate_limits SET count = count - 1
+     WHERE key = ? AND window_start = ? AND count > 0`
 );
 const stmtCount = db.prepare(
   `SELECT COUNT(*) AS n FROM rate_limits`
@@ -98,11 +110,11 @@ function rateLimitSqlite({ windowMs, max, message, skipSuccess = false, keyBy = 
       }
 
       if (skipSuccess) {
-        const rec = current;
+        const myWindow = current ? current.window_start : null;
         const myKey = key;
         res.on('finish', () => {
-          if (res.statusCode < 400 && rec) {
-            try { stmtReset.run(rec.window_start, myKey); } catch (e) { /* ignore */ }
+          if (res.statusCode < 400 && myWindow !== null) {
+            try { stmtGiveBack.run(myKey, myWindow); } catch (e) { /* ignore */ }
           }
         });
       }

@@ -1,6 +1,7 @@
 const express = require('express');
 const { addWholesaleRequest, getPublicProduct } = require('../lib/db');
-const { validate, V, rateLimit } = require('../lib/middleware');
+// makeRateLimit با نامِ rateLimit — سقف‌ها در حالت cluster مشترک می‌مانند.
+const { validate, V, makeRateLimit: rateLimit } = require('../lib/middleware');
 
 const router = express.Router();
 

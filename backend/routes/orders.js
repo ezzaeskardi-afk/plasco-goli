@@ -5,7 +5,8 @@ const {
   getShippingQuote, userCancelOrderTx, userRequestReturn, getSetting, quoteCoupon, getUserPhone, setPaymentDetails,
   getOrderForGuest
 } = require('../lib/db');
-const { requireAuth, asyncHandler, rateLimit } = require('../lib/middleware');
+// makeRateLimit با نامِ rateLimit — سقف‌ها در حالت cluster مشترک می‌مانند.
+const { requireAuth, asyncHandler, makeRateLimit: rateLimit } = require('../lib/middleware');
 const { normalizeDigits, normalizePhone, isValidIranPhone } = require('../lib/phone');
 const { requestPayment, verifyPayment } = require('../lib/payment');
 const { notifyAdminNewOrder, notifyCustomerOrderStatus } = require('../lib/sms');

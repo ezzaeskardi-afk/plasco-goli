@@ -62,13 +62,30 @@ const line = (c = '═') => console.log('  ' + c.repeat(58));
 
 /* ---------- خواندنِ خلاصه‌ی یک فایلِ دیتابیس ----------
    readOnly تلاشِ اول است تا کنارِ بکاپ فایلِ -journal جا نگذاریم؛ اگر نسخه‌ی
-   Node این گزینه را نشناسد، به بازکردنِ معمولی برمی‌گردیم. */
+   Node این گزینه را نشناسد، به بازکردنِ معمولی برمی‌گردیم — ولی *نه* وقتی
+   همراهِ نیمه‌کاره‌ای کنارِ فایل هست (توضیحش پایینِ همان شرط). */
 const NEEDED = ['products', 'orders', 'users', 'settings'];
+
+// آیا کنارِ فایل «همراهِ نیمه‌کاره» مانده؟ یعنی ژورنالِ داغ یا WALِ رهاشده —
+// نشانه‌ی اینکه نوشتنِ این فایل تمام نشده و وسطِ کار رهایش کرده‌اند.
+const hotCompanions = (file) => ['-journal', '-wal'].filter(x => {
+  try { return fs.statSync(file + x).size > 0; } catch (e) { return false; }
+});
 
 function inspect(file) {
   let d = null;
   try { d = new DatabaseSync(file, { readOnly: true }); }
-  catch (e) { try { d = new DatabaseSync(file); } catch (e2) { return { ok: false, message: e2.message }; } }
+  catch (e) {
+    // فقط اگر خودِ Node گزینه‌ی readOnly را نشناسد به این‌جا می‌رسیم. آن‌وقت
+    // بازکردنِ read-write روی فایلی که ژورنالِ داغ دارد، همان ژورنال را
+    // rollback و مصرف می‌کند — یعنی «فهرست گرفتن» بکاپ را عوض می‌کند. پس در
+    // آن حالت fallback نمی‌زنیم.
+    const hot = hotCompanions(file);
+    if (hot.length) {
+      return { ok: false, message: `نیمه‌کاره رها شده (${hot.join(' و ')} کنارش مانده) — قابلِ اعتماد نیست` };
+    }
+    try { d = new DatabaseSync(file); } catch (e2) { return { ok: false, message: e2.message }; }
+  }
   try {
     const tables = new Set(d.prepare(
       "SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name));
@@ -95,6 +112,17 @@ function inspect(file) {
       })(),
     };
   } catch (e) {
+    // SQLite تا اولین *خواندن* دست به ژورنال نمی‌زند، پس بکاپِ نیمه‌کاره موقعِ
+    // باز شدن لو نمی‌رود؛ همین‌جا می‌ترکد با پیامِ خامِ
+    // «attempt to write a readonly database». آن جمله مدیرِ نیمه‌شب را دنبالِ
+    // مشکلِ دسترسیِ فایل می‌فرستد، در حالی که واقعیت این است: این بکاپ وسطِ
+    // نوشتن رها شده. یکی از بکاپ‌های واقعیِ همین پروژه (۲۰۲۶-۰۷-۲۷) دقیقاً
+    // همین بود — ۲۰۰ کیلوبایت روی دیسک که تراکنشش هرگز commit نشده بود و
+    // محتوایش عملاً خالی است. باید صریح گفته شود، نه با پیامِ گمراه‌کننده.
+    const hot = hotCompanions(file);
+    if (hot.length) {
+      return { ok: false, message: `نیمه‌کاره رها شده (${hot.join(' و ')} کنارش مانده) — قابلِ اعتماد نیست` };
+    }
     return { ok: false, message: e.message };
   } finally {
     try { d.close(); } catch (e) { /* بسته بود */ }

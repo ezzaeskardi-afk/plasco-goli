@@ -26,10 +26,10 @@ const {
   closeDb, getDbHealth, getCategories, getCatalogSignature, checkpointWal, getTopProducts
 } = require('./lib/db');
 const { SqliteSessionStore } = require('./lib/session-store');
-const { rateLimit } = require('./lib/middleware');
-const { rateLimitSqlite } = require('./lib/rate-limit-sqlite');
+// makeRateLimit خودش بین پیاده‌سازیِ درون‌حافظه و SQLite انتخاب می‌کند؛ قبلاً
+// این انتخاب به‌صورت ternary در محلِ استفاده تکرار می‌شد.
+const { makeRateLimit } = require('./lib/middleware');
 const { productsCache, productDetailCache, categoriesCache, relatedCache, facetsCache, settingsCache, invalidateProducts, invalidateCategories, invalidateAll } = require('./lib/cache');
-const CLUSTER = isClusterEnabled();
 const { boolEnv, boundedIntEnv, validateProductionConfig, newRequestId, validateRuntimeConfig } = require('./lib/security-config');
 const { staticCompress, compressJson, sendHtml } = require('./lib/static-compress');
 const { webpNegotiate } = require('./lib/webp-negotiate');
@@ -291,18 +291,10 @@ app.use(session({
 // ۴۰۰ نفرِ همزمان (کمپین، عید) سقفِ یک IP مشترک را می‌خورند و همه ۴۲۹ می‌گیرند.
 // keyBy:'user' یعنی کاربرِ واردشده سهمیه‌ی خودش را دارد؛ مهمان (بدون ورود) هم
 // مثل قبل با IP شمرده می‌شود، پس سیلِ رباتِ مهمان هنوز محدود می‌ماند.
-const apiLimiter = CLUSTER
-  ? rateLimitSqlite({ windowMs: 60 * 1000, max: boundedIntEnv('API_RATE_LIMIT', 300, 1, 10000), keyBy: 'user' })
-  : rateLimit({ windowMs: 60 * 1000, max: boundedIntEnv('API_RATE_LIMIT', 300, 1, 10000), keyBy: 'user' });
+const apiLimiter = makeRateLimit({ windowMs: 60 * 1000, max: boundedIntEnv('API_RATE_LIMIT', 300, 1, 10000), keyBy: 'user' });
 app.use('/api', apiLimiter);
 
-const writeLimiterBase = CLUSTER
-  ? rateLimitSqlite({
-      windowMs: 60 * 1000, max: boundedIntEnv('WRITE_RATE_LIMIT', 300, 1, 2000),
-      keyBy: 'user',
-      message: 'تعداد درخواست‌ها زیاد است؛ یک دقیقه صبر کنید و دوباره تلاش کنید'
-    })
-  : rateLimit({
+const writeLimiterBase = makeRateLimit({
   // درخواست‌های نوشتاریِ واقعی باید محدود باشند؛ endpointهای حساس limiter مستقل دارند.
   // سقف پیش‌فرض طوری است که چند عملیات عادیِ یک کاربر در یک دقیقه را نگیرد.
   windowMs: 60 * 1000, max: boundedIntEnv('WRITE_RATE_LIMIT', 300, 1, 2000),

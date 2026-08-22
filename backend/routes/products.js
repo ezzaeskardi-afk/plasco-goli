@@ -3,7 +3,8 @@ const {
   getPublicProducts, getPublicProduct, queryProducts, getCatalogSignature, getCatalogFacets,
   getRatingsMap, getProductReviews, upsertReview, addStockAlert, getUserPhone, wholesaleInfo, getRelatedProducts
 } = require('../lib/db');
-const { etagJson, validate, V, requireAuth, rateLimit } = require('../lib/middleware');
+// makeRateLimit با نامِ rateLimit — سقف‌ها در حالت cluster مشترک می‌مانند.
+const { etagJson, validate, V, requireAuth, makeRateLimit: rateLimit } = require('../lib/middleware');
 
 const router = express.Router();
 

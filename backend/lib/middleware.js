@@ -91,6 +91,28 @@ function rateLimit({ windowMs, max, message, skipSuccess = false, keyBy = 'ip' }
 }
 
 // ---------------------------------------------------------------
+// انتخابِ خودکارِ پیاده‌سازیِ rate limit
+// ---------------------------------------------------------------
+// چرا لازم شد: قبلاً هر جا که می‌خواستیم سقفِ کلاستر-آگاه داشته باشیم، خودِ
+// محلِ استفاده باید `CLUSTER ? rateLimitSqlite({...}) : rateLimit({...})`
+// می‌نوشت — یعنی تنظیمات دو بار تکرار می‌شد. نتیجه‌اش این بود که فقط دو
+// limiterِ سراسری در server.js این کار را کرده بودند و هر ۱۸ سقفِ اختصاصیِ
+// مسیرها (پیامک، ورود با رمز، ثبت سفارش، رهگیری…) در حافظه مانده بودند؛ یعنی
+// با N worker، N برابر ضعیف‌تر. حالا محلِ استفاده فقط `makeRateLimit` صدا
+// می‌زند و انتخاب یک جا انجام می‌شود.
+//
+// در تک‌پروسه دقیقاً همان `rateLimit` قبلی برگردانده می‌شود، پس رفتار و سرعتِ
+// حالتی که امروز اجرا می‌شود هیچ تغییری نمی‌کند.
+function makeRateLimit(opts) {
+  // require درون تابع: در تک‌پروسه ماژولِ SQLite هرگز بار نمی‌شود، پس نه
+  // جدولی ساخته می‌شود و نه هزینه‌ای می‌دهیم.
+  const { isClusterEnabled } = require('./cluster');
+  if (!isClusterEnabled()) return rateLimit(opts);
+  const { rateLimitSqlite } = require('./rate-limit-sqlite');
+  return rateLimitSqlite(opts);
+}
+
+// ---------------------------------------------------------------
 // ETag برای پاسخ‌های JSON
 // ---------------------------------------------------------------
 // چرا: لیست محصولات در هر بازدید صفحه‌ی اول دوباره دانلود می‌شود. با ETag،
@@ -215,4 +237,4 @@ function validate(schema, source = 'body') {
   };
 }
 
-module.exports = { requireAuth, asyncHandler, rateLimit, validate, V, ValidationError, etagJson, requestKey, safeRateLimitConfig };
+module.exports = { requireAuth, asyncHandler, rateLimit, makeRateLimit, validate, V, ValidationError, etagJson, requestKey, safeRateLimitConfig };
