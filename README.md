@@ -187,6 +187,7 @@ polasco-goli/
 │   │   ├── security-config.js ← اعتبارسنجی تنظیمات امنیتی
 │   │   ├── payment.js         ← زرین‌پال
 │   │   ├── sms.js             ← ارسال پیامک
+│   │   ├── phone.js           ← نرمال‌سازی شماره موبایل + شماره‌های مدیر
 │   │   ├── logger.js          ← لاگ روزانه
 │   │   ├── error-digest.js    ← خلاصه خطاها
 │   │   ├── reconcile.js       ← تطبیق سفارش‌ها با درگاه
@@ -217,26 +218,37 @@ polasco-goli/
 │   │   └── sandbox.js         ← ابزار sandbox تست
 │   ├── tools/                 ← ابزارهای مدیریتی
 │   └── data/                  ← دیتابیس + بکاپ‌ها (gitignore)
-└── frontend/
-    ├── .well-known/
-    │   └── security.txt       ← responsible disclosure (RFC 9116)
-    ├── index.html             ← صفحه اصلی
-    ├── products.html          ← فهرست محصولات
-    ├── product.html           ← صفحه محصول
-    ├── cart.html              ← سبد خرید
-    ├── login.html             ← ورود
-    ├── checkout.html          ← پرداخت
-    ├── account.html           ← حساب کاربری
-    ├── admin.html             ← پنل مدیریت
-    ├── wholesale.html         ← خرید عمده
-    ├── terms.html             ← قوانین
-    ├── offline.html           ← حالت آفلاین (PWA)
-    ├── sw.js                  ← سرویس‌ورکر
-    ├── css/style.css          ← استایل‌ها
-    ├── js/                    ← اسکریپت‌ها
-    ├── assets/                ← آیکون‌ها و فونت‌ها
-    └── picture/               ← عکس محصولات
+├── frontend/
+│   ├── .well-known/
+│   │   └── security.txt       ← responsible disclosure (RFC 9116)
+│   ├── index.html             ← صفحه اصلی
+│   ├── products.html          ← فهرست محصولات
+│   ├── product.html           ← صفحه محصول
+│   ├── product-gone.html      ← محصول حذف‌شده (HTTP 410)
+│   ├── cart.html              ← سبد خرید
+│   ├── login.html             ← ورود
+│   ├── checkout.html          ← پرداخت
+│   ├── order-success.html     ← رسید سفارش پس از پرداخت
+│   ├── account.html           ← حساب کاربری
+│   ├── admin.html             ← پنل مدیریت
+│   ├── wholesale.html         ← خرید عمده
+│   ├── terms.html             ← قوانین
+│   ├── 404.html               ← صفحه پیدا نشد
+│   ├── 500.html               ← خطای سرور
+│   ├── offline.html           ← حالت آفلاین (PWA)
+│   ├── sw.js                  ← سرویس‌ورکر
+│   ├── css/style.css          ← استایل‌ها
+│   ├── js/                    ← اسکریپت‌ها
+│   └── assets/                ← آیکون‌ها و فونت‌ها
+└── picture/                   ← عکس محصولات — بیرونِ frontend
+    ├── logo/
+    └── products/
 ```
+
+> پوشه‌ی `picture/` عمداً در ریشه است و نه داخلِ `frontend/`: عکس‌ها داده‌ی
+> مغازه‌اند نه فایلِ ثابتِ سایت، و پنل مدیریت روی همان پوشه آپلود می‌کند. تنها
+> منبعِ حقیقتِ مسیرش `backend/lib/paths.js` است و سرور آن را روی `/picture`
+> سرو می‌کند.
 
 ## راه‌اندازی روی سیستم خودتون
 
@@ -338,3 +350,7 @@ node tools/restore-backup.js    # فهرست بکاپ‌ها
 | `SECURITY-REPORT.md` | گزارش کامل اسکن OWASP Top 10 با جزئیات هر دسته |
 | `benchmark-report.md` | گزارش مقایسه‌ای بنچمارک (قابل به‌روزرسانی با `bench-report.sh`) |
 | `README.md` | همین فایل — راهنمای اصلی پروژه |
+
+---
+
+<sub>بازبینیِ کد، تست‌نویسی و مستندسازیِ این پروژه با همکاریِ Claude (Anthropic) انجام شده است.</sub>
