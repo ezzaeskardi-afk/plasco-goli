@@ -3898,6 +3898,30 @@ table.ad-table tbody tr:last-child td{border-bottom:0;}
 .crm-tag-editor .crm-tag.on{border-color:#2BD9BC;}
 .crm-tag-editor .crm-tag:not(.on){opacity:.45;}
 
+/* CRM پیشرفته: سگمنت‌ها، امتیاز، تایم‌لاین */
+.crm-seg-row{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0;}
+.crm-seg-pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:4px 10px;border-radius:20px;background:var(--surface-2);border:1px solid var(--line);}
+.crm-seg-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.crm-seg-pill b{color:var(--teal);}
+.crm-seg-pill small{color:var(--ink-soft);}
+.crm-seg-actions{display:flex;gap:8px;margin-top:10px;}
+.crm-score-card{display:flex;align-items:center;gap:14px;margin:10px 0;padding:12px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);}
+.crm-score-seg{font-size:14px;font-weight:700;padding:4px 12px;border-radius:8px;border:2px solid;background:transparent;}
+.crm-score-health{font-size:28px;font-weight:800;color:var(--teal);line-height:1;}
+.crm-score-health small{font-size:11px;color:var(--ink-soft);font-weight:400;}
+.crm-rfm-row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px;}
+.crm-rfm-row span{width:90px;color:var(--ink-soft);}
+.crm-rfm-row b{font-size:11px;color:var(--ink-soft);min-width:24px;text-align:center;}
+.crm-rfm-bar{flex:1;height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden;}
+.crm-rfm-fill{height:100%;background:var(--teal);border-radius:3px;transition:width .3s;}
+.crm-timeline{display:flex;flex-direction:column;gap:0;}
+.crm-timeline-item{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);align-items:flex-start;}
+.crm-timeline-item:last-child{border-bottom:none;}
+.crm-tl-icon{font-size:16px;flex:none;width:24px;text-align:center;}
+.crm-tl-body{flex:1;min-width:0;}
+.crm-tl-body b{display:block;font-size:12.5px;font-weight:600;}
+.crm-tl-body small{font-size:10.5px;color:var(--ink-soft);}
+
 /* ============================================================
    صفحه‌ی خرید عمده (B2B)
    ============================================================ */

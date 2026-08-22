@@ -454,6 +454,30 @@ CREATE TABLE IF NOT EXISTS crm_tasks (
 CREATE INDEX IF NOT EXISTS idx_crm_tasks_user ON crm_tasks(user_id, done, due_at);
 CREATE INDEX IF NOT EXISTS idx_crm_tasks_open  ON crm_tasks(done, due_at);
 
+-- رویدادهای مشتری (تایم‌لاین فعالیت) — هر عمل مشتری ثبت می‌شود
+CREATE TABLE IF NOT EXISTS crm_activities (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id),
+  action     TEXT NOT NULL,
+  detail     TEXT NOT NULL DEFAULT '',
+  meta       TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_crm_act_user ON crm_activities(user_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_crm_act_action ON crm_activities(action, created_at DESC);
+
+-- امتیاز RFM مشتریان — هر شب بازحساب می‌شود
+CREATE TABLE IF NOT EXISTS crm_scores (
+  user_id    INTEGER PRIMARY KEY REFERENCES users(id),
+  recency    INTEGER NOT NULL DEFAULT 5,
+  frequency  INTEGER NOT NULL DEFAULT 1,
+  monetary   INTEGER NOT NULL DEFAULT 1,
+  health     INTEGER NOT NULL DEFAULT 50,
+  segment    TEXT NOT NULL DEFAULT 'new',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_crm_scores_seg ON crm_scores(segment);
+
 -- درخواست‌های خرید عمده (B2B) — مشتری فرم پر می‌کند، ادمین در پنل پیگیری می‌کند
 CREATE TABLE IF NOT EXISTS wholesale_requests (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1300,19 +1324,178 @@ function crmSearchCustomers(opts = {}) {
   return { customers, total, limit, offset };
 }
 
-// پرونده‌ی کامل مشتری در CRM: همان نمای مشتری + برچسب/یادداشت/پیگیری
+// پرونده‌ی کامل مشتری در CRM: همان نمای مشتری + برچسب/یادداشت/پیگیری + امتیاز + فعالیت
 function crmGetCustomer(id) {
   const base = getUserDetail(Number(id));
   if (!base) return null;
+  const score = stmtCrmScoreGet.get(Number(id));
   return {
     ...base,
     tags: stmtCrmUserTags.all(Number(id)),
     notes: stmtCrmNotes.all(Number(id)).map(serializeCrmNote),
-    tasks: stmtCrmTasks.all(Number(id)).map(serializeCrmTask)
+    tasks: stmtCrmTasks.all(Number(id)).map(serializeCrmTask),
+    score: score || { recency: 0, frequency: 0, monetary: 0, health: 50, segment: 'new', updatedAt: '' },
+    activities: crmGetActivities(Number(id), 50)
   };
 }
 
-// همه‌ی سفارش‌ها (جدیدترین اول) + شماره‌ی مشتری برای تماس/هماهنگی ارسال
+// ---- ثبت رویداد (فعالیت) مشتری ----
+const stmtCrmActInsert = db.prepare('INSERT INTO crm_activities (user_id, action, detail, meta) VALUES (?,?,?,?)');
+function crmLogActivity(userId, action, detail, meta) {
+  try {
+    stmtCrmActInsert.run(Number(userId), String(action).slice(0, 50), String(detail || '').slice(0, 500), JSON.stringify(meta || {}));
+  } catch (e) { /* نبود activity نباید سایت را بشکند */ }
+}
+
+// تایم‌لاین فعالیت مشتری
+const stmtCrmActivities = db.prepare(`SELECT * FROM crm_activities WHERE user_id = ? ORDER BY id DESC LIMIT ?`);
+function crmGetActivities(userId, limit = 50) {
+  return stmtCrmActivities.all(Number(userId), Math.min(Number(limit) || 50, 200)).map(a => ({
+    id: a.id, action: a.action, detail: a.detail,
+    meta: (() => { try { return JSON.parse(a.meta); } catch (e) { return {}; } })(),
+    createdAt: a.created_at
+  }));
+}
+
+// ---- امتیازدهی RFM + سلامت مشتری ----
+const stmtCrmScoreGet = db.prepare('SELECT * FROM crm_scores WHERE user_id = ?');
+const stmtCrmScoreUpsert = db.prepare(`INSERT INTO crm_scores (user_id, recency, frequency, monetary, health, segment, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+  ON CONFLICT(user_id) DO UPDATE SET recency=excluded.recency, frequency=excluded.frequency,
+  monetary=excluded.monetary, health=excluded.health, segment=excluded.segment, updated_at=excluded.updated_at`);
+
+// محاسبه امتیاز RFM برای یک مشتری
+function crmCalcRFM(userId) {
+  const r = db.prepare(`SELECT
+    CAST(julianday('now','localtime') - julianday(COALESCE(MAX(CASE WHEN status IN ${CRM_PAID} THEN created_at END), '1970-01-01')) AS INTEGER) AS daysSinceOrder,
+    COUNT(CASE WHEN status IN ${CRM_PAID} THEN 1 END) AS orderCount,
+    COALESCE(SUM(CASE WHEN status IN ${CRM_PAID} THEN total END), 0) AS totalSpent
+  FROM orders WHERE user_id = ?`).get(Number(userId));
+
+  // Recency: 1-5 (5 = جدیدترین)
+  const recency = r.daysSinceOrder <= 7 ? 5 : r.daysSinceOrder <= 30 ? 4 : r.daysSinceOrder <= 90 ? 3 : r.daysSinceOrder <= 180 ? 2 : 1;
+  // Frequency: 1-5
+  const frequency = r.orderCount >= 10 ? 5 : r.orderCount >= 5 ? 4 : r.orderCount >= 3 ? 3 : r.orderCount >= 2 ? 2 : r.orderCount >= 1 ? 1 : 0;
+  // Monetary: 1-5
+  const monetary = r.totalSpent >= 5000000 ? 5 : r.totalSpent >= 2000000 ? 4 : r.totalSpent >= 500000 ? 3 : r.totalSpent >= 100000 ? 2 : r.totalSpent > 0 ? 1 : 0;
+  // Health: 0-100 (ترکیب وزنی)
+  const health = Math.round(recency * 20 + frequency * 15 + monetary * 15);
+  // Segment
+  let segment = 'new';
+  if (frequency === 0) segment = 'lead';
+  else if (recency >= 4 && frequency >= 3 && monetary >= 3) segment = 'vip';
+  else if (recency <= 2 && frequency >= 2) segment = 'at_risk';
+  else if (recency <= 1 && frequency === 0) segment = 'dormant';
+  else if (frequency >= 2) segment = 'returning';
+  else if (recency >= 3) segment = 'new_buyer';
+  else segment = 'casual';
+
+  stmtCrmScoreUpsert.run(Number(userId), recency, frequency, monetary, health, segment);
+  return { recency, frequency, monetary, health, segment };
+}
+
+// بازحسابه امتیاز همه مشتریان (هر شب)
+function crmRecalcAllScores() {
+  const ids = db.prepare('SELECT id FROM users').all().map(r => r.id);
+  const segCounts = {};
+  for (const id of ids) {
+    const s = crmCalcRFM(id);
+    segCounts[s.segment] = (segCounts[s.segment] || 0) + 1;
+  }
+  return segCounts;
+}
+
+// آمار سگمنت‌ها
+const stmtCrmSegCounts = db.prepare('SELECT segment, COUNT(*) AS n FROM crm_scores GROUP BY segment');
+function crmGetSegmentStats() {
+  const rows = stmtCrmSegCounts.all();
+  const total = rows.reduce((s, r) => s + r.n, 0);
+  const segLabels = { vip: 'ویژه', at_risk: 'در خطر', returning: 'بازگشتی', new_buyer: 'خریدار جدید', casual: 'گذری', dormant: 'غیرفعال', lead: 'سرنخ', new: 'جدید' };
+  return rows.map(r => ({ segment: r.segment, label: segLabels[r.segment] || r.segment, count: r.n, pct: total ? Math.round(r.n * 100 / total) : 0 }));
+}
+
+// درآمد به تفکیک ماه
+const stmtCrmRevenueByMonth = db.prepare(`SELECT
+  strftime('%Y-%m', created_at) AS month,
+  COUNT(*) AS orders,
+  SUM(total) AS revenue,
+  COUNT(DISTINCT user_id) AS customers
+FROM orders WHERE status IN ${CRM_PAID}
+GROUP BY month ORDER BY month DESC LIMIT 24`);
+function crmGetRevenueByMonth() { return stmtCrmRevenueByMonth.all(); }
+
+// مشتریان پردرآمد
+const stmtCrmTopCustomers = db.prepare(`SELECT
+  u.id, u.phone, u.full_name,
+  COUNT(o.id) AS orders,
+  SUM(o.total) AS totalSpent,
+  MAX(o.created_at) AS lastOrder,
+  COALESCE(s.health, 50) AS health,
+  COALESCE(s.segment, 'new') AS segment
+FROM users u JOIN orders o ON o.user_id = u.id
+LEFT JOIN crm_scores s ON s.user_id = u.id
+WHERE o.status IN ${CRM_PAID}
+GROUP BY u.id ORDER BY totalSpent DESC LIMIT ?`);
+function crmGetTopCustomers(limit = 20) { return stmtCrmTopCustomers.all(Math.min(Number(limit) || 20, 100)); }
+
+// صادرات مشتریان به CSV
+function crmExportCustomers(opts = {}) {
+  const { customers } = crmSearchCustomers({ ...opts, limit: 10000, offset: 0 });
+  return customers.map(c => ({
+    id: c.id, phone: c.phone, name: c.fullName, orders: c.paidOrders,
+    spent: c.totalSpent, lastOrder: c.lastOrderAt || '', tags: c.tags.join(', ')
+  }));
+}
+
+// به‌روزرسانی خودکار برچسب‌ها بر اساس رفتار
+function crmAutoTag(userId) {
+  const score = stmtCrmScoreGet.get(Number(userId));
+  if (!score) return;
+  // پیدا کردن/ساختن برچسب‌های خودکار
+  const autoTags = {
+    'VIP': '#FFD700', 'پرخطر': '#FF4444', 'بازگشتی': '#44AAFF', 'غیرفعال': '#888888'
+  };
+  const tagMap = {};
+  for (const [name, color] of Object.entries(autoTags)) {
+    let t = stmtCrmTagByName.get(name);
+    if (!t) { stmtCrmTagInsert.run(name, color); t = stmtCrmTagByName.get(name); }
+    tagMap[name] = t.id;
+  }
+  // حذف برچسب‌های خودکار قبلی
+  const autoTagIds = Object.values(tagMap);
+  const currentTags = stmtCrmUserTags.all(Number(userId));
+  for (const t of currentTags) {
+    if (autoTagIds.includes(t.id)) {
+      db.prepare('DELETE FROM crm_user_tags WHERE user_id = ? AND tag_id = ?').run(Number(userId), t.id);
+    }
+  }
+  // اعمال برچسب جدید
+  if (score.segment === 'vip' && tagMap['VIP']) stmtCrmUserTagAdd.run(Number(userId), tagMap['VIP']);
+  if (score.segment === 'at_risk' && tagMap['پرخطر']) stmtCrmUserTagAdd.run(Number(userId), tagMap['پرخطر']);
+  if (score.segment === 'returning' && tagMap['بازگشتی']) stmtCrmUserTagAdd.run(Number(userId), tagMap['بازگشتی']);
+  if (score.segment === 'dormant' && tagMap['غیرفعال']) stmtCrmUserTagAdd.run(Number(userId), tagMap['غیرفعال']);
+}
+
+// بروزرسانی همه خودکاربرچسب‌ها
+function crmAutoTagAll() {
+  const ids = db.prepare('SELECT id FROM users').all();
+  for (const { id } of ids) crmAutoTag(id);
+}
+
+// خلاصه CRM پیشرفته
+function crmGetAdvancedSummary() {
+  const base = crmGetSummary();
+  const segments = crmGetSegmentStats();
+  const months = crmGetRevenueByMonth();
+  const topCustomers = crmGetTopCustomers(5);
+  const thisMonth = months[0] || { orders: 0, revenue: 0, customers: 0 };
+  const lastMonth = months[1] || { orders: 0, revenue: 0, customers: 0 };
+  const revenueGrowth = lastMonth.revenue > 0 ? Math.round((thisMonth.revenue - lastMonth.revenue) * 100 / lastMonth.revenue) : 0;
+  const orderGrowth = lastMonth.orders > 0 ? Math.round((thisMonth.orders - lastMonth.orders) * 100 / lastMonth.orders) : 0;
+  return { ...base, segments, months, topCustomers, thisMonth, revenueGrowth, orderGrowth };
+}
+
+// درخواست‌های خرید عمده (جدیدترین اول) + شماره‌ی مشتری برای تماس/هماهنگی ارسال
 const stmtAllOrders = db.prepare(`
   SELECT o.*, u.phone AS user_phone, u.full_name AS user_name
   FROM orders o JOIN users u ON u.id = o.user_id
@@ -2738,6 +2921,9 @@ module.exports = {
   crmGetSummary, crmSearchCustomers, crmGetCustomer,
   crmListTags, crmCreateTag, crmDeleteTag, crmSetUserTags,
   crmAddNote, crmDeleteNote, crmAddTask, crmToggleTask, crmDeleteTask,
+  crmLogActivity, crmGetActivities, crmCalcRFM, crmRecalcAllScores,
+  crmGetSegmentStats, crmGetRevenueByMonth, crmGetTopCustomers, crmExportCustomers,
+  crmAutoTag, crmAutoTagAll, crmGetAdvancedSummary,
   addWholesaleRequest, listWholesaleRequests, countNewWholesaleRequests, setWholesaleRequestStatus, deleteWholesaleRequest,
   otp: { get: stmtOtpGet, upsert: stmtOtpUpsert, bumpAttempts: stmtOtpBumpAttempts, del: stmtOtpDelete, ipBump: stmtIpBump, ipGet: stmtIpGet }
 };

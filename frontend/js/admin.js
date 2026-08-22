@@ -1542,12 +1542,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const { summary, tags } = await PG.api('/admin/crm/summary');
       CRM_TAGS = tags;
-      $('crmKpis').innerHTML = [
+      // KPIهای پایه
+      let kpiHtml = [
         kpi({ label: 'کل مشتری‌ها', num: money(summary.totalCustomers), unit: 'نفر', icon: 'i-users' }),
         kpi({ label: 'پیگیری باز', num: money(summary.openTasks), unit: 'مورد', icon: 'i-clock', tone: 'gold', sub: `${money(summary.dueTasks)} سررسیدشده` }),
         kpi({ label: 'برچسب‌خورده', num: money(summary.tagged), unit: 'نفر', icon: 'i-tag', tone: 'blue' }),
         kpi({ label: 'یادداشت‌ها', num: money(summary.totalNotes), unit: 'عدد', icon: 'i-note', tone: 'purple' })
       ].join('');
+      // KPIهای پیشرفته (درآمد و رشد)
+      try {
+        const adv = await PG.api('/admin/crm/advanced');
+        const s = adv.summary;
+        if (s.thisMonth.revenue > 0) {
+          kpiHtml += [
+            kpi({ label: 'فروش این ماه', num: money(s.thisMonth.revenue), unit: 'تومان', icon: 'i-wallet',
+              sub: `${s.revenueGrowth >= 0 ? '+' : ''}${money(s.revenueGrowth)}% نسبت به ماه قبل` }),
+            kpi({ label: 'مشتری فعال این ماه', num: money(s.thisMonth.customers), unit: 'نفر', icon: 'i-users', tone: 'teal',
+              sub: `${s.thisMonth.orders} سفارش` })
+          ].join('');
+        }
+        // نمودار سگمنت‌ها
+        if (s.segments && s.segments.length) {
+          kpiHtml += `<div class="ad-kpi" style="grid-column:span 2"><div class="kpi-inner"><div class="kpi-label">سگمنت‌های مشتریان</div><div class="crm-seg-row">${s.segments.map(seg => {
+            const colors = { vip: '#FFD700', at_risk: '#FF4444', returning: '#44AAFF', new_buyer: '#44DD44', casual: '#AAAAAA', dormant: '#666666', lead: '#CC88FF', new: '#2BD9BC' };
+            const color = colors[seg.segment] || '#888';
+            return `<div class="crm-seg-pill"><span class="crm-seg-dot" style="background:${color}"></span>${esc(seg.label)} <b>${money(seg.count)}</b> <small>(${money(seg.pct)}%)</small></div>`;
+          }).join('')}</div><div class="crm-seg-actions"><button class="btn btn-outline btn-sm" id="btnCrmRecalc" title="بازحساب RFM همه مشتریان">🔄 بازحساب</button><a class="btn btn-outline btn-sm" href="/api/admin/crm/export" target="_blank">📥 صادرات CSV</a></div></div></div>`;
+        }
+      } catch (e) { /* advanced ممکنه نباشد */ }
+      $('crmKpis').innerHTML = kpiHtml;
       $('navCrm').textContent = money(summary.openTasks);
       $('navCrm').classList.toggle('urgent', summary.dueTasks > 0);
       renderCrmTagChips();
@@ -1628,6 +1651,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function renderCrmDetail(c) {
     const s = c.summary;
+    const score = c.score || {};
+    const segmentLabels = { vip: '⭐ ویژه', at_risk: '⚠️ در خطر', returning: '🔄 بازگشتی', new_buyer: '🛒 خریدار جدید', casual: '👤 گذری', dormant: '💤 غیرفعال', lead: '🎯 سرنخ', new: '✨ جدید' };
+    const segLabel = segmentLabels[score.segment] || '—';
+    const segColors = { vip: '#FFD700', at_risk: '#FF4444', returning: '#44AAFF', new_buyer: '#44DD44', casual: '#AAAAAA', dormant: '#666666', lead: '#CC88FF', new: '#2BD9BC' };
+    const segColor = segColors[score.segment] || '#888';
+    const rfmBar = (val, max = 5) => `<div class="crm-rfm-bar"><div class="crm-rfm-fill" style="width:${(val/max)*100}%"></div></div>`;
+
     const tagEditor = CRM_TAGS.length
       ? `<div class="crm-tag-editor">${CRM_TAGS.map(t => {
           const on = c.tags.some(x => x.id === t.id);
@@ -1650,6 +1680,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           <div><b>${money(s.totalSpent)}</b><small>تومان خرید</small></div>
         </div>
         <div class="crm-tags">${c.tags.length ? c.tags.map(crmTagPill).join('') : '<small class="muted">بدون برچسب</small>'}</div>
+      </div>
+
+      <div class="crm-sec">
+        <div class="crm-sec-head"><svg><use href="#i-chart"/></svg> امتیاز مشتری <button class="btn btn-outline btn-xs" id="btnCrmRecalcCust" title="بازحساب">🔄</button></div>
+        <div class="crm-score-card">
+          <div class="crm-score-seg" style="border-color:${segColor};color:${segColor}">${segLabel}</div>
+          <div class="crm-score-health"><span>${money(score.health || 50)}</span><small>/۱۰۰ سلامت</small></div>
+        </div>
+        <div class="crm-rfm-row"><span>تازگی خرید</span>${rfmBar(score.recency)}<b>${money(score.recency)}/۵</b></div>
+        <div class="crm-rfm-row"><span>تعداد سفارش</span>${rfmBar(score.frequency)}<b>${money(score.frequency)}/۵</b></div>
+        <div class="crm-rfm-row"><span>مبلغ خرید</span>${rfmBar(score.monetary)}<b>${money(score.monetary)}/۵</b></div>
       </div>
 
       <div class="crm-sec">
@@ -1678,6 +1719,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           <input type="text" id="crmTaskTitle" placeholder="عنوان پیگیری…" maxlength="200">
           <input type="date" id="crmTaskDue" class="ad-date">
           <button class="btn btn-primary btn-sm" id="crmTaskAdd"><svg><use href="#i-plus"/></svg> افزودن</button>
+        </div>
+      </div>
+
+      <div class="crm-sec">
+        <div class="crm-sec-head"><svg><use href="#i-clock"/></svg> تایم‌لاین فعالیت</div>
+        <div class="crm-timeline">
+          ${(c.activities || []).slice(0, 15).map(a => {
+            const actIcons = { order: '🛒', note: '📝', task: '📋', tag: '🏷️', login: '🔑', stock: '📦', payment: '💳', view: '👁️' };
+            const icon = actIcons[a.action] || '📌';
+            return `<div class="crm-timeline-item"><span class="crm-tl-icon">${icon}</span><span class="crm-tl-body"><b>${esc(a.detail || a.action)}</b><small>${esc(faFull(a.createdAt))}</small></span></div>`;
+          }).join('') || '<small class="muted">فعالیتی ثبت نشده.</small>'}
         </div>
       </div>
 
@@ -1789,6 +1841,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderCrmDetail(CRM_DETAIL);
       } catch (err) { PG.toast(err.message, 'error'); }
       return;
+    }
+  });
+
+  // --- بازحساب RFM مشتری ---
+  $('crmDetailPane').addEventListener('click', async (e) => {
+    if (e.target.closest('#btnCrmRecalcCust')) {
+      try {
+        const { score } = await PG.api(`/admin/crm/customers/${CRM_SEL}/recalc`, { method: 'POST' });
+        if (CRM_DETAIL) { CRM_DETAIL.score = score; renderCrmDetail(CRM_DETAIL); }
+        PG.toast('امتیاز بازحساب شد ✅', 'success');
+      } catch (err) { PG.toast(err.message, 'error'); }
+    }
+  });
+  // --- بازحساب همه مشتریان (از KPI) ---
+  $('crmKpis').addEventListener('click', async (e) => {
+    if (e.target.closest('#btnCrmRecalc')) {
+      try {
+        await PG.api('/admin/crm/recalc-all', { method: 'POST' });
+        PG.toast('امتیاز همه مشتریان بازحساب شد ✅', 'success');
+        loadCrm();
+      } catch (err) { PG.toast(err.message, 'error'); }
     }
   });
 

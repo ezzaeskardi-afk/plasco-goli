@@ -28,6 +28,9 @@ const {
   crmGetSummary, crmSearchCustomers, crmGetCustomer,
   crmListTags, crmCreateTag, crmDeleteTag, crmSetUserTags,
   crmAddNote, crmDeleteNote, crmAddTask, crmToggleTask, crmDeleteTask,
+  crmLogActivity, crmGetActivities, crmCalcRFM, crmRecalcAllScores,
+  crmGetSegmentStats, crmGetRevenueByMonth, crmGetTopCustomers, crmExportCustomers,
+  crmAutoTag, crmAutoTagAll, crmGetAdvancedSummary,
   listWholesaleRequests, countNewWholesaleRequests, setWholesaleRequestStatus, deleteWholesaleRequest
 } = require('../lib/db');
 const { rateLimit, asyncHandler } = require('../lib/middleware');
@@ -319,6 +322,55 @@ router.put('/crm/customers/:id/tags', (req, res) => {
   note(req, 'crm_tags_set', `#${req.params.id}`);
   res.json({ ok: true });
 });
+
+// ---- CRM پیشرفته: خلاصه، سگمنت‌ها، درآمد، صادرات ----
+router.get('/crm/advanced', (req, res) => {
+  try { res.json({ summary: crmGetAdvancedSummary() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.get('/crm/segments', (req, res) => {
+  res.json({ segments: crmGetSegmentStats() });
+});
+router.get('/crm/revenue', (req, res) => {
+  res.json({ months: crmGetRevenueByMonth() });
+});
+router.get('/crm/top', (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+  res.json({ customers: crmGetTopCustomers(limit) });
+});
+router.get('/crm/export', (req, res) => {
+  const data = crmExportCustomers({ q: req.query.q, tag: req.query.tag, filter: req.query.filter });
+  const csv = '\uFEFF' + ['ID,Phone,Name,Orders,Spent,LastOrder,Tags'].concat(
+    data.map(c => `${c.id},${c.phone},${c.name},${c.orders},${c.spent},${c.lastOrder},${c.tags}`)
+  ).join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="customers.csv"');
+  res.send(csv);
+});
+// بازحساب RFM برای یک مشتری
+router.post('/crm/customers/:id/recalc', (req, res) => {
+  const score = crmCalcRFM(req.params.id);
+  crmAutoTag(req.params.id);
+  note(req, 'crm_recalc', `#${req.params.id}`);
+  res.json({ score });
+});
+// بازحساب همه مشتریان
+router.post('/crm/recalc-all', (req, res) => {
+  const segments = crmRecalcAllScores();
+  crmAutoTagAll();
+  note(req, 'crm_recalc_all', JSON.stringify(segments));
+  res.json({ ok: true, segments });
+});
+// فعالیت مشتری
+router.get('/crm/customers/:id/activities', (req, res) => {
+  const activities = crmGetActivities(req.params.id, Math.min(Number(req.query.limit) || 50, 200));
+  res.json({ activities });
+});
+router.post('/crm/customers/:id/activities', crmWrap((req, res) => {
+  crmLogActivity(req.params.id, req.body?.action || 'note', req.body?.detail, req.body?.meta);
+  note(req, 'crm_activity_add', `#${req.params.id}`);
+  res.status(201).json({ ok: true });
+}));
 
 // ---------- درخواست‌های خرید عمده (B2B) ----------
 router.get('/wholesale/requests', (req, res) => {
