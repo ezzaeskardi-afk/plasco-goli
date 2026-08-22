@@ -1058,7 +1058,7 @@ const stmtAllUsers = db.prepare(`
          COALESCE(SUM(CASE WHEN o.status IN ('paid','shipped','delivered','return_requested') THEN o.total END),0) AS total_spent,
          MAX(CASE WHEN o.status IN ('paid','shipped','delivered','return_requested') THEN o.created_at END) AS last_order_at
   FROM users u LEFT JOIN orders o ON o.user_id = u.id
-  GROUP BY u.id ORDER BY u.created_at DESC LIMIT 1000`);
+  GROUP BY u.id ORDER BY u.created_at DESC`);
 function getAllUsers() {
   return stmtAllUsers.all().map(u => ({
     id: u.id, phone: u.phone, fullName: u.full_name || '', isAdmin: Boolean(u.is_admin), isStaff: Boolean(u.is_staff),
@@ -1391,7 +1391,7 @@ const adminCancelOrderTx = transaction((orderId, reason) => {
   const changed = stmtCancelOrder.run(String(reason || '').slice(0, 200), orderId).changes > 0;
   if (changed) {
     const o = stmtOrderById.get(orderId);
-    releaseStock(JSON.parse(o.items));   // کالاها دوباره قابل فروش می‌شوند
+    releaseStock(safeParseJson(o.items, []));   // کالاها دوباره قابل فروش می‌شوند
   }
   return changed;
 });
@@ -1400,7 +1400,7 @@ const adminCancelOrderTx = transaction((orderId, reason) => {
 const stmtAcceptReturn = db.prepare(`UPDATE orders SET status='returned' WHERE id = ? AND status = 'return_requested'`);
 const adminAcceptReturnTx = transaction((orderId) => {
   const changed = stmtAcceptReturn.run(orderId).changes > 0;
-  if (changed) releaseStock(JSON.parse(stmtOrderById.get(orderId).items));
+  if (changed) releaseStock(safeParseJson(stmtOrderById.get(orderId).items, []));
   return changed;
 });
 
@@ -1409,7 +1409,7 @@ const stmtUserCancel = db.prepare(`UPDATE orders SET status='canceled', cancel_r
   WHERE id = ? AND user_id = ? AND status = 'paid'`);
 const userCancelOrderTx = transaction((orderId, userId) => {
   const changed = stmtUserCancel.run('لغو توسط مشتری', orderId, userId).changes > 0;
-  if (changed) releaseStock(JSON.parse(stmtOrderById.get(orderId).items));
+  if (changed) releaseStock(safeParseJson(stmtOrderById.get(orderId).items, []));
   return changed;
 });
 
@@ -2385,11 +2385,19 @@ const stmtMarkPaid = db.prepare(`UPDATE orders SET status='paid', ref_id=?, paid
 const stmtMarkFailed = db.prepare(`UPDATE orders SET status='failed', expires_at=NULL
   WHERE id = ? AND status = 'pending_payment'`);
 
+// خواندنِ امنِ JSON. ستون‌های items/address سفارش‌ها در دیتابیس JSON هستند؛ اگر
+// یک ردیف به هر دلیلی خراب باشد (ویرایش دستی، مهاجرت قدیمی، قطعی وسط نوشتن)،
+// یک JSON.parse لخت کل لیست سفارش‌های مشتری/پنل را با خطای ۵۰۰ می‌شکند — نه فقط
+// همان یک ردیف. پس با پاییزِ امن می‌خوانیم تا بدترین حالت یک ردیفِ خالی باشد.
+function safeParseJson(text, fallback = []) {
+  try { return JSON.parse(text); } catch (e) { return fallback; }
+}
+
 function serializeOrder(o) {
   if (!o) return null;
   return {
     id: o.id, userId: o.user_id,
-    items: JSON.parse(o.items), address: JSON.parse(o.address),
+    items: safeParseJson(o.items, []), address: safeParseJson(o.address, {}),
     total: o.total, shippingFee: o.shipping_fee || 0,
     couponCode: o.coupon_code || '', discount: o.discount || 0,
     status: o.status, authority: o.authority, refId: o.ref_id, paymentUrl: o.payment_url || '',
@@ -2472,7 +2480,7 @@ const markOrderFailedTx = transaction((id) => {
   const changed = stmtMarkFailed.run(id).changes > 0;
   if (changed) {
     const o = stmtOrderById.get(id);
-    releaseStock(JSON.parse(o.items));
+    releaseStock(safeParseJson(o.items, []));
   }
   return changed;
 });
