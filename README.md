@@ -2,15 +2,16 @@
 
 فروشگاه فارسی محصولات پلاستیکی با frontend ساده‌ی HTML/CSS/JavaScript و backend مبتنی بر Node.js و Express. مشتری محصول را به سبد اضافه می‌کند، با شماره موبایل وارد می‌شود، آدرس تحویل می‌دهد، سفارش ثبت می‌کند و وضعیت سفارش را از حساب کاربری یا صفحه‌ی پیگیری می‌بیند.
 
-> وضعیت فعلی: **۶۸۸ تست smoke + ۵۴ تست سئو = ۷۴۲ تست سبز.** CRM پیشرفته با امتیازدهی RFM، وضعیت سیستم در پنل، بنچمارک ۱۰,۰۰۰ کاربر، و Cluster Mode آماده است.
+> وضعیت فعلی: **۶۸۸ تست smoke + ۸۶ تست سئو + ۴۵ تست امنیت + ۴۷ تست OWASP = ۸۶۶ تست سبز.** CRM پیشرفته با امتیازدهی RFM، وضعیت سیستم در پنل، بنچمارک ۱۰,۰۰۰ کاربر، Cluster Mode، و اسکن خودکار OWASP Top 10.
 
 ## وضعیت فنی فعلی
 
 - Node.js `>=22.5`، Express و SQLite داخلی Node
-- **۱۵۵ تابع** در `db.js` (۲,۹۲۹ خط) — ۲۴ فایل کتابخانه + ۹ مسیر API
-- تست smoke: **۶۸۸ تست موفق** + تست سئو: **۵۴ تست موفق**
+- **۱۵۳ تابع** در `db.js` (۲,۹۲۹ خط) — ۲۴ فایل کتابخانه + ۹ مسیر API
+- **۵۰ کامیت** در مخزن — **۲۴۹ فایل** تحت کنترل نسخه
+- تست smoke: **۶۸۸ تست** | سئو: **۸۶ تست** | امنیت: **۴۵ تست** | OWASP: **۴۷ تست**
 - بنچمارک: **۱۰,۰۰۰ کاربر همزمان — ۱۰۰٪ موفق، صفر خطا**
-- شاخه‌ی اصلی: `master`
+- شاخه‌ها: `master` و `main` — هر دو یکسان
 
 ## Quick start
 
@@ -59,7 +60,7 @@ npm start
 - sitemap.xml داینامیک با lastmod واقعی
 - robots.txt داینامیک
 - صفحه محصول حذف‌شده: HTTP 410 Gone
-- **تست خودکار سئو**: ۵۴ تست — canonical، og:image، robots، JSON-LD
+- **تست خودکار سئو (۸۶ تست)**: canonical، og:image، robots، JSON-LD، meta description، title، img alt، favicon
 
 ### امنیت
 - CSP کامل (بدون `unsafe-inline`) + گزارش‌گیری
@@ -69,6 +70,10 @@ npm start
 - قفل حساب بعد از رمز غلط پیاپی
 - ماسک‌کردن شماره موبایل در لاگ
 - Gitleaks برای جلوگیری از لو رفتن secretها
+- **اسکن خودکار OWASP Top 10 (۴۷ تست)** روی ۱۰ دستهٔ آسیب‌پذیری
+- **تست امنیت آپلود، CSRF، rate-limit (۴۵ تست)**
+- **security.txt** برای responsible disclosure (RFC 9116)
+- **HTTPS-GUIDE.md** — راهنمای کامل فعال‌سازی SSL و تنظیمات امنیتی production
 
 ### عملکرد
 - **Cluster Mode**: استفاده از تمام هسته‌های CPU (روی لینوکس)
@@ -78,11 +83,45 @@ npm start
 - **فشرده‌سازی**: gzip/brotli برای CSS/JS/SVG
 - **WebP خودکار**: تحویل نسخه سبک‌تر اگر مرورگر بپذیرد
 - **SQLite WAL**: خواندن و نوشتن هم‌زمان
-- **بنچمارک**: `bench-load.js` (نوشتن) + `bench-read.js` (خواندن)
 
-## نتایج بنچمارک
+## مجموعه تست‌ها
 
-### نوشتن (POST /api/orders)
+```bash
+cd backend
+
+npm test                    # ۶۸۸ تست smoke + regression
+node test-seo.js            # ۸۶ تست سئو
+node tests/security.js      # ۴۵ تست امنیت (آپلود، CSRF، rate-limit)
+node tests/owasp-scan.js    # ۴۷ تست OWASP Top 10
+node tests/bench-report-integrity.js  # ۱۸ تست یکپارچگی گزارش بنچمارک
+npm run owasp               # اسکن OWASP با اسکریپت npm
+npm run check               # همه تست‌ها + بنچمارک
+```
+
+## بنچمارک
+
+```bash
+cd backend
+
+# تست کامل (۴۰۰ خریدار + ۴۰۰ خواننده)
+bash bench-report.sh
+
+# فقط نوشتن
+bash bench-report.sh write 1500
+
+# فقط خواندن
+bash bench-report.sh read 5000
+
+# اجرای مستقیم
+node bench-load.js 400               # بنچمارک نوشتن
+node bench-read.js 400               # بنچمارک خواندن
+```
+
+`bench-report.sh` خروجی را تجزیه می‌کند و به‌صورت بلوک new در `benchmark-report.md` ذخیره می‌کند (append — محتوای قبلی پاک نمی‌شود).
+
+### نتایج بنچمارک
+
+#### نوشتن (POST /api/orders)
 
 | کاربر | p50 | p99 | توان | موفقیت |
 |---|---|---|---|---|
@@ -90,7 +129,7 @@ npm start
 | ۲۰۰۰ | 597 ms | 1026 ms | 1767 req/s | ۱۰۰٪ ✅ |
 | ۵۰۰۰ | 1586 ms | 2635 ms | 1692 req/s | ۱۰۰٪ ✅ |
 
-### خواندن (GET /api/products)
+#### خواندن (GET /api/products)
 
 | کاربر | p50 | p99 | موفقیت |
 |---|---|---|---|
@@ -119,6 +158,7 @@ npm start
 ```
 polasco-goli/
 ├── README.md
+├── HTTPS-GUIDE.md             ← راهنمای کامل SSL و امنیت production
 ├── StartSite.bat              ← راه‌اندازی سریع
 ├── gitleaks.toml              ← تنظیمات secret scanning
 ├── .github/workflows/         ← اسکن Gitleaks در CI
@@ -128,19 +168,21 @@ polasco-goli/
 │   ├── .env.example
 │   ├── test-all.js            ← مجموعه تست (۶۸۸ تست)
 │   ├── test-smoke.js          ← تست مسیر سایت
-│   ├── test-seo.js            ← تست خودکار سئو (۵۴ تست)
+│   ├── test-seo.js            ← تست سئو (۸۶ تست)
 │   ├── bench-load.js          ← بنچمارک نوشتن (خرید همزمان)
 │   ├── bench-read.js          ← بنچمارک خواندن (لیست/جستجو)
+│   ├── bench-report.sh        ← اسکریپت خودکار بنچمارک و ثبت در گزارش
 │   ├── benchmark-report.md    ← گزارش مقایسه‌ای بنچمارک
+│   ├── SECURITY-REPORT.md     ← گزارش کامل اسکن OWASP Top 10
 │   ├── lib/
-│   │   ├── db.js              ← دیتابیس SQLite (۲,۹۲۹ خط، ۱۵۵ تابع)
+│   │   ├── db.js              ← دیتابیس SQLite (۲,۹۲۹ خط، ۱۵۳ تابع)
 │   │   ├── cache.js           ← کش درون‌حافظه با TTL
 │   │   ├── cluster.js         ← Node.js cluster (لینوکس)
 │   │   ├── rate-limit-sqlite.js ← rate-limit مشترک بین workers
 │   │   ├── metrics.js         ← متریک درخواست/تأخیر
 │   │   ├── session-store.js   ← نشست در SQLite
 │   │   ├── login-guard.js     ← قفل حساب
-│   │   ├── middleware.js       ← احراز هویت، rate-limit، ETag
+│   │   ├── middleware.js       ← احراز هویت، rate-limit، ETag، اعتبارسنجی
 │   │   ├── security-config.js ← اعتبارسنجی تنظیمات امنیتی
 │   │   ├── payment.js         ← زرین‌پال
 │   │   ├── sms.js             ← ارسال پیامک
@@ -166,10 +208,17 @@ polasco-goli/
 │   │   ├── wholesale.js       ← عمده‌فروشی B2B
 │   │   ├── admin.js           ← پنل مدیریت
 │   │   └── shop.js            ← تنظیمات فروشگاه
-│   ├── tests/                 ← مجموعه تست امنیت و مرزی
+│   ├── tests/
+│   │   ├── security.js        ← تست امنیت (۴۵ تست)
+│   │   ├── owasp-scan.js      ← اسکن OWASP Top 10 (۴۷ تست)
+│   │   ├── bench-report-integrity.js ← تست یکپارچگی گزارش بنچمارک
+│   │   ├── discount.js        ← تست کد تخفیف
+│   │   └── sandbox.js         ← ابزار sandbox تست
 │   ├── tools/                 ← ابزارهای مدیریتی
-│   └── data/                  ← دیتابیس + بکاپ‌ها
+│   └── data/                  ← دیتابیس + بکاپ‌ها (gitignore)
 └── frontend/
+    ├── .well-known/
+    │   └── security.txt       ← responsible disclosure (RFC 9116)
     ├── index.html             ← صفحه اصلی
     ├── products.html          ← فهرست محصولات
     ├── product.html           ← صفحه محصول
@@ -202,9 +251,11 @@ npm start
 
 تست‌ها:
 ```bash
-npm test                  # ۶۸۸ تست smoke
-node test-seo.js          # ۵۴ تست سئو
-npm run check             # همه تست‌ها + بنچمارک
+npm test                      # ۶۸۸ تست smoke
+node test-seo.js              # ۸۶ تست سئو
+node tests/security.js        # ۴۵ تست امنیت
+node tests/owasp-scan.js      # ۴۷ تست OWASP Top 10
+npm run check                 # همه تست‌ها + بنچمارک
 ```
 
 ## مسیر خرید
@@ -249,10 +300,15 @@ CLUSTER_ENABLED=true node backend/server.js
 
 ## امنیت
 
+### اسکن‌های خودکار
+```bash
+node tests/owasp-scan.js       # اسکن OWASP Top 10 (۴۷ تست)
+node tests/security.js         # تست آپلود، CSRF، rate-limit (۴۵ تست)
+```
+
 ### Gitleaks
 ```bash
 gitleaks detect --redact --config gitleaks.toml --source .
-cd backend && npm run security:gitleaks
 ```
 
 ### لاگ‌ها
@@ -269,11 +325,11 @@ npm run logs:summary -- --days=7
 node tools/restore-backup.js    # فهرست بکاپ‌ها
 ```
 
-## سایر فایل‌ها
+## مستندات
 
 | فایل | توضیح |
 |---|---|
-| `benchmark-report.md` | گزارش مقایسه‌ای بنچمارک (قابل به‌روزرسانی) |
-| `یادداشت-کلود.md` | یادداشت‌های فنی و تصمیم‌گیری‌ها |
-| `گزارش-۱۰۰-محصول.md` | گزارش تحلیلی رسیدن به ۱۰۰ محصول |
-| `ui-ux-pro-max/` | تحقیق و طراحی UI/UX |
+| `HTTPS-GUIDE.md` | راهنمای کامل فعال‌سازی SSL، nginx، و تنظیمات امنیتی production |
+| `SECURITY-REPORT.md` | گزارش کامل اسکن OWASP Top 10 با جزئیات هر دسته |
+| `benchmark-report.md` | گزارش مقایسه‌ای بنچمارک (قابل به‌روزرسانی با `bench-report.sh`) |
+| `README.md` | همین فایل — راهنمای اصلی پروژه |
