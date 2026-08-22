@@ -337,7 +337,7 @@ function shutdown(code) {
     check('After logout, user is null', meAfter.data.user === null);
 
     // ============ FULL PURCHASE FLOW (order + test payment) ============
-    // fresh buyer phone (the earlier phone is inside the 90s resend cooldown)
+    // fresh buyer phone (the earlier phone is inside the 30s resend cooldown)
     async function loginAs(ph) {
       let rq = await askOtp(ph);
       if (rq.status === 429) throw new Error(`OTP rate limit for ${ph}`);

@@ -73,7 +73,7 @@ async function verifyPassword(password, stored) {
 }
 
 const OTP_TTL_MS = 2 * 60 * 1000;   // اعتبار کد
-const RESEND_COOLDOWN_MS = 90 * 1000; // حداقل فاصله بین دو پیامک برای یک شماره
+const RESEND_COOLDOWN_MS = 30 * 1000; // حداقل فاصله بین دو پیامک برای یک شماره
 const MAX_ATTEMPTS = 5;              // حداکثر تلاش برای یک کد
 const MAX_SMS_PER_PHONE_PER_DAY = 10;
 // قابل‌تنظیم با env فقط برای محیط تست؛ مقدار واقعی همان ۳۰ است

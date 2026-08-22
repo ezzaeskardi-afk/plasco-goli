@@ -170,17 +170,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!st) { stopTick(); setResendReady(); return; }
 
     const leftResend = Math.ceil((st.resendAt - Date.now()) / 1000);
-    const leftCode = Math.ceil(((st.codeExpiresAt || 0) - Date.now()) / 1000);
 
-    // عمر خود کد: وقتی تمام شد به کاربر بگو، نه اینکه بگذاریم کد اشتباه بزند
+    // عمر خود کد: فقط وقتی منقضی شد هشدار بده، قبلش چیزی نمایش نده
+    const leftCode = Math.ceil(((st.codeExpiresAt || 0) - Date.now()) / 1000);
     const codeHint = document.getElementById('codeExpiry');
     if (codeHint) {
-      if (leftCode > 0) {
-        codeHint.textContent = `اعتبار کد: ${toFa(Math.floor(leftCode / 60))}:${toFa(String(leftCode % 60).padStart(2, '0'))}`;
-        codeHint.classList.remove('expired');
-      } else {
-        codeHint.textContent = 'اعتبار کد تمام شد — دوباره ارسال کنید';
+      if (leftCode <= 0) {
+        codeHint.textContent = 'کد منقضی شده — دوباره ارسال کنید';
         codeHint.classList.add('expired');
+      } else {
+        codeHint.textContent = '';
+        codeHint.classList.remove('expired');
       }
     }
 
@@ -190,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (resendWrap) {
         resendWrap.classList.add('counting');
         // نوار پیشرفت: نسبت زمان سپری‌شده به کل مهلت
-        const total = st.resendTotal || 90;
+        const total = st.resendTotal || 30;
         const pct = Math.max(0, Math.min(100, ((total - leftResend) / total) * 100));
         resendWrap.style.setProperty('--resend-progress', pct.toFixed(1) + '%');
       }
@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
       method: 'POST',
       body: JSON.stringify({ phone, challenge: token })
     });
-    const retry = Number(res.retryAfter) || 90;
+    const retry = Number(res.retryAfter) || 30;
     const ttl = Number(res.expiresIn) || 120;
     saveState({
       phone,
