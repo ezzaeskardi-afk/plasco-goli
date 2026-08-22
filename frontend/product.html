@@ -13,7 +13,7 @@
 <link rel="preload" href="/assets/fonts/Vazir-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/Vazir-Bold-FD-WOL.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/icons.svg" as="fetch" crossorigin>
-<link rel="stylesheet" href="/css/style.css?v=59">
+<link rel="stylesheet" href="/css/style.css?v=60">
 </head>
 <body>
 <a href="#main" class="skip-link">رفتن به محتوای اصلی</a>
@@ -226,6 +226,16 @@
   </section>
 </main>
 
+<!-- نوار پایین موبایل: قیمت و دکمه خرید همیشه در دسترس -->
+<div class="pd-mobile-bar" id="pdMobileBar" hidden>
+  <div class="pd-mobile-bar-info">
+    <span class="pd-mobile-bar-price" id="pdMobileBarPrice"></span>
+  </div>
+  <button class="buy-btn pd-mobile-bar-buy" id="pdMobileBarBuy" aria-label="افزودن به سبد">
+    <svg><use href="#i-cart"/></svg> <span>افزودن به سبد</span>
+  </button>
+</div>
+
 <footer class="site">
   <div class="container footer-grid">
     <div class="footer-about">
@@ -264,8 +274,8 @@
   <svg><use href="#i-phone"/></svg>
   <span class="fab-label">تماس با فروشگاه</span>
 </a>
-<script src="/js/common.js?v=59" defer></script>
-<script src="/js/product.js?v=59" defer></script>
+<script src="/js/common.js?v=60" defer></script>
+<script src="/js/product.js?v=60" defer></script>
 
 </body>
 </html>

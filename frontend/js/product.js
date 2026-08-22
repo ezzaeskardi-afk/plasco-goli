@@ -176,6 +176,43 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     loading.classList.add('hidden');
     loaded.classList.remove('hidden');
+
+    // نوار پایین موبایل: وقتی کاربر از کنار دکمه افزودن به سبد رد شد، نوار
+    // پایین ظاهر می‌شود تا قیمت و دکمه همیشه در دسترس باشد
+    const mobileBar = document.getElementById('pdMobileBar');
+    const mobileBarPrice = document.getElementById('pdMobileBarPrice');
+    const mobileBarBuy = document.getElementById('pdMobileBarBuy');
+    if (mobileBar && mobileBarPrice && mobileBarBuy) {
+      mobileBarPrice.textContent = PG.money(p.price) + ' تومان';
+      // روی موبایل نوار را نشان بده
+      if (window.matchMedia('(max-width:820px)').matches) {
+        mobileBar.removeAttribute('hidden');
+        mobileBar.classList.add('is-visible');
+        document.body.classList.add('has-pd-bar');
+      }
+      // دکمه نوار پایین هم مثل دکمه اصلی کار کند
+      mobileBarBuy.addEventListener('click', () => buy.click());
+      // وقتی اسکرول به پایین رفت، نوار را نشان بده
+      let lastScroll = 0;
+      window.addEventListener('scroll', () => {
+        const y = window.scrollY;
+        const buyRow = document.querySelector('.pd-buy-row');
+        if (!buyRow) return;
+        const buyRowBottom = buyRow.getBoundingClientRect().bottom;
+        // اگر ردیف خرید بالای صفحه رفته، نوار را نشون بده
+        if (buyRowBottom < 0 && !mobileBar.classList.contains('is-visible')) {
+          mobileBar.removeAttribute('hidden');
+          mobileBar.classList.add('is-visible');
+          document.body.classList.add('has-pd-bar');
+        } else if (buyRowBottom >= 0 && mobileBar.classList.contains('is-visible')) {
+          // اگر برگشتی بالا و ردیف خرید دیده میشه، نوار را پنهان کن
+          mobileBar.classList.remove('is-visible');
+          mobileBar.setAttribute('hidden', '');
+          document.body.classList.remove('has-pd-bar');
+        }
+        lastScroll = y;
+      }, { passive: true });
+    }
   }
 
   // ---------- گالری عکس ----------

@@ -2242,6 +2242,18 @@ a.cart-row-title:hover{color:var(--teal);}
   .product-grid{grid-template-columns:1fr;}
   .wish-link{display:none;} /* نوار پایین همین میانبر را دارد؛ هدر شلوغ نشود */
 }
+/* بهبود سبد خرید موبایل */
+@media (max-width:640px){
+  .cart-row{padding:12px;gap:12px;align-items:stretch;}
+  .cart-row-media{width:64px;height:64px;border-radius:12px;}
+  .cart-row-body{display:flex;flex-direction:column;justify-content:space-between;}
+  .cart-row-end{width:100%;flex-direction:row;justify-content:space-between;align-items:center;}
+  .cart-row-end .qty-row{flex:1;display:flex;justify-content:center;}
+  .cart-summary{padding:20px 16px;position:relative;}
+  .cart-summary .btn{width:100%;padding:14px;}
+  /* خلاصه سفارش بالای sticky bar در موبایل */
+  .cart-layout .cart-summary{margin-bottom:70px;}
+}
 
 /* ---------- مودال نمای سریع محصول ---------- */
 .qv-overlay{
@@ -2427,6 +2439,17 @@ body.qv-lock{overflow:hidden;}
 .pd-perks li{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink-soft);}
 .pd-perks svg{width:17px;height:17px;color:var(--gold);flex:none;}
 .product-title a{color:inherit;}
+/* نوار پایین موبایل محصول: قیمت + دکمه افزودن به سبد */
+.pd-mobile-bar{
+  display:none;position:fixed;bottom:0;left:0;right:0;z-index:50;
+  padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom));
+  background:rgba(11,20,17,.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border-top:1px solid var(--line-strong);
+  align-items:center;justify-content:space-between;gap:14px;
+}
+.pd-mobile-bar-price{font-size:17px;font-weight:900;white-space:nowrap;}
+.pd-mobile-bar-buy{padding:12px 20px;font-size:14px;white-space:nowrap;flex:none;}
+.pd-mobile-bar.is-visible{display:flex;}
 @media (max-width:820px){
   .pd-layout{grid-template-columns:1fr;gap:26px;}
   .pd-media{max-width:460px;margin-inline:auto;width:100%;}
@@ -2435,7 +2458,11 @@ body.qv-lock{overflow:hidden;}
      پایین می‌راند؛ یک نوار افقیِ کشیدنی طبیعی‌تر است. */
   .pd-thumbs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;}
   .pd-zoom-hint{opacity:1;transform:none;} /* موبایل hover ندارد */
+  .pd-mobile-bar{display:none;} /* فعال‌سازی با JS بعد از اسکرول */
+  .pd-mobile-bar.is-visible{display:flex;} /* فعال‌سازی با JS */
+  .pd-buy-row{padding-bottom:8px;} /* فاصله کمتر از sticky bar */
 }
+body.has-pd-bar{padding-bottom:70px;} /* فاصله از sticky bar */
 
 /* ---------- منوی موبایل ---------- */
 .mobile-drawer{
