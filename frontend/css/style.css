@@ -608,7 +608,7 @@ main > section + section{padding-top:calc(var(--sp-section) * .45);}
 .product-card:hover .product-badge{transform:rotate(-3deg) scale(1.07);}
 .product-body{padding:20px 20px 22px;display:flex;flex-direction:column;gap:10px;flex:1;position:relative;z-index:1;}
 .product-cat{font-size:12px;font-weight:700;color:#2BD9BC;}
-.product-title{font-size:16.5px;font-weight:800;}
+.product-title{font-size:16.5px;font-weight:800;line-height:1.5;min-height:3em;}
 /* زیرخط طلاییِ کشویی روی عنوان */
 .product-title a{
   background-image:linear-gradient(var(--gold),var(--gold));
@@ -617,8 +617,9 @@ main > section + section{padding-top:calc(var(--sp-section) * .45);}
   padding-bottom:2px;
 }
 .product-card:hover .product-title a{background-size:100% 1.5px;}
-.product-desc{font-size:13.5px;color:var(--ink-soft);flex:1;}
-.stock-hint{font-size:12px;font-weight:700;color:var(--gold);display:flex;align-items:center;gap:6px;}
+.product-desc{font-size:13.5px;color:var(--ink-soft);line-height:1.85;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:4.8em;flex:none;}
+.stock-hint{font-size:12px;font-weight:700;color:var(--gold);display:flex;align-items:center;gap:6px;min-height:1.6em;}
+.stock-hint:empty{visibility:hidden;}
 .stock-hint::before{
   content:"";width:6px;height:6px;border-radius:50%;background:var(--gold);
   box-shadow:0 0 8px var(--gold);flex:none;animation:stockPulse 2.2s ease-in-out infinite;
@@ -627,7 +628,7 @@ main > section + section{padding-top:calc(var(--sp-section) * .45);}
   0%,100%{opacity:1;transform:scale(1)}
   50%{opacity:.45;transform:scale(.78)}
 }
-.product-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;}
+.product-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;}
 .price{font-weight:800;font-size:16px;color:var(--ink);transition:color .25s ease;}
 .product-card:hover .price{color:#2BD9BC;}
 .price small{font-size:11.5px;font-weight:600;color:var(--ink-soft);}
@@ -669,11 +670,11 @@ main > section + section{padding-top:calc(var(--sp-section) * .45);}
 .pd-save svg{width:17px;height:17px;flex:none;}
 .pd-save b{font-weight:900;}
 .buy-btn{
-  display:flex;align-items:center;gap:6px;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
   background:linear-gradient(135deg,#25E3C4, var(--teal-dark));color:#04211B;
-  padding:9px 15px;border-radius:999px;font-size:13px;font-weight:800;
+  padding:9px 15px;border-radius:999px;font-size:13px;font-weight:800;line-height:1.4;
   transition:box-shadow .2s ease, transform .2s ease, opacity .2s ease;
-  position:relative;overflow:hidden;
+  position:relative;overflow:hidden;min-height:36px;border:none;cursor:pointer;font-family:inherit;
 }
 /* برق نرم که با hover از روی دکمه رد می‌شود */
 .buy-btn::before{
@@ -700,10 +701,10 @@ main > section + section{padding-top:calc(var(--sp-section) * .45);}
    و شبکه نپرد، ولی رنگِ اصلیِ سایت را نمی‌گیرد: این کالا خریدنی نیست و نباید
    به‌اندازه‌ی «افزودن به سبد» چشم را ببرد. */
 .notify-btn{
-  display:flex;align-items:center;gap:6px;
-  padding:9px 15px;border-radius:999px;font-size:12.5px;font-weight:800;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  padding:9px 15px;border-radius:999px;font-size:12.5px;font-weight:800;line-height:1.4;
   color:var(--ink-soft);background:var(--surface-2);
-  border:1px solid var(--line);
+  border:1px solid var(--line);min-height:36px;font-family:inherit;cursor:pointer;
   transition:color .2s ease, border-color .2s ease, background .2s ease,
              transform .2s ease, box-shadow .2s ease;
 }
@@ -1171,7 +1172,7 @@ a.cart-row-title:hover{color:var(--teal);}
 .shop-bar-x:hover{opacity:1;}
 
 /* ---------- دیدگاه و امتیاز محصول ---------- */
-.pc-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.pc-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:1.6em;}
 .pc-stars{
   display:inline-flex;align-items:center;gap:4px;
   font-size:12px;font-weight:800;color:var(--gold);flex:none;
@@ -2539,30 +2540,27 @@ body.has-pd-bar{padding-bottom:70px;} /* فاصله از sticky bar */
   .pill{padding:11px 20px;}
 }
 @media (max-width:560px){
-  .product-title{font-size:15px;line-height:1.6;}
+  .product-title{font-size:15px;line-height:1.6;min-height:auto;}
   .price{font-size:16px;}
   .product-body{padding:16px 15px 18px;gap:8px;}
-  .buy-btn{padding:12px 14px;} /* هدف لمسی بزرگ‌تر */
-  .product-desc{
-    font-size:12.5px;line-height:1.85;
-    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
-  }
+  .buy-btn{padding:12px 14px;min-height:42px;} /* هدف لمسی بزرگ‌تر */
+  .product-desc{font-size:12.5px;-webkit-line-clamp:2;min-height:3.5em;}
   .product-badge{top:10px;right:10px;font-size:10.5px;padding:4px 9px;}
   .wish-btn{top:10px;left:10px;width:40px;height:40px;}
   .wish-btn svg{width:18px;height:18px;}
   .product-grid{gap:14px;}
   /* در ۲ ستون، قیمت و دکمه کنار هم جا نمی‌شوند → زیر هم */
   .product-footer{flex-direction:column;align-items:stretch;gap:10px;}
-  .product-footer .buy-btn{justify-content:center;width:100%;}
+  .product-footer .buy-btn,.product-footer .notify-btn{justify-content:center;width:100%;}
   .product-footer .price{text-align:center;}
 }
 @media (max-width:430px){
   /* تک‌ستونی؛ دوباره جا هست که قیمت و دکمه کنار هم بنشینند */
   .product-body{padding:18px 18px 20px;}
-  .product-desc{-webkit-line-clamp:3;}
+  .product-desc{-webkit-line-clamp:3;min-height:4.8em;}
   .product-grid{gap:16px;}
   .product-footer{flex-direction:row;align-items:center;}
-  .product-footer .buy-btn{width:auto;}
+  .product-footer .buy-btn,.product-footer .notify-btn{width:auto;}
   .product-footer .price{text-align:right;}
 }
 
