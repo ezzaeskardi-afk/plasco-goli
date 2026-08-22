@@ -787,6 +787,10 @@ app.use((req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'چنین مسیری وجود ندارد' });
   }
+  // res.sendFile() در Express پیش‌فرض Cache-Control: public, max-age=0 ست می‌کند.
+  // یعنی پروکسی‌های میانی می‌توانند صفحه‌ی ۴۰۴ را کش کنند — حتی برای لحظه‌ای.
+  // با no-cache می‌گوییم هر بار از سرور بپرس.
+  res.setHeader('Cache-Control', 'no-cache');
   res.status(404).sendFile(path.join(FRONTEND_DIR, '404.html'), (sendErr) => {
     if (sendErr && !res.headersSent) {
       res.type('text/plain; charset=utf-8').send('چنین صفحه‌ای وجود ندارد.');
@@ -835,6 +839,8 @@ app.use((err, req, res, next) => {
   // می‌دید و نمی‌فهمید خطا خورده. حالا صفحه‌ی اختصاصی ۵۰۰ می‌رود.
   // callback لازم است: اگر خودِ فایل هم خوانده نشود، به جای اینکه Express
   // دوباره وارد همین هندلر شود و حلقه بسازد، یک متن ساده می‌فرستیم.
+  // مانند ۴۰۴ بالا: جلوی کش پروکسی برای صفحه‌ی خطا
+  res.setHeader('Cache-Control', 'no-cache');
   res.status(500).sendFile(path.join(FRONTEND_DIR, '500.html'), (sendErr) => {
     if (sendErr && !res.headersSent) {
       res.type('text/plain; charset=utf-8')
