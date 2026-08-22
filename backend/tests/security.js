@@ -289,14 +289,17 @@ const kill = (srv) => { try { srv.child.kill(); } catch (e) {} };
 
   let removed = 0;
   for (const f of (fs.existsSync(PICS) ? fs.readdirSync(PICS) : [])) {
-    if (!before.has(f)) { fs.unlinkSync(path.join(PICS, f)); removed++; }
+    if (!before.has(f)) {
+      try { fs.unlinkSync(path.join(PICS, f)); removed++; }
+      catch (e) { if (!['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw e; }
+    }
   }
   check('عکس‌های تستی پاک شدند', removed >= 1, String(removed));
   kill(main);
 
   // ---------- فاز دوم: جعل IP ----------
   console.log('\n--- جعل IP و محدودیت نرخ ---');
-  const tiny = startServer(3995, { WRITE_RATE_LIMIT: '5' });
+  const tiny = startServer(3995, { WRITE_RATE_LIMIT: '5', API_RATE_LIMIT: '10000' });
   if (!await waitUp(tiny)) { console.error('phase-2 server did not start\n' + tiny.out); kill(tiny); return process.exit(1); }
   const api2 = apiOn(tiny);
   cookies.clear();

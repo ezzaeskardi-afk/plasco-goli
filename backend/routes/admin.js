@@ -122,7 +122,7 @@ router.use((req, res, next) => {
   return isOrderPath ? requireStaff(req, res, next) : requireAdmin(req, res, next);
 });
 // سقف بالاتر از قبل چون پنل جدید چند بخش هم‌زمان دارد
-router.use(rateLimit({ windowMs: 60 * 1000, max: 300, message: 'درخواست‌های زیاد؛ کمی صبر کنید' }));
+router.use(rateLimit({ windowMs: 60 * 1000, max: 1000, message: 'درخواست‌های زیاد؛ کمی صبر کنید' }));
 
 // ثبت رویداد با کاربر جاری
 function note(req, action, target = '', detail = '') {

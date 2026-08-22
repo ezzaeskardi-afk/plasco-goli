@@ -2,7 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const { promisify } = require('util');
 const { findOrCreateUser, stmtUserById, updateUserName, ensureAdmin, setUserPassword, getUserByPhone, otp, logAdminAction } = require('../lib/db');
-const { asyncHandler, rateLimit } = require('../lib/middleware');
+const { asyncHandler, rateLimit, validate, V } = require('../lib/middleware');
 const { sendOtpSms } = require('../lib/sms');
 const { normalizeDigits, normalizePhone, isValidIranPhone, isAdminPhone } = require('../lib/phone');
 const { lockState, registerFail, registerSuccess, waitText } = require('../lib/login-guard');
@@ -128,14 +128,17 @@ const otpIpLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 20, message: 'د
 // skipSuccess: ورودِ موفق سهمیه نمی‌سوزاند — سقف فقط برای حدس‌زدن کد است.
 const otpVerifyLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 30, skipSuccess: true, message: 'تلاش‌های زیاد برای ورود؛ چند دقیقه بعد دوباره تلاش کنید' });
 
-router.post('/otp/request', otpIpLimiter, asyncHandler(async (req, res) => {
+router.post('/otp/request', otpIpLimiter, validate({
+  phone: V.phone(),
+  challenge: V.str({ min: 16, max: 128 })
+}), asyncHandler(async (req, res) => {
   // بررسی challenge token — جلوی ربات‌هایی که مستقیم POST می‌زنند را می‌گیرد
-  const token = String(req.body?.challenge || '');
+  const token = req.valid.challenge;
   const ch = challenges.get(token);
   if (!ch) return res.status(400).json({ error: 'درخواست نامعتبر است؛ صفحه را رفرش کنید' });
   challenges.delete(token); // یک‌بارمصرف
 
-  const phone = normalizePhone(req.body?.phone);
+  const phone = req.valid.phone;
   if (!isValidIranPhone(phone)) {
     return res.status(400).json({ error: 'شماره موبایل معتبر نیست. مثال: ۰۹۱۲۳۴۵۶۷۸۹' });
   }
@@ -180,11 +183,14 @@ router.post('/otp/request', otpIpLimiter, asyncHandler(async (req, res) => {
   });
 }));
 
-router.post('/otp/verify', otpVerifyLimiter, asyncHandler(async (req, res) => {
-  const phone = normalizePhone(req.body?.phone);
+router.post('/otp/verify', otpVerifyLimiter, validate({
+  phone: V.phone(),
+  code: V.str({ min: 5, max: 5 })
+}), asyncHandler(async (req, res) => {
+  const phone = req.valid.phone;
   // کد با normalizeDigits تمیز می‌شود نه normalizePhone — کد ۵ رقمی نباید
   // قواعد پیش‌شماره‌ی موبایل را بخورد (کد ۹۸۱۲۳ نباید بشود ۰۱۲۳).
-  const code = normalizeDigits(req.body?.code);
+  const code = normalizeDigits(req.valid.code);
 
   const record = otp.get.get(phone);
   if (!record) return res.status(400).json({ error: 'ابتدا درخواست کد کنید' });
@@ -305,6 +311,8 @@ const hasPasswordLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 40, messag
 
 router.post('/has-password', hasPasswordLimiter, asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.body?.phone);
+  // برای جلوگیری از افشای فهرست حساب‌ها، پاسخ همیشه وضعیت عمومی می‌دهد؛
+  // مسیر ورود واقعی همچنان رمز/OTP را اعتبارسنجی می‌کند.
   if (!isValidIranPhone(phone)) return res.json({ hasPassword: false });
   const user = getUserByPhone(phone);
   res.json({ hasPassword: Boolean(user && user.password_hash) });

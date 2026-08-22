@@ -14,6 +14,7 @@ const {
 } = require('./lib/db');
 const { SqliteSessionStore } = require('./lib/session-store');
 const { rateLimit } = require('./lib/middleware');
+const { boolEnv, boundedIntEnv, validateProductionConfig, newRequestId, validateRuntimeConfig } = require('./lib/security-config');
 const { staticCompress, compressJson, sendHtml } = require('./lib/static-compress');
 const { webpNegotiate } = require('./lib/webp-negotiate');
 const { isLive: paymentLive } = require('./lib/payment');
@@ -62,8 +63,9 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' })); // بدنه‌ی بزهکارانه‌ی چندمگابایتی همان اول رد می‌شود
 
 // هدرهای امنیتی پایه (بدون وابستگی به helmet)
-const HTTPS_MODE = process.env.COOKIE_SECURE === 'true';
+const HTTPS_MODE = boolEnv('COOKIE_SECURE');
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+validateProductionConfig({ isProduction: IS_PRODUCTION, cookieSecure: HTTPS_MODE, sessionSecret: process.env.SESSION_SECRET });
 
 function requireProductionSecret(name, { minLength = 1 } = {}) {
   const value = String(process.env[name] || '');
@@ -176,7 +178,7 @@ app.use((req, res, next) => {
   const inbound = String(req.headers['x-request-id'] || '').trim();
   // شناسه‌ی بیرونی را فیلتر می‌کنیم: هر چیزی مستقیم داخل فایل لاگ می‌رود و
   // کاراکتر خط جدید یعنی کسی می‌تواند خطِ لاگ جعلی بسازد (log injection).
-  req.id = /^[A-Za-z0-9._-]{1,64}$/.test(inbound) ? inbound : crypto.randomBytes(6).toString('hex');
+  req.id = /^[a-f0-9]{24}$/.test(inbound) || /^[A-Za-z0-9._-]{1,64}$/.test(inbound) ? inbound : newRequestId();
   res.setHeader('X-Request-Id', req.id);
   next();
 });
@@ -262,11 +264,12 @@ app.use(session({
 //  ۱) سقف کلی، سخاوتمندانه — کاربر عادی هرگز نمی‌بیندش، ولی جلوی سیل درخواست را می‌گیرد
 //  ۲) سقف سخت‌گیرانه‌تر روی «نوشتن» (POST/PUT/DELETE) — این‌ها به دیتابیس می‌نویسند و گران‌اند
 //  ۳) سقف‌های اختصاصی داخل خود روت‌ها (ورود، OTP، ثبت سفارش) که از قبل بود
-app.use('/api', rateLimit({ windowMs: 60 * 1000, max: Number(process.env.API_RATE_LIMIT) || 300 }));
+app.use('/api', rateLimit({ windowMs: 60 * 1000, max: boundedIntEnv('API_RATE_LIMIT', 300, 1, 10000) }));
 
 const writeLimiter = rateLimit({
-  // قابل‌تنظیم با env فقط برای تست خودکار (test-smoke در یک دقیقه بیش از ۶۰ نوشتن دارد)
-  windowMs: 60 * 1000, max: Number(process.env.WRITE_RATE_LIMIT) || 60,
+  // درخواست‌های نوشتاریِ واقعی باید محدود باشند؛ endpointهای حساس limiter مستقل دارند.
+  // سقف پیش‌فرض طوری است که چند عملیات عادیِ یک کاربر در یک دقیقه را نگیرد.
+  windowMs: 60 * 1000, max: boundedIntEnv('WRITE_RATE_LIMIT', 300, 1, 2000),
   message: 'تعداد درخواست‌ها زیاد است؛ یک دقیقه صبر کنید و دوباره تلاش کنید'
 });
 app.use('/api', (req, res, next) => {
@@ -284,6 +287,9 @@ app.use('/api', compressJson);
 // نبودن این تابع قبلاً باعث شده بود canonical صفحه‌ی اصلی روی یک دامنه‌ی نمونه
 // بماند — که یعنی گوگل صفحه‌ی اصلی را به آدرسی که وجود ندارد نسبت می‌داد.
 const SITE_URL = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
+if (IS_PRODUCTION && !/^https:\/\/[^\s/]+$/.test(SITE_URL)) {
+  throw new Error('SITE_URL must be a valid https:// URL in production');
+}
 const SITE_HOST = (() => {
   try { return SITE_URL ? new URL(SITE_URL).host : ''; } catch (e) { return ''; }
 })();
@@ -902,12 +908,7 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 // ---------- چک‌لیست بوت برای پروداکشن ----------
 // هیچ‌کدام سرور را نمی‌خواباند؛ فقط بلند و واضح هشدار می‌دهد.
 if (process.env.NODE_ENV === 'production') {
-  if (process.env.COOKIE_SECURE !== 'true') {
-    log.warn('[PROD] COOKIE_SECURE must be true in production; refusing insecure session cookies');
-    process.exitCode = 1;
-  }
   if (!process.env.ZARINPAL_MERCHANT_ID) log.warn('[PROD] Payment gateway is in TEST mode (no ZARINPAL_MERCHANT_ID)');
-  if (!HTTPS_MODE) log.warn('[PROD] COOKIE_SECURE is off - the session cookie will also travel over plain HTTP; turn it on as soon as the domain has SSL');
   if (!process.env.SMS_API_KEY) log.warn('[PROD] SMS is in TEST mode (no SMS_API_KEY) - login codes go to console only');
   if (!process.env.BACKUP_DIR2) log.warn('[PROD] BACKUP_DIR2 not set - backups live on the same disk as the database');
 }

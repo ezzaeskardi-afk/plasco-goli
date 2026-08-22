@@ -201,7 +201,7 @@ router.get('/:id/reviews', (req, res) => {
 
 // ثبت/ویرایش نظر — بعد از ویرایش دوباره به صف تأیید می‌رود
 router.post('/:id/reviews', requireAuth,
-  rateLimit({ windowMs: 60000, max: 5, message: 'تعداد ثبت نظر زیاد است؛ یک دقیقه صبر کنید' }),
+  rateLimit({ windowMs: 60000, max: 10, message: 'تعداد درخواست زیاد است؛ یک دقیقه صبر کنید' }),
   (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'شناسه‌ی محصول معتبر نیست' });

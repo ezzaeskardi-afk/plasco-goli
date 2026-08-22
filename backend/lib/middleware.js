@@ -26,12 +26,24 @@ function asyncHandler(fn) {
 //     حافظه‌ی سرور با کلیدهای یک‌بارمصرف پر نشود.
 const MAX_KEYS = 20000;
 
+function requestKey(req, name = 'ip') {
+  const value = name === 'user' && req.session?.userId
+    ? `user:${req.session.userId}`
+    : `ip:${req.ip || 'unknown'}`;
+  return value;
+}
+
+function safeRateLimitConfig(value, fallback, min, max) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= min && n <= max ? n : fallback;
+}
+
 // skipSuccess=true یعنی درخواستی که موفق بوده (کد کمتر از ۴۰۰) از سقف کم
 // نمی‌شود. چرا لازم است: اپراتورهای موبایل ایران CGNAT دارند، یعنی ده‌ها مشتری
 // واقعی از یک IP بیرونی می‌آیند. اگر ورودِ *موفق* هم شمرده شود، در یک شب شلوغ
 // نفر بیست‌ویکم پیغام «تلاش‌های زیاد برای ورود» می‌گیرد در حالی که رمزش درست
 // است. چیزی که باید محدود شود حدس‌زدنِ رمز است، نه ورود درست.
-function rateLimit({ windowMs, max, message, skipSuccess = false }) {
+function rateLimit({ windowMs, max, message, skipSuccess = false, keyBy = 'ip' }) {
   const hits = new Map(); // key -> { count, resetAt }
   const sweep = () => {
     const now = Date.now();
@@ -40,7 +52,7 @@ function rateLimit({ windowMs, max, message, skipSuccess = false }) {
   setInterval(sweep, Math.min(windowMs, 60000)).unref();
 
   return (req, res, next) => {
-    const key = req.ip || 'unknown';
+    const key = requestKey(req, keyBy);
     const now = Date.now();
     let rec = hits.get(key);
     if (!rec || rec.resetAt <= now) {
@@ -199,4 +211,4 @@ function validate(schema, source = 'body') {
   };
 }
 
-module.exports = { requireAuth, asyncHandler, rateLimit, etagJson, validate, V, ValidationError };
+module.exports = { requireAuth, asyncHandler, rateLimit, validate, V, ValidationError, etagJson, requestKey, safeRateLimitConfig };

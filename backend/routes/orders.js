@@ -254,7 +254,7 @@ router.post('/:id/reorder', requireAuth,
 
 // لغو سفارش توسط مشتری — فقط تا وقتی هنوز ارسال نشده (paid)
 router.post('/:id/cancel', requireAuth,
-  rateLimit({ windowMs: 60000, max: 10, message: 'تعداد درخواست زیاد است؛ یک دقیقه صبر کنید' }),
+  rateLimit({ windowMs: 60000, max: 30, message: 'تعداد درخواست زیاد است؛ یک دقیقه صبر کنید' }),
   (req, res) => {
     const order = getOrder(req.params.id);
     if (!order || order.userId !== req.session.userId) {

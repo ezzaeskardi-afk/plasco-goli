@@ -533,35 +533,36 @@ function shutdown(code) {
     await api('POST', `/admin/orders/${roid}/status`, { from: 'shipped', to: 'delivered' });
 
     await loginBuyer();
-    const delivered = (await api('GET', `/orders/${roid}`)).data.order;
+    const deliveredRes = await api('GET', `/orders/${roid}`);
+    const delivered = deliveredRes.data.order;
     check('V7 tracking: customer sees tracking code + delivery date',
-      delivered.trackingCode === 'SMOKE-1234-IR' && Boolean(delivered.deliveredAt));
+      deliveredRes.status === 200 && delivered?.trackingCode === 'SMOKE-1234-IR' && Boolean(delivered?.deliveredAt), JSON.stringify(deliveredRes.data));
 
-    const shortReason = await api('POST', `/orders/${roid}/return`, { reason: 'bad' });
+    const shortReason = await api('POST', `/orders/${roid}/return`, { reason: 'ب' });
     check('V7 return: too-short reason is rejected (400)', shortReason.status === 400);
     const retReq = await api('POST', `/orders/${roid}/return`, { reason: 'The lid arrived cracked' });
-    check('V7 return: request lands in return_requested', retReq.status === 200 && retReq.data.order.status === 'return_requested');
+    check('V7 return: request lands in return_requested', retReq.status === 200 && retReq.data.order?.status === 'return_requested', JSON.stringify(retReq.data));
 
     const stockBeforeReturn = (await api('GET', `/products/${buyable.id}`)).data.product.stock;
     await loginAdmin();
     const accept = await api('POST', `/admin/orders/${roid}/status`, { from: 'return_requested', to: 'returned' });
-    check('V7 return: admin accepts -> order becomes returned', accept.status === 200 && accept.data.order.status === 'returned');
+    check('V7 return: admin accepts -> order becomes returned', accept.status === 200 && accept.data.order?.status === 'returned', JSON.stringify(accept.data));
     const stockAfterReturn = (await api('GET', `/products/${buyable.id}`)).data.product.stock;
     check('V7 return: returned goods go back to stock', stockAfterReturn === stockBeforeReturn + 1);
 
     // ---------- reviews (with admin approval queue) ----------
     await loginBuyer();
     const badRating = await api('POST', `/products/${buyable.id}/reviews`, { rating: 9 });
-    check('V7 reviews: rating out of range is rejected (400)', badRating.status === 400);
+    check('V7 reviews: rating out of range is rejected (400)', badRating.status === 400, JSON.stringify(badRating.data));
     const myRev = await api('POST', `/products/${buyable.id}/reviews`, { rating: 5, body: 'Great quality (smoke test)' });
     check('V7 reviews: buyer review stored as pending + isBuyer flag',
-      myRev.status === 200 && myRev.data.review.status === 'pending' && myRev.data.review.isBuyer === true);
+      myRev.status === 200 && myRev.data.review?.status === 'pending' && myRev.data.review?.isBuyer === true, JSON.stringify(myRev.data));
     const revCountBefore = (await api('GET', `/products/${buyable.id}/reviews`)).data.count;
 
     await loginAdmin();
     const queue = await api('GET', '/admin/reviews?status=pending');
     const mine = (queue.data.reviews || []).find(r => r.productId === buyable.id && String(r.body).includes('smoke test'));
-    check('V7 reviews: admin sees it in the pending queue', Boolean(mine));
+    check('V7 reviews: admin sees it in the pending queue', Boolean(mine), JSON.stringify(queue.data));
     const approve = await api('POST', `/admin/reviews/${mine.id}/status`, { status: 'approved' });
     check('V7 reviews: approving works', approve.status === 200 && approve.data.review.status === 'approved');
     const pubAfter = await api('GET', `/products/${buyable.id}/reviews`);
