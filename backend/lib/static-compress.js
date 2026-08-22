@@ -50,7 +50,10 @@ function cachePolicy(pathname) {
   if (p.endsWith('.html')) return 'no-cache';
   // سرویس‌ورکر و manifest هرگز نباید بلندمدت کش شوند: اگر sw.js کهنه بماند،
   // مشتری تا مدت‌ها با نسخه‌ی قدیمی منطق کش گیر می‌کند و راه بیرون آمدن ندارد.
-  if (p === '/sw.js' || p.endsWith('manifest.json') || p.endsWith('manifest.webmanifest')) {
+  // icons.svg و favicon.svg هم بدون ?v= لود می‌شوند؛ اگر immutable بمانند،
+  // هر تغییری در آیکون‌ها تا ۳۰ روز به کاربر نمی‌رسد.
+  if (p === '/sw.js' || p.endsWith('manifest.json') || p.endsWith('manifest.webmanifest')
+      || p === '/assets/icons.svg' || p === '/assets/favicon.svg') {
     return 'no-cache';
   }
   // این‌ها با ?v= نسخه‌بندی می‌شوند (یا نامشان تصادفی است) پس امن است

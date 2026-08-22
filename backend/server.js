@@ -264,12 +264,19 @@ app.use(session({
 //  ۱) سقف کلی، سخاوتمندانه — کاربر عادی هرگز نمی‌بیندش، ولی جلوی سیل درخواست را می‌گیرد
 //  ۲) سقف سخت‌گیرانه‌تر روی «نوشتن» (POST/PUT/DELETE) — این‌ها به دیتابیس می‌نویسند و گران‌اند
 //  ۳) سقف‌های اختصاصی داخل خود روت‌ها (ورود، OTP، ثبت سفارش) که از قبل بود
-app.use('/api', rateLimit({ windowMs: 60 * 1000, max: boundedIntEnv('API_RATE_LIMIT', 300, 1, 10000) }));
+//
+// کلیدِ هر دو لایه‌ی سراسری `user` است نه `ip`. چرا: اپراتورهای موبایل ایران
+// CGNAT دارند، یعنی صدها مشتریِ واقعی از یک IP بیرونی می‌آیند. با کلیدِ IP،
+// ۴۰۰ نفرِ همزمان (کمپین، عید) سقفِ یک IP مشترک را می‌خورند و همه ۴۲۹ می‌گیرند.
+// keyBy:'user' یعنی کاربرِ واردشده سهمیه‌ی خودش را دارد؛ مهمان (بدون ورود) هم
+// مثل قبل با IP شمرده می‌شود، پس سیلِ رباتِ مهمان هنوز محدود می‌ماند.
+app.use('/api', rateLimit({ windowMs: 60 * 1000, max: boundedIntEnv('API_RATE_LIMIT', 300, 1, 10000), keyBy: 'user' }));
 
 const writeLimiter = rateLimit({
   // درخواست‌های نوشتاریِ واقعی باید محدود باشند؛ endpointهای حساس limiter مستقل دارند.
   // سقف پیش‌فرض طوری است که چند عملیات عادیِ یک کاربر در یک دقیقه را نگیرد.
   windowMs: 60 * 1000, max: boundedIntEnv('WRITE_RATE_LIMIT', 300, 1, 2000),
+  keyBy: 'user',
   message: 'تعداد درخواست‌ها زیاد است؛ یک دقیقه صبر کنید و دوباره تلاش کنید'
 });
 app.use('/api', (req, res, next) => {
@@ -737,7 +744,10 @@ app.use(express.static(FRONTEND_DIR, {
     if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
     // سرویس‌ورکر و manifest استثنا: اگر کهنه کش شوند، مشتری با منطق کشِ قدیمی
     // گیر می‌افتد و خودش راهی برای بیرون آمدن ندارد.
-    else if (p.endsWith('/sw.js') || p.endsWith('manifest.json') || p.endsWith('manifest.webmanifest')) {
+    // icons.svg و favicon.svg هم بدون ?v= لود می‌شوند؛ immutable نبودنشان
+    // یعنی تغییر آیکون‌ها فوراً به کاربر برسد.
+    else if (p.endsWith('/sw.js') || p.endsWith('manifest.json') || p.endsWith('manifest.webmanifest')
+      || p.endsWith('/assets/icons.svg') || p.endsWith('/assets/favicon.svg')) {
       res.setHeader('Cache-Control', 'no-cache');
     }
     else if (/\.(css|js|woff2?|svg)$/i.test(p)) {

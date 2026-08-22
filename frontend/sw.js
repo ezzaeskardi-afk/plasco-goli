@@ -8,7 +8,7 @@
 // چرا صفحه‌ها کش نمی‌شوند: در یک فروشگاه، نشان‌دادن نسخه‌ی کهنه یعنی مشتری
 // قیمت قدیمی یا کالای ناموجود را می‌بیند و سر همان زنگ می‌زند. سرعت به این
 // قیمت نمی‌ارزد.
-const CACHE = 'pg-static-v4';   // v4: بستن style-src در CSP — offline.html هشِ استایلِ درون‌خطی‌اش را لازم دارد، پس نسخه‌ی کهنه‌ی کش باید بیفتد
+const CACHE = 'pg-static-v7';   // v7: نصبِ SW با cache:'reload' از HTTP cache کهنه عبور می‌کند
 
 const OFFLINE_URL = '/offline.html';
 const STATIC = [
@@ -21,11 +21,21 @@ const STATIC = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE).then((c) =>
+    caches.open(CACHE).then(async (c) => {
       // هر فایل جدا: اگر یکی نبود، کلِ نصب شکست نخورد. addAll اتمی است و
       // یک ۴۰۴ کوچک باعث می‌شد هیچ‌چیز کش نشود — از جمله صفحه‌ی آفلاین.
-      Promise.all(STATIC.map((u) => c.add(u).catch(() => {})))
-    )
+      //
+      // fetch با cache:'reload' عمدی است: اگر قبلاً همین آدرس را با
+      // Cache-Control: immutable گرفته باشیم (مثل icons.svg در نسخه‌های قبل)،
+      // c.add() همان ورودیِ کهنه‌ی HTTP cache را برمی‌گرداند و نسخه‌ی تازه
+      // هرگز وارد کش نمی‌شود. reload یعنی همیشه از شبکه، تا نصب دقیقاً
+      // محتوایِ روی دیسک را بگیرد.
+      await Promise.all(STATIC.map((u) =>
+        fetch(u, { cache: 'reload' })
+          .then((res) => (res.ok ? c.put(u, res) : Promise.resolve()))
+          .catch(() => {})
+      ));
+    })
   );
   self.skipWaiting();
 });

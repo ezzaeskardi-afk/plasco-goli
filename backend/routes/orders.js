@@ -28,7 +28,9 @@ function buildOrderItemsFromCart(cart) {
 }
 
 // ساخت سفارش از سبد فعلی + شروع پرداخت
-router.post('/', requireAuth, rateLimit({ windowMs: 60000, max: 10, message: 'تعداد تلاش برای ثبت سفارش زیاد است؛ یک دقیقه صبر کنید' }), asyncHandler(async (req, res) => {
+// سقفِ ثبت سفارش با `user` کلید می‌خورد نه `ip` (این روت بعد از requireAuth است).
+// با کلیدِ IP، ده‌ها مشتریِ واقعی پشت یک IP مشترک (CGNAT) سهمیه‌ی هم را می‌خوردند.
+router.post('/', requireAuth, rateLimit({ windowMs: 60000, max: 10, keyBy: 'user', message: 'تعداد تلاش برای ثبت سفارش زیاد است؛ یک دقیقه صبر کنید' }), asyncHandler(async (req, res) => {
   // تعطیلی موقت فروشگاه از پنل — مرور و سبد آزاد است، فقط ثبت سفارش بسته می‌شود
   if (getSetting('shop_open') === '0') {
     return res.status(503).json({ error: 'فروشگاه موقتاً تعطیل است و فعلاً سفارش نمی‌پذیرد؛ به‌زودی برمی‌گردیم' });
@@ -213,7 +215,7 @@ const MAX_QTY_PER_ITEM = 99;   // همان سقف routes/cart.js
 const MAX_DISTINCT_ITEMS = 50;
 
 router.post('/:id/reorder', requireAuth,
-  rateLimit({ windowMs: 60000, max: 20, message: 'تعداد درخواست زیاد است؛ یک دقیقه صبر کنید' }),
+  rateLimit({ windowMs: 60000, max: 20, keyBy: 'user', message: 'تعداد درخواست زیاد است؛ یک دقیقه صبر کنید' }),
   (req, res) => {
     const order = getOrder(req.params.id);
     // پیام یکسان برای «نبود» و «مالِ کسِ دیگر» تا شماره‌ی سفارش‌ها قابل حدس‌زدن نشود
@@ -254,7 +256,7 @@ router.post('/:id/reorder', requireAuth,
 
 // لغو سفارش توسط مشتری — فقط تا وقتی هنوز ارسال نشده (paid)
 router.post('/:id/cancel', requireAuth,
-  rateLimit({ windowMs: 60000, max: 30, message: 'تعداد درخواست زیاد است؛ یک دقیقه صبر کنید' }),
+  rateLimit({ windowMs: 60000, max: 30, keyBy: 'user', message: 'تعداد درخواست زیاد است؛ یک دقیقه صبر کنید' }),
   (req, res) => {
     const order = getOrder(req.params.id);
     if (!order || order.userId !== req.session.userId) {
@@ -276,7 +278,7 @@ router.post('/:id/cancel', requireAuth,
 // درخواست مرجوعی — تا ۷ روز بعد از تحویل
 const RETURN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 router.post('/:id/return', requireAuth,
-  rateLimit({ windowMs: 60000, max: 10, message: 'تعداد درخواست زیاد است؛ یک دقیقه صبر کنید' }),
+  rateLimit({ windowMs: 60000, max: 10, keyBy: 'user', message: 'تعداد درخواست زیاد است؛ یک دقیقه صبر کنید' }),
   (req, res) => {
     const reason = String(req.body?.reason || '').trim().slice(0, 300);
     if (reason.length < 5) {
