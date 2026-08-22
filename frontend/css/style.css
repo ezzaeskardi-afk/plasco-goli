@@ -1754,7 +1754,7 @@ a.cart-row-title:hover{color:var(--teal);}
   animation:otpShake .45s ease;
 }
 @keyframes otpShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
-@media (max-width:480px){.otp-boxes{gap:7px}.otp-digit{width:44px;height:50px;font-size:max(20px,16px);border-radius:12px}}
+@media (max-width:480px){.otp-boxes{gap:clamp(9px,3.4vw,14px)}.otp-digit{width:clamp(38px,10.5vw,46px);height:clamp(44px,12vw,52px);font-size:max(20px,16px);border-radius:12px}}
 @media (prefers-reduced-motion:reduce){.otp-digit{transition:none}.otp-boxes.is-error .otp-digit{animation:none}}
 .field-hint{font-size:11.5px;color:var(--ink-dim);margin:7px 0 0;}
 #codeExpiry{font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink-soft);}
