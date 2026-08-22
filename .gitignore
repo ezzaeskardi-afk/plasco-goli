@@ -48,3 +48,7 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+ui-ux-pro-max/
+picture/products/raw-upload-*/
+*.jfif
+__pycache__/
