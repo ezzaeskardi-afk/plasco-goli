@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getProducts, getCategories, getShopInfo } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
 import type { Product, ShopCategory } from "@/lib/types";
@@ -61,7 +62,7 @@ function HeroSection({ banner }: { banner?: string | null }) {
 
         {/* دکمه‌های CTA */}
         <div className="flex items-center justify-center gap-3">
-          <a
+          <Link
             href="/products"
             className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
             style={{
@@ -72,8 +73,8 @@ function HeroSection({ banner }: { banner?: string | null }) {
           >
             مشاهدهٔ محصولات
             <span className="text-lg">←</span>
-          </a>
-          <a
+          </Link>
+          <Link
             href="/wholesale"
             className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
             style={{
@@ -83,7 +84,7 @@ function HeroSection({ banner }: { banner?: string | null }) {
             }}
           >
             خرید عمده
-          </a>
+          </Link>
         </div>
       </div>
     </section>
@@ -96,7 +97,7 @@ function CategoryBar({ categories }: { categories: ShopCategory[] }) {
   return (
     <section className="mx-auto max-w-[1180px] px-6 pb-8">
       <div className="flex gap-2 overflow-x-auto pb-2">
-        <a
+        <Link
           href="/products"
           className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition-colors"
           style={{
@@ -105,9 +106,9 @@ function CategoryBar({ categories }: { categories: ShopCategory[] }) {
           }}
         >
           همه
-        </a>
+        </Link>
         {categories.slice(0, 8).map((cat) => (
-          <a
+          <Link
             key={cat.id}
             href={`/products?category=${encodeURIComponent(cat.name)}`}
             className="shrink-0 rounded-full px-4 py-2 text-xs font-medium transition-colors"
@@ -118,7 +119,7 @@ function CategoryBar({ categories }: { categories: ShopCategory[] }) {
             }}
           >
             {cat.name}
-          </a>
+          </Link>
         ))}
       </div>
     </section>
@@ -132,12 +133,12 @@ function BestSellersSection({ products }: { products: Product[] }) {
         <h2 className="text-xl md:text-2xl font-extrabold text-ink">
           <span className="text-gold">★</span> پرفروش‌ترین‌ها
         </h2>
-        <a
+        <Link
           href="/products"
           className="text-sm font-medium text-teal hover:text-teal-dark transition-colors"
         >
           همهٔ محصولات ←
-        </a>
+        </Link>
       </div>
       <ProductCardGrid products={products} />
     </section>

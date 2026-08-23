@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { getProducts, getFacets } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
 import { FilterBar } from "@/components/FilterBar";
@@ -121,7 +122,7 @@ function Pagination({
   return (
     <div className="flex items-center justify-center gap-1 mt-8">
       {page > 1 && (
-        <a
+        <Link
           href={buildUrl(page - 1)}
           className="rounded-full w-9 h-9 flex items-center justify-center text-sm font-medium transition-colors"
           style={{
@@ -130,7 +131,7 @@ function Pagination({
           }}
         >
           ←
-        </a>
+        </Link>
       )}
       {pages.map((p, i) =>
         p === "..." ? (
@@ -141,7 +142,7 @@ function Pagination({
             ...
           </span>
         ) : (
-          <a
+          <Link
             key={p}
             href={buildUrl(p)}
             className="rounded-full w-9 h-9 flex items-center justify-center text-sm font-medium transition-colors"
@@ -154,11 +155,11 @@ function Pagination({
             }}
           >
             {toFa(p)}
-          </a>
+          </Link>
         ),
       )}
       {page < totalPages && (
-        <a
+        <Link
           href={buildUrl(page + 1)}
           className="rounded-full w-9 h-9 flex items-center justify-center text-sm font-medium transition-colors"
           style={{
@@ -167,7 +168,7 @@ function Pagination({
           }}
         >
           →
-        </a>
+        </Link>
       )}
     </div>
   );
@@ -191,9 +192,9 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
     <div className="mx-auto max-w-[1180px] px-6 py-8">
       {/* breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-ink-dim mb-6">
-        <a href="/" className="hover:text-teal transition-colors">
+        <Link href="/" className="hover:text-teal transition-colors">
           خانه
-        </a>
+        </Link>
         <span>/</span>
         <span className="text-ink-soft">محصولات</span>
       </div>
@@ -235,7 +236,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
           <p className="text-ink-soft text-sm mb-3">
             محصولی با این مشخصات پیدا نشد.
           </p>
-          <a
+          <Link
             href="/products"
             className="inline-block rounded-full px-4 py-2 text-sm font-medium transition-colors"
             style={{
@@ -244,7 +245,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
             }}
           >
             پاک کردن فیلترها
-          </a>
+          </Link>
         </div>
       )}
 

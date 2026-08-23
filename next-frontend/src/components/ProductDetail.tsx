@@ -1,11 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import type { Product } from "@/lib/types";
 
 function toFa(n: number): string {
   return new Intl.NumberFormat("fa-IR").format(n);
 }
-
 function toToman(price: number): string {
   return `${toFa(price)} تومان`;
 }
@@ -18,16 +18,17 @@ export function ProductDetail({ product }: { product: Product }) {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
       {/* گالری تصویر */}
       <div
-        className="rounded-[26px] overflow-hidden aspect-square"
+        className="relative rounded-[26px] overflow-hidden aspect-square"
         style={{ background: "var(--color-surface)" }}
       >
         {product.image ? (
-          <img
+          <Image
             src={product.image}
             alt={product.title}
-            className="w-full h-full object-cover"
-            width={600}
-            height={600}
+            fill
+            sizes="(max-width: 768px) 100vw, 50vw"
+            className="object-cover"
+            priority
           />
         ) : (
           <div
@@ -35,12 +36,8 @@ export function ProductDetail({ product }: { product: Product }) {
             style={{ background: "var(--color-surface-2)" }}
           >
             <svg
-              width="96"
-              height="96"
-              viewBox="0 0 64 64"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1"
+              width="96" height="96" viewBox="0 0 64 64"
+              fill="none" stroke="currentColor" strokeWidth="1"
               style={{ color: "var(--color-teal-dark)" }}
             >
               <rect x="8" y="12" width="48" height="40" rx="6" />
@@ -54,19 +51,14 @@ export function ProductDetail({ product }: { product: Product }) {
 
       {/* اطلاعات محصول */}
       <div className="flex flex-col gap-4">
-        {/* دسته‌بندی */}
         {product.category && (
-          <span className="text-xs font-medium text-teal">
-            {product.category}
-          </span>
+          <span className="text-xs font-medium text-teal">{product.category}</span>
         )}
 
-        {/* عنوان */}
         <h1 className="text-2xl md:text-3xl font-extrabold text-ink leading-tight">
           {product.title}
         </h1>
 
-        {/* امتیاز */}
         {product.rating != null && product.rating.count > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-base text-gold">
@@ -79,25 +71,14 @@ export function ProductDetail({ product }: { product: Product }) {
           </div>
         )}
 
-        {/* قیمت */}
-        <div
-          className="rounded-[18px] p-4"
-          style={{ background: "var(--color-surface)" }}
-        >
+        <div className="rounded-[18px] p-4" style={{ background: "var(--color-surface)" }}>
           {hasDiscount ? (
             <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-extrabold text-teal">
-                {toToman(product.price)}
-              </span>
-              <span className="text-sm text-ink-dim line-through">
-                {toToman(product.oldPrice)}
-              </span>
+              <span className="text-3xl font-extrabold text-teal">{toToman(product.price)}</span>
+              <span className="text-sm text-ink-dim line-through">{toToman(product.oldPrice)}</span>
               <span
                 className="rounded-full px-2.5 py-0.5 text-xs font-bold"
-                style={{
-                  background: "var(--color-coral-tint)",
-                  color: "var(--color-coral)",
-                }}
+                style={{ background: "var(--color-coral-tint)", color: "var(--color-coral)" }}
               >
                 {toFa(product.discountPercent)}٪ تخفیف
               </span>
@@ -109,20 +90,16 @@ export function ProductDetail({ product }: { product: Product }) {
           )}
         </div>
 
-        {/* موجودی */}
         <div className="flex items-center gap-2 text-sm">
           {outOfStock ? (
             <span className="text-coral font-medium">ناموجود</span>
           ) : product.stock <= 5 ? (
-            <span className="text-gold font-medium">
-              فقط {toFa(product.stock)} عدد در انبار
-            </span>
+            <span className="text-gold font-medium">فقط {toFa(product.stock)} عدد در انبار</span>
           ) : (
             <span className="text-teal font-medium">موجود در انبار</span>
           )}
         </div>
 
-        {/* دکمهٔ افزودن به سبد */}
         {!outOfStock && (
           <button
             className="mt-2 rounded-full py-3 px-8 text-base font-bold transition-all self-start inline-flex items-center gap-2"

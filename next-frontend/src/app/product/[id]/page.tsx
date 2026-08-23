@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getProduct, getRelatedProducts } from "@/lib/api";
 import { ProductDetail } from "@/components/ProductDetail";
 import { ProductCardGrid } from "@/components/ProductCard";
@@ -43,9 +44,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
     return (
       <div className="mx-auto max-w-[1180px] px-6 py-16 text-center">
         <h1 className="text-2xl font-bold text-ink mb-3">محصول پیدا نشد</h1>
-        <a href="/products" className="text-teal text-sm">
+        <Link href="/products" className="text-teal text-sm">
           بازگشت به محصولات
-        </a>
+        </Link>
       </div>
     );
   }
@@ -59,7 +60,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <p className="text-sm text-ink-soft mb-4">
           این محصول حذف شده یا در دسترس نیست.
         </p>
-        <a
+        <Link
           href="/products"
           className="inline-block rounded-full px-4 py-2 text-sm font-medium transition-colors"
           style={{
@@ -68,7 +69,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           }}
         >
           مشاهدهٔ محصولات
-        </a>
+        </Link>
       </div>
     );
   }
@@ -79,13 +80,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
     <div className="mx-auto max-w-[1180px] px-6 py-8">
       {/* breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-ink-dim mb-6">
-        <a href="/" className="hover:text-teal transition-colors">
+        <Link href="/" className="hover:text-teal transition-colors">
           خانه
-        </a>
+        </Link>
         <span>/</span>
-        <a href="/products" className="hover:text-teal transition-colors">
+        <Link href="/products" className="hover:text-teal transition-colors">
           محصولات
-        </a>
+        </Link>
         <span>/</span>
         <span className="text-ink-soft truncate max-w-[200px]">
           {product.title}

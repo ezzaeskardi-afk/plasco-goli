@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CartContent } from "@/components/CartContent";
 import type { Metadata } from "next";
 
@@ -10,7 +11,7 @@ export default function CartPage() {
   return (
     <div className="mx-auto max-w-[1180px] px-6 py-8">
       <div className="flex items-center gap-2 text-xs text-ink-dim mb-6">
-        <a href="/" className="hover:text-teal transition-colors">خانه</a>
+        <Link href="/" className="hover:text-teal transition-colors">خانه</Link>
         <span>/</span>
         <span className="text-ink-soft">سبد خرید</span>
       </div>
