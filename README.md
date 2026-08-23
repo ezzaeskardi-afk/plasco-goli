@@ -1,17 +1,24 @@
 # پلاسکو گلی — فروشگاه آنلاین
 
+[![Security scan](https://github.com/ezzaeskardi-afk/plasco-goli/actions/workflows/security.yml/badge.svg)](https://github.com/ezzaeskardi-afk/plasco-goli/actions/workflows/security.yml)
+![tests](https://img.shields.io/badge/tests-955%20passing-brightgreen)
+![OWASP](https://img.shields.io/badge/OWASP%20Top%2010-47%20checks-blue)
+![node](https://img.shields.io/badge/node-%3E%3D22.5-339933)
+![deps](https://img.shields.io/badge/runtime%20deps-3-lightgrey)
+![license](https://img.shields.io/badge/license-proprietary-red)
+
 فروشگاه فارسی محصولات پلاستیکی با frontend ساده‌ی HTML/CSS/JavaScript و backend مبتنی بر Node.js و Express. مشتری محصول را به سبد اضافه می‌کند، با شماره موبایل وارد می‌شود، آدرس تحویل می‌دهد، سفارش ثبت می‌کند و وضعیت سفارش را از حساب کاربری یا صفحه‌ی پیگیری می‌بیند.
 
-> وضعیت فعلی: **۷۲۲ تست smoke + ۸۶ تست سئو + ۴۵ تست امنیت + ۴۷ تست OWASP = ۹۰۰ تست سبز.** CRM پیشرفته با امتیازدهی RFM، وضعیت سیستم در پنل، بنچمارک ۱۰,۰۰۰ کاربر، Cluster Mode (سقف‌های نرخ، قفل حساب و توکن ورود بین workerها مشترک)، و اسکن خودکار OWASP Top 10.
+> وضعیت فعلی: **۹۵۵ تست خودکار، همه سبز** — ۷۲۲ دود + ۸۶ سئو + ۴۷ OWASP + ۴۵ امنیت + ۳۷ تخفیف + ۱۸ یکپارچگیِ گزارشِ بنچمارک (به‌علاوه‌ی نگهبانِ مرزِ راز که شمارش‌پذیر نیست). CRM پیشرفته با امتیازدهی RFM، وضعیت سیستم در پنل، بنچمارک ۱۰,۰۰۰ کاربر، Cluster Mode (سقف‌های نرخ، قفل حساب و توکن ورود بین workerها مشترک)، و اسکن خودکار OWASP Top 10.
 
 ## وضعیت فنی فعلی
 
-- Node.js `>=22.5`، Express و SQLite داخلی Node
-- **۱۵۳ تابع** در `db.js` (۲,۹۳۶ خط) — ۲۵ فایل کتابخانه + ۹ مسیر API
-- **۵۸ کامیت** در مخزن — **۱۹۸ فایل** تحت کنترل نسخه
-- تست smoke: **۷۲۲ تست** | سئو: **۸۶ تست** | امنیت: **۴۵ تست** | OWASP: **۴۷ تست**
+- Node.js `>=22.5`، Express و SQLite داخلی Node — **فقط ۳ وابستگیِ اجرا** (`express`، `express-session`، `dotenv`)
+- **۱۵۳ تابع** در `db.js` (۲,۹۳۶ خط) — ۲۵ فایل کتابخانه + ۹ مسیر API + ۷ ابزار مدیریتی
+- **۵۹ کامیت** در مخزن — **۱۹۹ فایل** تحت کنترل نسخه
+- تست: دود **۷۲۲** | سئو **۸۶** | OWASP **۴۷** | امنیت **۴۵** | تخفیف **۳۷** | یکپارچگیِ بنچمارک **۱۸** = **۹۵۵**
 - بنچمارک: **۱۰,۰۰۰ کاربر همزمان — ۱۰۰٪ موفق، صفر خطا**
-- شاخهٔ اصلی: `main`
+- شاخهٔ اصلی: `main` (تنها شاخه — بدون شاخه‌ی جانبی)
 
 ## Quick start
 
@@ -86,17 +93,37 @@ npm start
 
 ## مجموعه تست‌ها
 
+شش مجموعه‌ی شمارش‌پذیر + یک نگهبان. عمداً جدا مانده‌اند، چون هر کدام سرور را با
+سقف‌های نرخِ متفاوتی بالا می‌آورد (تستِ دود سقف را باز می‌خواهد، تستِ امنیت و OWASP
+بسته) و قاطی‌کردنشان در یک پروسه یعنی یکی سهمیه‌ی دیگری را می‌سوزاند.
+
 ```bash
 cd backend
 
-npm test                    # ۷۲۲ تست smoke + regression
-node test-seo.js            # ۸۶ تست سئو
-node tests/security.js      # ۴۵ تست امنیت (آپلود، CSRF، rate-limit)
-node tests/owasp-scan.js    # ۴۷ تست OWASP Top 10
-node tests/bench-report-integrity.js  # ۱۸ تست یکپارچگی گزارش بنچمارک
-npm run owasp               # اسکن OWASP با اسکریپت npm
-npm run check               # همه تست‌ها + بنچمارک
+npm test                              # ۷۲۲ تست دود (test-smoke.js)
+node test-seo.js                      # ۸۶ تست سئو
+node tests/owasp-scan.js              # ۴۷ تست OWASP Top 10
+node tests/security.js                # ۴۵ تست امنیت (آپلود، CSRF، جعل IP، rate-limit)
+node tests/discount.js                # ۳۷ تست کد تخفیف و قیمت قبلی
+node tests/bench-report-integrity.js  # ۱۸ تست یکپارچگیِ گزارشِ بنچمارک
+npm run test:secrets                  # نگهبانِ مرزِ راز (بی‌شمارش — یا سبز است یا throw)
 ```
+
+میان‌بُرهای npm:
+
+```bash
+npm run test:all     # دود + امنیت + تخفیف  (test-all.js)
+npm run owasp        # همان tests/owasp-scan.js
+npm run test:full    # هر شش مجموعه + نگهبانِ راز — ۹۵۵ تست، بی بنچمارک
+npm run check        # test:all + سئو + بنچمارکِ ۲۰۰ کاربر  (بدونِ OWASP و راز)
+```
+
+> `npm run check` نامش قدیمی است و **همه‌ی** تست‌ها را اجرا نمی‌کند: بنچمارک دارد
+> ولی OWASP و نگهبانِ راز را ندارد. برای پوششِ کامل `npm run test:full`، و اگر
+> بنچمارک هم می‌خواهی هر دو را پشت سر هم.
+
+هر شش مجموعه روی **کپیِ** دیتابیس اجرا می‌شوند (`tests/sandbox.js` در پوشه‌ی موقتِ
+سیستم)، پس هیچ‌کدام به داده‌ی واقعیِ مغازه دست نمی‌زند.
 
 ## بنچمارک
 
@@ -158,17 +185,23 @@ node bench-read.js 400               # بنچمارک خواندن
 ```
 polasco-goli/
 ├── README.md
+├── SECURITY.md                ← سیاستِ گزارشِ آسیب‌پذیری (responsible disclosure)
 ├── HTTPS-GUIDE.md             ← راهنمای کامل SSL و امنیت production
 ├── StartSite.bat              ← راه‌اندازی سریع
 ├── gitleaks.toml              ← تنظیمات secret scanning
+├── .gitattributes             ← قرارِ خط‌پایان (مخزن LF است)
+├── .gitleaksignore            ← استثناهای بررسی‌شده‌ی gitleaks
 ├── .github/workflows/         ← اسکن Gitleaks در CI
 ├── backend/
 │   ├── server.js              ← نقطه شروع سرور
 │   ├── package.json
+│   ├── package-lock.json
+│   ├── ecosystem.config.js    ← تنظیماتِ PM2
 │   ├── .env.example
-│   ├── test-all.js            ← مجموعه تست (۷۲۲ تست)
-│   ├── test-smoke.js          ← تست مسیر سایت
+│   ├── test-smoke.js          ← تست دود، کلِ مسیرِ سایت (۷۲۲ تست)
+│   ├── test-all.js            ← اجراکننده‌ی سه مجموعه: دود + امنیت + تخفیف
 │   ├── test-seo.js            ← تست سئو (۸۶ تست)
+│   ├── tidy-test-data.js      ← پاک‌کردنِ رسوبِ تست دود (موجودی را دست نمی‌زند)
 │   ├── bench-load.js          ← بنچمارک نوشتن (خرید همزمان)
 │   ├── bench-read.js          ← بنچمارک خواندن (لیست/جستجو)
 │   ├── bench-report.sh        ← اسکریپت خودکار بنچمارک و ثبت در گزارش
@@ -211,12 +244,21 @@ polasco-goli/
 │   │   ├── admin.js           ← پنل مدیریت
 │   │   └── shop.js            ← تنظیمات فروشگاه
 │   ├── tests/
-│   │   ├── security.js        ← تست امنیت (۴۵ تست)
 │   │   ├── owasp-scan.js      ← اسکن OWASP Top 10 (۴۷ تست)
-│   │   ├── bench-report-integrity.js ← تست یکپارچگی گزارش بنچمارک
-│   │   ├── discount.js        ← تست کد تخفیف
-│   │   └── sandbox.js         ← ابزار sandbox تست
-│   ├── tools/                 ← ابزارهای مدیریتی
+│   │   ├── security.js        ← تست امنیت (۴۵ تست)
+│   │   ├── discount.js        ← تست کد تخفیف (۳۷ تست)
+│   │   ├── bench-report-integrity.js ← یکپارچگیِ گزارشِ بنچمارک (۱۸ تست)
+│   │   ├── secrets.js         ← نگهبانِ مرزِ راز (frontend، .env.example، ماسکِ لاگ)
+│   │   ├── sandbox.js         ← ابزار sandbox تست (کپیِ دیتابیس در tmp)
+│   │   └── makepng.js         ← ساختِ PNG معتبر با ابعادِ دلخواه برای تستِ آپلود
+│   ├── tools/
+│   │   ├── restore-backup.js  ← بازگردانیِ دیتابیس از بکاپ (چندلایه محافظ)
+│   │   ├── seed-catalog.js    ← افزودنِ محصولاتِ پیش‌نویس (published = 0)
+│   │   ├── optimize-images.js ← ساختِ نسخه‌ی WebP کنارِ هر عکس
+│   │   ├── import-photos-*.js ← واردکردنِ دسته‌عکسِ تحویلیِ مالک
+│   │   ├── contrast-audit.js  ← بازرسِ کنتراست رنگ (WCAG 2.2 سطح AA)
+│   │   ├── css-audit.js       ← بازرسِ ریسپانسیو و متغیرهای CSS
+│   │   └── log-summary.js     ← خلاصه‌ی خطاهای لاگ
 │   └── data/                  ← دیتابیس + بکاپ‌ها (gitignore)
 ├── frontend/
 │   ├── .well-known/
@@ -237,9 +279,11 @@ polasco-goli/
 │   ├── 500.html               ← خطای سرور
 │   ├── offline.html           ← حالت آفلاین (PWA)
 │   ├── sw.js                  ← سرویس‌ورکر
+│   ├── manifest.webmanifest   ← مانیفستِ PWA
 │   ├── css/style.css          ← استایل‌ها
-│   ├── js/                    ← اسکریپت‌ها
-│   └── assets/                ← آیکون‌ها و فونت‌ها
+│   ├── css/invoice.css        ← استایلِ فاکتورِ چاپی
+│   ├── js/                    ← اسکریپت‌ها (۱۲ فایل)
+│   └── assets/                ← آیکون‌ها و فونت وزیرمتن
 └── picture/                   ← عکس محصولات — بیرونِ frontend
     ├── logo/
     └── products/
@@ -264,12 +308,11 @@ npm start
 
 تست‌ها:
 ```bash
-npm test                      # ۷۲۲ تست smoke
-node test-seo.js              # ۸۶ تست سئو
-node tests/security.js        # ۴۵ تست امنیت
-node tests/owasp-scan.js      # ۴۷ تست OWASP Top 10
-npm run check                 # همه تست‌ها + بنچمارک
+npm run test:full             # هر شش مجموعه — ۹۵۵ تست
 ```
+
+فهرستِ کاملِ مجموعه‌ها و اینکه هر کدام چه می‌سنجد، در بخشِ
+[مجموعه تست‌ها](#مجموعه-تستها) آمده. عمداً اینجا تکرار نشده تا دو جا از هم واگرا نشوند.
 
 ## مسیر خرید
 
@@ -320,10 +363,20 @@ CLUSTER_ENABLED=true node backend/server.js
 ### اسکن‌های خودکار
 ```bash
 node tests/owasp-scan.js       # اسکن OWASP Top 10 (۴۷ تست)
-node tests/security.js         # تست آپلود، CSRF، rate-limit (۴۵ تست)
+node tests/security.js         # تست آپلود، CSRF، جعل IP، rate-limit (۴۵ تست)
+npm run test:secrets           # نگهبانِ مرزِ راز
+npm run security:gitleaks      # gitleaks با تنظیماتِ خودِ پروژه
 ```
 
-### Gitleaks
+`security.yml` در CI هر push را با Gitleaks اسکن می‌کند — وضعیتش در نشانِ بالای
+همین صفحه دیده می‌شود.
+
+### گزارشِ آسیب‌پذیری
+اگر ایرادِ امنیتی پیدا کردید، لطفاً به‌صورت عمومی issue نسازید.
+راهِ درستش در [SECURITY.md](SECURITY.md) و `frontend/.well-known/security.txt`
+(طبق RFC 9116) نوشته شده.
+
+### Gitleaks دستی
 ```bash
 gitleaks detect --redact --config gitleaks.toml --source .
 ```
@@ -337,19 +390,39 @@ gitleaks detect --redact --config gitleaks.toml --source .
 npm run logs:summary -- --days=7
 ```
 
-### بکاپ
-```bash
-node tools/restore-backup.js    # فهرست بکاپ‌ها
-```
+## ابزارهای مدیریتی
+
+همه بدونِ هیچ پکیجِ بیرونی و همه با `cd backend` اجرا می‌شوند.
+
+| ابزار | کار |
+|---|---|
+| `node tools/restore-backup.js` | فهرستِ بکاپ‌ها. بی‌آرگومان **هیچ چیزی را عوض نمی‌کند** — فقط نشان می‌دهد. بکاپِ نیمه‌کاره را قبل از اعتماد رد می‌کند. |
+| `node tools/restore-backup.js 2026-08-20` | بازگردانی به آن روز — با عکسِ `pre-restore-*` و تأییدِ `yes` |
+| `node tools/seed-catalog.js` | افزودنِ محصولاتِ **پیش‌نویس** (`published = 0`) — روی سایت دیده نمی‌شوند تا خودت عکس و قیمت بگذاری |
+| `node tools/optimize-images.js` | ساختِ نسخه‌ی WebP کنارِ هر عکس (۲۵–۴۵٪ سبک‌تر) |
+| `node tools/contrast-audit.js` | بازرسِ کنتراست رنگ طبقِ WCAG 2.2 سطح AA |
+| `node tools/css-audit.js` | بازرسِ ریسپانسیو + متغیرهای CSSِ استفاده‌شده‌ی تعریف‌نشده |
+| `node tools/log-summary.js --days=7` | خلاصه‌ی خطاهای لاگ |
+| `node tidy-test-data.js` | فهرستِ رسوبِ تست دود (سرور خاموش). با `--apply` پاک می‌کند؛ موجودی را **عمداً** دست نمی‌زند. |
+| `node tidy-test-data.js --check-stock` | مقایسه‌ی موجودی با آخرین بکاپ |
 
 ## مستندات
 
 | فایل | توضیح |
 |---|---|
-| `HTTPS-GUIDE.md` | راهنمای کامل فعال‌سازی SSL، nginx، و تنظیمات امنیتی production |
-| `SECURITY-REPORT.md` | گزارش کامل اسکن OWASP Top 10 با جزئیات هر دسته |
-| `benchmark-report.md` | گزارش مقایسه‌ای بنچمارک (قابل به‌روزرسانی با `bench-report.sh`) |
 | `README.md` | همین فایل — راهنمای اصلی پروژه |
+| `SECURITY.md` | چطور آسیب‌پذیری را خصوصی گزارش کنید |
+| `HTTPS-GUIDE.md` | راهنمای کامل فعال‌سازی SSL، nginx، و تنظیمات امنیتی production |
+| `backend/SECURITY-REPORT.md` | گزارش کامل اسکن OWASP Top 10 با جزئیات هر دسته |
+| `backend/benchmark-report.md` | گزارش مقایسه‌ای بنچمارک (قابل به‌روزرسانی با `bench-report.sh`) |
+
+## مالکیت و مجوز
+
+این کد **اختصاصی** است و مجوزِ متن‌بازی ندارد. نبودنِ فایلِ `LICENSE` تصادفی
+نیست: طبق قانونِ کپی‌رایت، نبودنِ مجوز یعنی هیچ اجازه‌ای واگذار نشده است. مخزن
+برای *دیدن* عمومی است، نه برای استفاده‌ی مجدد.
+
+© ۲۰۲۶ پلاسکو گلی — همه‌ی حقوق محفوظ است.
 
 ---
 

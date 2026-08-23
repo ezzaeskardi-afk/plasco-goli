@@ -2,6 +2,7 @@
   "name": "polasco-goli-backend",
   "version": "1.0.0",
   "private": true,
+  "license": "UNLICENSED",
   "description": "بک‌اند فروشگاه پلاسکو گلی — سبد خرید، ورود با شماره موبایل، سفارش و پرداخت",
   "main": "server.js",
   "type": "commonjs",
@@ -11,14 +12,19 @@
     "prod": "pm2 start ecosystem.config.js",
     "test": "node test-smoke.js",
     "test:all": "node test-all.js",
+    "test:seo": "node test-seo.js",
+    "test:security": "node tests/security.js",
+    "test:discount": "node tests/discount.js",
+    "test:integrity": "node tests/bench-report-integrity.js",
+    "test:secrets": "node tests/secrets.js",
+    "owasp": "node tests/owasp-scan.js",
+    "test:full": "node test-smoke.js && node test-seo.js && node tests/owasp-scan.js && node tests/security.js && node tests/discount.js && node tests/bench-report-integrity.js && node tests/secrets.js",
     "check": "node test-all.js && node test-seo.js && node bench-load.js 200 3998 0 0",
     "bench": "node bench-load.js",
     "bench:read": "node bench-read.js",
     "cluster": "CLUSTER_ENABLED=true node server.js",
     "logs:summary": "node tools/log-summary.js",
-    "security:gitleaks": "gitleaks detect --redact --config ../gitleaks.toml --source ..",
-    "test:secrets": "node tests/secrets.js",
-    "owasp": "node tests/owasp-scan.js"
+    "security:gitleaks": "gitleaks detect --redact --config ../gitleaks.toml --source .."
   },
   "engines": {
     "node": ">=22.5"
