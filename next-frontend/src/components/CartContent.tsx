@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useOptimistic, useTransition } from "react";
+import { useEffect, useState, useOptimistic } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getCart,
@@ -11,6 +12,7 @@ import {
   removeCoupon,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 import type { CartResponse, CartItem } from "@/lib/types";
 
 function toFa(n: number): string {
@@ -56,7 +58,7 @@ function useOptimisticCart(cart: CartResponse | null) {
 // ============================================================
 export function CartContent() {
   const queryClient = useQueryClient();
-  const [isPending, startTransition] = useTransition();
+  const toast = useToast();
   const [couponCode, setCouponCode] = useState("");
   const [couponMsg, setCouponMsg] = useState("");
 
@@ -74,6 +76,20 @@ export function CartContent() {
   const { optimistic, updateItemQty, removeItem } = useOptimisticCart(
     cart ?? null,
   );
+
+  // پیام‌های خودِ سرور درباره‌ی تغییری که *او* در سبد داد: کالایی که مدیر حذف
+  // کرده و از سبد برداشته شد، تعدادی که به سقف چسبید، کدِ تخفیفی که با تغییرِ
+  // سبد دیگر صدق نمی‌کند. سرور این‌ها را می‌فرستد و نسخه‌ی Next بی‌صدا دورشان
+  // می‌ریخت — یعنی سبدِ کاربر عوض می‌شد و هیچ توضیحی نمی‌گرفت.
+  // نسخه‌ی Express همین دو را در frontend/js/cart.js:77 و :218 توست می‌کند.
+  const notice = cart?.notice;
+  const couponNotice = cart?.couponNotice;
+  useEffect(() => {
+    if (notice) toast(notice, { tone: "info" });
+  }, [notice, toast]);
+  useEffect(() => {
+    if (couponNotice) toast(couponNotice, { tone: "info" });
+  }, [couponNotice, toast]);
 
   // Mutation — آپدیت تعداد
   const updateMutation = useMutation({
@@ -174,14 +190,16 @@ export function CartContent() {
           >
             {/* تصویر */}
             <div
-              className="w-20 h-20 rounded-xl shrink-0 overflow-hidden"
+              className="w-20 h-20 rounded-xl shrink-0 overflow-hidden relative"
               style={{ background: "var(--color-surface-2)" }}
             >
               {item.image ? (
-                <img
+                <Image
                   src={item.image}
                   alt={item.title}
-                  className="w-full h-full object-cover"
+                  fill
+                  sizes="80px"
+                  className="object-cover"
                 />
               ) : (
                 <div
@@ -283,8 +301,27 @@ export function CartContent() {
 
                 {/* قیمت */}
                 <div className="text-right">
-                  {item.discountPercent > 0 ? (
-                    <div className="flex items-baseline gap-1.5">
+                  {/* تخفیف عمده مقدم است: وقتی فعال شده، قیمتِ واحدِ واقعی
+                      همان unitPrice است نه price. قبلاً همیشه price نشان داده
+                      می‌شد، پس مشتریِ عمده قیمتِ خرده می‌دید در حالی که سرور
+                      کمتر حساب می‌کرد — عددِ ردیف با جمعِ فاکتور نمی‌خواند. */}
+                  {item.wholesale?.applies ? (
+                    <div className="flex items-baseline gap-1.5 justify-end">
+                      <span
+                        className="text-sm font-extrabold"
+                        style={{ color: "var(--color-gold)" }}
+                      >
+                        {toToman(item.unitPrice)}
+                      </span>
+                      <span
+                        className="text-[11px] line-through"
+                        style={{ color: "var(--color-ink-dim)" }}
+                      >
+                        {toToman(item.price)}
+                      </span>
+                    </div>
+                  ) : item.discountPercent > 0 ? (
+                    <div className="flex items-baseline gap-1.5 justify-end">
                       <span
                         className="text-sm font-extrabold"
                         style={{ color: "var(--color-teal)" }}
@@ -306,8 +343,30 @@ export function CartContent() {
                       {toToman(item.price)}
                     </span>
                   )}
+                  {/* جمعِ ردیف — همان چیزی که سرور حساب کرده. بدونش کاربر باید
+                      قیمت×تعداد را خودش ضرب می‌کرد و با تخفیف عمده هم به عددِ
+                      اشتباه می‌رسید. */}
+                  <div
+                    className="text-[11px] mt-0.5"
+                    style={{ color: "var(--color-ink-dim)" }}
+                  >
+                    جمع: {toToman(item.subtotal)}
+                  </div>
                 </div>
               </div>
+
+              {item.wholesale?.applies && (
+                <p
+                  className="text-[11px] mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5"
+                  style={{
+                    background: "var(--color-gold-tint)",
+                    color: "var(--color-gold)",
+                  }}
+                >
+                  تخفیف عمده اعمال شد — {toFa(item.wholesale.discount)}٪ (از{" "}
+                  {toFa(item.wholesale.minQty)} عدد)
+                </p>
+              )}
             </div>
           </div>
         ))}
@@ -330,7 +389,9 @@ export function CartContent() {
           {displayCart.coupon ? (
             <div className="flex items-center justify-between mb-3 text-xs">
               <span style={{ color: "var(--color-teal)" }}>
-                کد تخفیف: {displayCart.coupon}
+                {/* `.code` لازم است: سرور آبجکت می‌فرستد. قبلاً خودِ آبجکت رندر
+                    می‌شد و صفحه با هر کدِ تخفیفِ معتبر به صفحه‌ی خطا می‌افتاد. */}
+                کد تخفیف: {displayCart.coupon.code}
               </span>
               <button
                 onClick={() => removeCouponMutation.mutate()}
@@ -392,16 +453,37 @@ export function CartContent() {
               className="flex justify-between"
               style={{ color: "var(--color-ink-soft)" }}
             >
+              <span>تعداد اقلام</span>
+              <span>{toFa(displayCart.count)}</span>
+            </div>
+            <div
+              className="flex justify-between"
+              style={{ color: "var(--color-ink-soft)" }}
+            >
               <span>جمع اقلام</span>
               <span>{toToman(displayCart.total)}</span>
             </div>
+            {/* صرفه‌جویی از تخفیفِ خودِ محصولات — جدا از کد تخفیف. سرور
+                حسابش می‌کند و Express نشانش می‌داد؛ اینجا جا افتاده بود. */}
+            {displayCart.savings > 0 && (
+              <div
+                className="flex justify-between"
+                style={{ color: "var(--color-teal)" }}
+              >
+                <span>صرفه‌جویی شما</span>
+                <span>{toToman(displayCart.savings)}</span>
+              </div>
+            )}
             {displayCart.discount > 0 && (
               <div
                 className="flex justify-between"
                 style={{ color: "var(--color-teal)" }}
               >
-                <span>تخفیف</span>
-                <span>-{toToman(displayCart.discount)}</span>
+                <span>
+                  تخفیف
+                  {displayCart.coupon ? ` (${displayCart.coupon.code})` : ""}
+                </span>
+                <span>−{toToman(displayCart.discount)}</span>
               </div>
             )}
             <div
@@ -417,17 +499,23 @@ export function CartContent() {
                 )}
               </span>
             </div>
-            {displayCart.freeShippingGap > 0 && (
-              <div
-                className="text-center py-1.5 rounded-full text-[11px]"
-                style={{
-                  background: "var(--color-gold-tint)",
-                  color: "var(--color-gold)",
-                }}
-              >
-                {toToman(displayCart.freeShippingGap)} تا ارسال رایگان
-              </div>
-            )}
+            {/* شرط عیناً همان frontend/js/cart.js:228: فقط وقتی فروشگاه هم
+                آستانه‌ی ارسال رایگان تعریف کرده و هم کرایه‌ای می‌گیرد. وگرنه
+                «تا ارسال رایگان» برای فروشگاهی که همیشه رایگان می‌فرستد
+                بی‌معنی است. */}
+            {displayCart.freeShippingOver > 0 &&
+              displayCart.shippingCost > 0 &&
+              displayCart.freeShippingGap > 0 && (
+                <div
+                  className="text-center py-1.5 rounded-full text-[11px]"
+                  style={{
+                    background: "var(--color-gold-tint)",
+                    color: "var(--color-gold)",
+                  }}
+                >
+                  {toToman(displayCart.freeShippingGap)} تا ارسال رایگان
+                </div>
+              )}
             <div
               className="flex justify-between text-sm font-extrabold pt-2"
               style={{

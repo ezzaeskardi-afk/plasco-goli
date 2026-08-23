@@ -318,7 +318,10 @@ export function CheckoutContent() {
                   {item.title} ×{toFa(item.qty)}
                 </span>
                 <span className="shrink-0" style={{ color: "var(--color-ink-soft)" }}>
-                  {toToman(item.price * item.qty)}
+                  {/* subtotal خودِ سرور، نه price×qty. با تخفیف عمده قیمتِ واحد
+                      unitPrice است و ضربِ دستی عددی می‌داد که با ردیفِ «جمع»
+                      پایین همین کادر نمی‌خواند. */}
+                  {toToman(item.subtotal)}
                 </span>
               </div>
             ))}
@@ -331,8 +334,8 @@ export function CheckoutContent() {
             </div>
             {cart.discount > 0 && (
               <div className="flex justify-between" style={{ color: "var(--color-teal)" }}>
-                <span>تخفیف</span>
-                <span>-{toToman(cart.discount)}</span>
+                <span>تخفیف{cart.coupon ? ` (${cart.coupon.code})` : ""}</span>
+                <span>−{toToman(cart.discount)}</span>
               </div>
             )}
             <div className="flex justify-between" style={{ color: "var(--color-ink-soft)" }}>

@@ -107,10 +107,14 @@ function clampQty(product, wanted) {
 // وقتی تعداد درخواستی به سقف خورد، باید دقیقاً بگوییم کدام سقف — قبلاً همیشه
 // «فقط X عدد موجود است» گفته می‌شد و اگر موجودی انبار ۵۰۰ بود ولی کاربر ۱۲۰ عدد
 // می‌خواست، پیام می‌شد «فقط ۵۰۰ عدد موجود است» که هم بی‌معنی بود هم گمراه‌کننده.
+//
+// عددها فارسی می‌آیند، مثل بقیه‌ی پیام‌های مالیِ سرور (lib/db.js:2249 و
+// lib/sms.js:139). قبلاً لاتین بود و وسط جمله‌ی فارسی «حداکثر 99 عدد» می‌شد.
+const faNum = (n) => Number(n).toLocaleString('fa-IR');
 function capReason(product, cap) {
   return cap === MAX_QTY_PER_ITEM && Number(product.stock) > MAX_QTY_PER_ITEM
-    ? `در هر سفارش حداکثر ${MAX_QTY_PER_ITEM} عدد از یک کالا می‌شود ثبت کرد`
-    : `از «${product.title}» فقط ${cap} عدد موجود است`;
+    ? `در هر سفارش حداکثر ${faNum(MAX_QTY_PER_ITEM)} عدد از یک کالا می‌شود ثبت کرد`
+    : `از «${product.title}» فقط ${faNum(cap)} عدد موجود است`;
 }
 
 router.get('/', (req, res) => {

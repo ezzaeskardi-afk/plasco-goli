@@ -151,11 +151,19 @@ export async function getCart(): Promise<CartResponse> {
   return fetcher<CartResponse>("/api/cart");
 }
 
+// نوعِ خروجی قبلاً `{added, skipped}` نوشته شده بود که **غلط** بود؛ آن شکل
+// خروجیِ «افزودنِ گروهی» (سفارشِ مجدد) است. مسیرِ افزودنِ یک محصول در
+// backend/routes/cart.js:148 با `res.json(buildCartResponse(req))` جواب می‌دهد،
+// یعنی کلِ سبد. همان اشتباهی که در CreateOrderResponse هم بود: نوعِ اعلام‌شده
+// چیزی را وعده می‌داد که سرور نمی‌فرستد.
+//
+// نتیجه‌ی عملیِ درست بودنش: پاسخ را مستقیم می‌شود در کشِ ["cart"] نشاند
+// (`setQueryData`) و نشانگرِ سبد در هدر بدون یک درخواستِ اضافه به‌روز می‌شود.
 export async function addToCart(
   productId: number,
   qty: number = 1,
-): Promise<{ added: number; skipped: number[] }> {
-  return fetcher("/api/cart/add", {
+): Promise<CartResponse> {
+  return fetcher<CartResponse>("/api/cart/add", {
     method: "POST",
     body: JSON.stringify({ productId, qty }),
   });

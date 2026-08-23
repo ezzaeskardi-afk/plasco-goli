@@ -793,14 +793,16 @@ function shutdown(code) {
     const cOver = await api('POST', '/cart/update', { productId: tmpId, qty: 9 });
     const cOverItem = (cOver.data.items || []).find(i => i.productId === tmpId);
     check('V9 cart: qty above stock is clamped with a notice',
-      cOverItem.qty === 4 && /فقط 4 عدد موجود/.test(cOver.data.notice || ''));
+      cOverItem.qty === 4 && /فقط ۴ عدد موجود/.test(cOver.data.notice || ''));
 
     // موجودی زیاد ولی بیشتر از سقف هر قلم → پیام باید از «سقف سفارش» بگوید نه از انبار
     await api('PUT', `/admin/products/${tmpId}`, { stock: 150 });
     const cCap = await api('POST', '/cart/update', { productId: tmpId, qty: 120 });
     const cCapItem = (cCap.data.items || []).find(i => i.productId === tmpId);
+    // عددِ داخل پیام فارسی است (capReason در routes/cart.js) — مثل بقیه‌ی
+    // پیام‌های مالیِ سرور. این assert قبلاً «99» لاتین می‌خواست.
     check('V9 cart: per-order cap has its own message',
-      cCapItem.qty === 99 && /حداکثر 99/.test(cCap.data.notice || ''));
+      cCapItem.qty === 99 && /حداکثر ۹۹/.test(cCap.data.notice || ''));
 
     // ناموجود شدن کالای داخل سبد → حذف با توضیح، نه بی‌صدا
     await api('PUT', `/admin/products/${tmpId}`, { stock: 0 });

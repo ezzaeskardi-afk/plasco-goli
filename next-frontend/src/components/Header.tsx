@@ -6,6 +6,12 @@ import { useQuery } from "@tanstack/react-query";
 import { getCart, getMe } from "@/lib/api";
 import type { CartResponse, AuthMeResponse } from "@/lib/types";
 
+// عددِ نشانگرِ سبد باید فارسی باشد. بقیه‌ی سایت همه‌جا از این استفاده می‌کند و
+// فقط این دو نقطه لاتین مانده بود؛ کنارِ «۳ قلم» یک «3» تو ذوق می‌زد.
+function toFa(n: number): string {
+  return new Intl.NumberFormat("fa-IR").format(n);
+}
+
 export function Header() {
   const pathname = usePathname();
 
@@ -125,8 +131,10 @@ export function Header() {
                   background: "var(--color-coral)",
                   color: "var(--color-ink-on-warm)",
                 }}
+                // عددِ تنها برای صفحه‌خوان بی‌معنی است؛ با برچسب می‌فهمد چیست.
+                aria-label={`${toFa(cartCount)} قلم در سبد`}
               >
-                {cartCount}
+                {toFa(cartCount)}
               </span>
             )}
           </Link>
@@ -187,7 +195,7 @@ export function Header() {
               : "text-ink-soft"
           }`}
         >
-          سبد {cartCount > 0 && `(${cartCount})`}
+          سبد {cartCount > 0 && `(${toFa(cartCount)})`}
         </Link>
         <Link
           href={

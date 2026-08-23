@@ -79,6 +79,16 @@ export interface ShopInfo {
 // سبد خرید
 // ============================================================
 
+// تخفیف عمده‌ی یک قلم — خروجی wholesaleInfo در backend/lib/db.js:737.
+// وقتی محصول تخفیف عمده ندارد، سرور `null` می‌فرستد.
+export interface CartItemWholesale {
+  minQty: number;
+  discount: number;
+  unitPrice: number;
+  /** آیا با تعدادِ فعلیِ همین قلم فعال شده است */
+  applies: boolean;
+}
+
 export interface CartItem {
   productId: number;
   title: string;
@@ -93,6 +103,21 @@ export interface CartItem {
   hasDiscount: boolean;
   savings: number;
   notice?: string;
+  // این چهار فیلد را سرور همیشه می‌فرستد (routes/cart.js:24-46) ولی در نوع
+  // نیامده بودند، پس سبدِ Next قیمتِ عمده را نادیده می‌گرفت و جمعِ هر ردیف را
+  // نشان نمی‌داد: مشتریِ عمده قیمتِ خرده می‌دید.
+  unitPrice: number;
+  subtotal: number;
+  wholesale: CartItemWholesale | null;
+  wholesaleSavings: number;
+}
+
+// کوپنِ نشسته روی سبد. سرور **آبجکت** می‌فرستد (routes/cart.js:68)، نه رشته.
+// نوعِ قبلی `string | null` بود و صفحه‌ی سبد با اعمالِ هر کد تخفیفِ معتبر
+// می‌ترکید (React error #31: «آبجکت فرزندِ معتبر نیست»).
+export interface CartCoupon {
+  code: string;
+  discount: number;
 }
 
 export interface CartResponse {
@@ -100,13 +125,17 @@ export interface CartResponse {
   total: number;
   count: number;
   savings: number;
-  coupon: string | null;
+  coupon: CartCoupon | null;
   discount: number;
   shippingCost: number;
   freeShippingOver: number;
   shippingFee: number;
   freeShippingGap: number;
   payable: number;
+  /** پیامِ سرور درباره‌ی تغییری که خودش در سبد داد (کالای حذف‌شده، تعدادِ اصلاح‌شده) */
+  notice?: string;
+  /** کدِ تخفیف دیگر صدق نمی‌کند و سرور برش داشت */
+  couponNotice?: string;
 }
 
 // ============================================================
