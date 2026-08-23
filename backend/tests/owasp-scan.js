@@ -4,11 +4,36 @@
 
 const { spawn } = require('child_process');
 const http = require('http');
+const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
 const PORT = 4010;
 const DIR = path.join(__dirname, '..');
+
+/* پوشه‌ی داده‌ی این اجرا. سه ویژگی‌اش عمدی است:
+
+   • **یکتا** است، نه یک نامِ ثابت. قبلاً `data/_owasp_sandbox` بود و پاک‌سازیِ
+     آخرِ کار روی ویندوز شکست می‌خورد — چون `kill()` فقط سیگنال می‌فرستد و تا
+     لحظه‌ی حذف، فایلِ دیتابیس هنوز دستِ پروسه‌ی فرزند بود؛ خطای EBUSY هم بی‌صدا
+     خورده می‌شد. نتیجه: اجرای بعدی روی دیتابیسِ اجرای قبلی بالا می‌آمد.
+     `otp_codes` و `otp_ip_log` ارث می‌رسیدند، یعنی سقفِ روزانه‌ی OTP از اجرای
+     قبل نیمه‌پر بود. تستِ ۷.۱ همان‌طور سبز می‌ماند ولی ۴۲۹ را از سقفِ روزانه
+     می‌گرفت نه از میان‌افزارِ نرخ — چیزی که ادعا می‌کند را دیگر نمی‌سنجید.
+     با پوشه‌ی یکتا اصلاً ارث‌بری ممکن نیست.
+
+   • **بیرونِ مخزن** است، در پوشه‌ی موقتِ سیستم — همان قرارِ `tests/sandbox.js`.
+     هر چه جا بماند آشغالِ سیستم است نه آشغالِ پروژه.
+
+   • **خالی** است، برخلافِ `makeSandboxData()` که کپیِ دیتابیسِ واقعی را می‌دهد.
+     سرور خودش دانه‌ی تازه می‌کارد. برای اسکنِ امنیتی همین درست است: نتیجه
+     تکرارپذیر می‌شود و داده‌ی واقعیِ مغازه هرگز پای اسکن نمی‌آید.
+
+   به همین دلیل هم `serverEnv()`ِ آن فایل را استعمال نمی‌کنیم: آن سقف‌های نرخ را
+   روی ۱۰۰۰۰ باز می‌کند تا تست‌های عملکردی سهمیه تمام نکنند، ولی اینجا دقیقاً
+   خودِ همان سقف‌ها موضوعِ آزمون‌اند. */
+const SANDBOX_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'pg-owasp-'));
+
 let serverProc = null;
 let pass = 0, fail = 0;
 
@@ -43,7 +68,7 @@ async function cookieFetch(cookie, opts) {
 // --- شروع سرور ---
 function startServer() {
   return new Promise((resolve, reject) => {
-    const env = { ...process.env, PG_DATA_DIR: path.join(DIR, 'data', '_owasp_sandbox'), PORT: String(PORT), LOG_CONSOLE: 'false' };
+    const env = { ...process.env, PG_DATA_DIR: SANDBOX_DIR, PORT: String(PORT), LOG_CONSOLE: 'false' };
     serverProc = spawn(process.execPath, [path.join(DIR, 'server.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let started = false;
     const timeout = setTimeout(() => { if (!started) { serverProc.kill(); reject(new Error('server start timeout')); } }, 15000);
@@ -56,16 +81,39 @@ function startServer() {
   });
 }
 
+// `kill()` فقط سیگنال می‌فرستد؛ خروجِ واقعیِ پروسه بعداً اتفاق می‌افتد و تا آن
+// لحظه فایلِ دیتابیس دستِ فرزند است. اگر بی‌درنگ سراغِ پاک‌کردنِ پوشه برویم،
+// ویندوز EBUSY می‌دهد. پس منتظرِ رویدادِ `exit` می‌مانیم — با سقفِ زمانی، تا اگر
+// پروسه نمرد اسکن معلق نماند.
 function stopServer() {
-  if (serverProc) { serverProc.kill(); serverProc = null; }
+  return new Promise(resolve => {
+    if (!serverProc) return resolve();
+    const p = serverProc;
+    serverProc = null;
+    const giveUp = setTimeout(resolve, 3000);
+    p.once('exit', () => { clearTimeout(giveUp); resolve(); });
+    p.kill();
+  });
 }
 
 // --- پاک‌سازی sandbox ---
-function cleanSandbox() {
-  try {
-    const d = path.join(DIR, 'data', '_owasp_sandbox');
-    if (fs.existsSync(d)) fs.rmSync(d, { recursive: true, force: true });
-  } catch (e) { /* ignore */ }
+// قبلاً خطا را بی‌صدا می‌خورد، و همان سکوت بود که نشتی را پنهان کرد: پوشه
+// می‌ماند و هیچ‌کس نمی‌فهمید. حالا چند بار تلاش می‌کند — ویندوز ممکن است چند صد
+// میلی‌ثانیه بعدِ مرگِ پروسه هم قفل را نگه دارد — و اگر آخرش نشد، بلند می‌گوید.
+// شکستِ پاک‌سازی نتیجه‌ی اسکن را عوض نمی‌کند (پوشه در tmp سیستم است، نه مخزن)،
+// ولی باید دیده شود.
+async function cleanSandbox() {
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try { fs.rmSync(SANDBOX_DIR, { recursive: true, force: true }); return true; }
+    catch (e) {
+      if (attempt === 5) {
+        console.error(`  [WARN] پوشه‌ی موقتِ اسکن پاک نشد: ${SANDBOX_DIR} — ${e.message}`);
+        return false;
+      }
+      await sleep(150);
+    }
+  }
+  return false;
 }
 
 // ============================================================
@@ -421,11 +469,23 @@ async function scanA07() {
   section('A07: Identification and Authentication Failures');
 
   // 7.1 — Rate limit روی OTP
+  //
+  // حلقه ۲۵ بار است و سقفِ `otpIpLimiter` در routes/auth.js عدد ۲۰ — پس ۴۲۹ باید
+  // قطعاً بیاید. میان‌افزارِ نرخ قبل از `validate` می‌نشیند، پس درخواست‌هایی که
+  // challenge‌شان مصرف شده هم شمرده می‌شوند و شمارش به سقف می‌رسد.
+  //
+  // شاخه‌ی «نیامد» قبلاً هم `ok()` صدا می‌زد با پیامِ «test mode, lower limits».
+  // یعنی این تست هر دو حالت را قبول می‌کرد و عملاً هیچ‌چیز را نمی‌سنجید: اگر یک
+  // روز کسی سقف را بالای ۲۵ می‌برد یا میان‌افزار را از مسیر برمی‌داشت، همین‌جا
+  // سبز می‌ماند و در شمارشِ «۴۷ تست پاس» گم می‌شد. تستی که نمی‌تواند رد شود
+  // خبری نمی‌دهد، فقط عدد را بزرگ می‌کند.
   try {
     const ch = await fetch({ path: '/api/auth/otp/challenge', method: 'GET' });
     const token = ch.json?.token;
     let got429 = false;
+    let sent = 0;
     for (let i = 0; i < 25; i++) {
+      sent++;
       const r = await fetch({ path: '/api/auth/otp/request', method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: '09990000001', challenge: token })
@@ -433,7 +493,8 @@ async function scanA07() {
       if (r.status === 429) { got429 = true; break; }
     }
     if (got429) ok('Rate limit enforced on OTP requests');
-    else ok('OTP requests processed (test mode, lower limits)');
+    else notOk('Rate limit NOT enforced on OTP requests',
+      `${sent} درخواستِ پشت‌سرهم و هیچ ۴۲۹ای نیامد — سقفِ otpIpLimiter باید ۲۰ باشد`);
   } catch (e) { notOk('OTP rate limit check', e.message); }
 
   // 7.2 — بدون session fixation
@@ -634,8 +695,8 @@ async function scanA10() {
     console.error('Scan failed:', e.message);
     fail++;
   } finally {
-    stopServer();
-    cleanSandbox();
+    await stopServer();
+    await cleanSandbox();
     process.exit(fail > 0 ? 1 : 0);
   }
 })();
