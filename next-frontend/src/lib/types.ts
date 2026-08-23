@@ -223,3 +223,130 @@ export interface TrackOrderResponse {
 export interface OrdersResponse {
   orders: Order[];
 }
+
+// ============================================================
+// CRM
+// ============================================================
+
+export interface CrmSummary {
+  totalCustomers: number;
+  tagged: number;
+  openTasks: number;
+  dueTasks: number;
+  totalNotes: number;
+}
+
+export interface CrmTag {
+  id: number;
+  name: string;
+  color: string;
+}
+
+export interface CrmCustomer {
+  id: number;
+  phone: string;
+  fullName: string;
+  isAdmin: boolean;
+  isStaff: boolean;
+  createdAt: string;
+  paidOrders: number;
+  totalSpent: number;
+  lastOrderAt: string | null;
+  tags: string[];
+}
+
+export interface CrmCustomerList {
+  customers: CrmCustomer[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CrmScore {
+  recency: number;
+  frequency: number;
+  monetary: number;
+  health: number;
+  segment: string;
+  updatedAt: string;
+}
+
+export interface CrmNote {
+  id: number;
+  body: string;
+  byName: string;
+  createdAt: string;
+}
+
+export interface CrmTask {
+  id: number;
+  title: string;
+  done: boolean;
+  dueAt: string | null;
+  byName: string;
+  createdAt: string;
+}
+
+export interface CrmActivity {
+  id: number;
+  action: string;
+  detail: string;
+  meta: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface CrmCustomerDetail {
+  id: number;
+  phone: string;
+  fullName: string;
+  isAdmin: boolean;
+  isStaff: boolean;
+  createdAt: string;
+  orders: Order[];
+  tags: CrmTag[];
+  notes: CrmNote[];
+  tasks: CrmTask[];
+  score: CrmScore;
+  activities: CrmActivity[];
+}
+
+export interface CrmAdvancedSummary {
+  totalCustomers: number;
+  activeBuyers: number;
+  vipCount: number;
+  atRiskCount: number;
+  dormantCount: number;
+  avgHealth: number;
+  totalRevenue: number;
+  avgOrderValue: number;
+  retentionRate: number;
+}
+
+export interface CrmSegmentStat {
+  segment: string;
+  label: string;
+  count: number;
+  pct: number;
+  avgSpent: number;
+  totalSpent: number;
+}
+
+export interface CrmRevenueMonth {
+  month: string;
+  label: string;
+  revenue: number;
+  orders: number;
+  customers: number;
+  avgOrder: number;
+}
+
+export interface CrmTopCustomer {
+  id: number;
+  phone: string;
+  fullName: string;
+  orders: number;
+  spent: number;
+  lastOrder: string;
+  health: number;
+  segment: string;
+}

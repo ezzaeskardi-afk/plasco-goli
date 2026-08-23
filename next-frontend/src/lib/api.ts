@@ -74,6 +74,14 @@ import type {
   TrackOrderResponse,
   OrdersResponse,
   Order,
+  CrmSummary,
+  CrmTag,
+  CrmCustomerList,
+  CrmCustomerDetail,
+  CrmAdvancedSummary,
+  CrmSegmentStat,
+  CrmRevenueMonth,
+  CrmTopCustomer,
 } from "./types";
 
 // ============================================================
@@ -304,4 +312,148 @@ export async function cancelOrder(
     method: "POST",
     body: JSON.stringify({ reason }),
   });
+}
+
+// ============================================================
+// CRM (admin)
+// ============================================================
+
+export async function crmGetSummary(): Promise<{
+  summary: CrmSummary;
+  tags: CrmTag[];
+}> {
+  return fetcher("/api/admin/crm/summary");
+}
+
+export async function crmGetCustomers(params?: {
+  q?: string;
+  tag?: string;
+  filter?: string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<CrmCustomerList> {
+  const sp = new URLSearchParams();
+  if (params?.q) sp.set("q", params.q);
+  if (params?.tag) sp.set("tag", params.tag);
+  if (params?.filter) sp.set("filter", params.filter);
+  if (params?.sort) sp.set("sort", params.sort || "spent");
+  if (params?.limit) sp.set("limit", String(params.limit));
+  if (params?.offset) sp.set("offset", String(params.offset));
+  const qs = sp.toString();
+  return fetcher(`/api/admin/crm/customers${qs ? `?${qs}` : ""}`);
+}
+
+export async function crmGetCustomer(
+  id: number,
+): Promise<{ customer: CrmCustomerDetail }> {
+  return fetcher(`/api/admin/crm/customers/${id}`);
+}
+
+export async function crmAddNote(
+  customerId: number,
+  body: string,
+): Promise<{ note: { id: number; body: string; byName: string; createdAt: string } }> {
+  return fetcher(`/api/admin/crm/customers/${customerId}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export async function crmDeleteNote(
+  id: number,
+): Promise<{ ok: boolean }> {
+  return fetcher(`/api/admin/crm/notes/${id}`, { method: "DELETE" });
+}
+
+export async function crmAddTask(
+  customerId: number,
+  title: string,
+  dueAt?: string,
+): Promise<{ task: { id: number; title: string; done: boolean; dueAt: string | null } }> {
+  return fetcher(`/api/admin/crm/customers/${customerId}/tasks`, {
+    method: "POST",
+    body: JSON.stringify({ title, dueAt: dueAt || null }),
+  });
+}
+
+export async function crmToggleTask(
+  id: number,
+  done: boolean,
+): Promise<{ task: { id: number; done: boolean } }> {
+  return fetcher(`/api/admin/crm/tasks/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ done }),
+  });
+}
+
+export async function crmDeleteTask(
+  id: number,
+): Promise<{ ok: boolean }> {
+  return fetcher(`/api/admin/crm/tasks/${id}`, { method: "DELETE" });
+}
+
+export async function crmCreateTag(
+  name: string,
+  color?: string,
+): Promise<{ tag: CrmTag }> {
+  return fetcher("/api/admin/crm/tags", {
+    method: "POST",
+    body: JSON.stringify({ name, color: color || "#25D6B0" }),
+  });
+}
+
+export async function crmDeleteTag(
+  id: number,
+): Promise<{ ok: boolean }> {
+  return fetcher(`/api/admin/crm/tags/${id}`, { method: "DELETE" });
+}
+
+export async function crmSetUserTags(
+  customerId: number,
+  tagIds: number[],
+): Promise<{ ok: boolean }> {
+  return fetcher(`/api/admin/crm/customers/${customerId}/tags`, {
+    method: "PUT",
+    body: JSON.stringify({ tagIds }),
+  });
+}
+
+export async function crmGetAdvanced(): Promise<{
+  summary: CrmAdvancedSummary;
+}> {
+  return fetcher("/api/admin/crm/advanced");
+}
+
+export async function crmGetSegments(): Promise<{
+  segments: CrmSegmentStat[];
+}> {
+  return fetcher("/api/admin/crm/segments");
+}
+
+export async function crmGetRevenue(): Promise<{ months: CrmRevenueMonth[] }> {
+  return fetcher("/api/admin/crm/revenue");
+}
+
+export async function crmGetTopCustomers(
+  limit?: number,
+): Promise<{ customers: CrmTopCustomer[] }> {
+  return fetcher(
+    `/api/admin/crm/top${limit ? `?limit=${limit}` : ""}`,
+  );
+}
+
+export async function crmRecalcCustomer(
+  id: number,
+): Promise<{ score: CrmAdvancedSummary extends object ? unknown : unknown }> {
+  return fetcher(`/api/admin/crm/customers/${id}/recalc`, {
+    method: "POST",
+  });
+}
+
+export async function crmRecalcAll(): Promise<{
+  ok: boolean;
+  segments: Record<string, number>;
+}> {
+  return fetcher("/api/admin/crm/recalc-all", { method: "POST" });
 }
