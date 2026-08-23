@@ -181,9 +181,10 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const params = await searchParams;
 
   const products: Product[] = productsRes?.products || [];
-  const page = productsRes?.page || 1;
-  const totalPages = productsRes?.totalPages || 1;
-  const total = productsRes?.total || 0;
+  const meta = productsRes?.meta;
+  const page = meta?.page || 1;
+  const totalPages = meta?.pages || 1;
+  const total = meta?.total || 0;
   const categories = facets?.categories || [];
 
   return (

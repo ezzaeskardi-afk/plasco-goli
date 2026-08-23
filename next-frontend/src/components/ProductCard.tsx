@@ -97,14 +97,14 @@ export function ProductCard({ product }: { product: Product }) {
 
         {/* امتیاز */}
         <div className="flex items-center gap-1 min-h-[1.6em]">
-          {product.rating != null && product.rating > 0 && (
+          {product.rating != null && product.rating.count > 0 && (
             <>
               <span className="text-xs text-gold">
-                {"★".repeat(Math.round(product.rating))}
-                {"☆".repeat(5 - Math.round(product.rating))}
+                {"★".repeat(Math.round(product.rating.avg))}
+                {"☆".repeat(5 - Math.round(product.rating.avg))}
               </span>
               <span className="text-[10px] text-ink-dim">
-                ({toFa(product.reviewCount)})
+                ({toFa(product.rating.count)})
               </span>
             </>
           )}

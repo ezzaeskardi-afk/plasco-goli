@@ -1,56 +1,81 @@
 // ============================================================
-// تایپ‌های API — منطبق با پاسخ‌های Express
+// تایپ‌های API — دقیقاً منطبق با پاسخ‌های واقعی Express
 // ============================================================
 
 export interface Product {
   id: number;
   title: string;
+  description?: string;
   price: number;
   oldPrice: number;
   discountPercent: number;
+  badge: string;
   stock: number;
-  categoryId: number;
-  category?: string;
-  image: string | null;
+  category: string; // نام دسته (متن، نه id)
   icon: string;
-  rating: number | null;
-  reviewCount: number;
-  isDraft?: boolean;
-  createdAt?: string;
+  image: string | null; // مسیر عکس مثل "/picture/products/..."
+  images: string[];
+  specs: { k: string; v: string }[];
+  rating: { count: number; avg: number } | null;
+  wholesale?: unknown;
+}
+
+export interface ProductListMeta {
+  total: number;
+  page: number;
+  pages: number;
+  limit: number;
+  hasMore: boolean;
+  fuzzy: boolean;
+  suggestion: string;
 }
 
 export interface ProductListResponse {
   products: Product[];
-  page: number;
-  pageSize: number;
-  total: number;
-  totalPages: number;
+  meta: ProductListMeta;
 }
 
-export interface ShopInfo {
-  siteName: string;
-  siteDescription: string;
-  shippingFee: number;
-  freeShippingThreshold: number;
-  phone: string;
-  address: string;
-  isClosed: boolean;
-  closedMessage: string;
-  bannerText: string;
-  bannerActive: boolean;
+/** پاسخ API /products/:id */
+export interface ProductDetailResponse {
+  product: Product;
 }
 
-export interface Category {
-  id: number;
-  name: string;
-  slug: string;
-  count: number;
+export interface FacetCategory {
+  category: string; // نام دسته
+  n: number; // تعداد
+  icon: string;
 }
 
 export interface FacetResponse {
   minPrice: number;
   maxPrice: number;
-  categories: Category[];
+  categories: FacetCategory[];
+}
+
+/** پاسخ API /shop/categories */
+export interface CategoriesResponse {
+  categories: ShopCategory[];
+}
+
+export interface ShopCategory {
+  id: number;
+  name: string;
+  icon: string;
+  sort: number;
+  count: number;
+}
+
+/** پاسخ API /shop/info */
+export interface ShopInfo {
+  shopName: string;
+  shopPhone: string;
+  announcement: string;
+  shopOpen: boolean;
+  promoText: string;
+  promoCode: string;
+  lowStockThreshold: number;
+  freeShippingOver: number;
+  shippingCost: number;
 }
 
 export interface User {
@@ -60,6 +85,10 @@ export interface User {
   isAdmin: boolean;
   isStaff: boolean;
   hasPassword: boolean;
+}
+
+export interface AuthMeResponse {
+  user: User | null;
 }
 
 export interface CartItem {

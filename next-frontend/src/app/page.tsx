@@ -1,6 +1,6 @@
 import { getProducts, getCategories, getShopInfo } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
-import type { Product } from "@/lib/types";
+import type { Product, ShopCategory } from "@/lib/types";
 
 // ============================================================
 // SSR — داده‌ها موقع رندر سرور گرفته می‌شوند
@@ -90,12 +90,12 @@ function HeroSection({ banner }: { banner?: string | null }) {
   );
 }
 
-function CategoryBar({ categories }: { categories: { id: number; name: string; slug: string; count: number }[] }) {
+function CategoryBar({ categories }: { categories: ShopCategory[] }) {
   if (!categories.length) return null;
 
   return (
     <section className="mx-auto max-w-[1180px] px-6 pb-8">
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+      <div className="flex gap-2 overflow-x-auto pb-2">
         <a
           href="/products"
           className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition-colors"
@@ -109,7 +109,7 @@ function CategoryBar({ categories }: { categories: { id: number; name: string; s
         {categories.slice(0, 8).map((cat) => (
           <a
             key={cat.id}
-            href={`/products?category=${cat.slug}`}
+            href={`/products?category=${encodeURIComponent(cat.name)}`}
             className="shrink-0 rounded-full px-4 py-2 text-xs font-medium transition-colors"
             style={{
               background: "var(--color-surface)",
@@ -174,7 +174,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <HeroSection banner={shopInfo?.bannerActive ? shopInfo?.bannerText : null} />
+      <HeroSection banner={shopInfo?.announcement || null} />
       <CategoryBar categories={categories} />
       <BestSellersSection products={products} />
       <TrustBadges />

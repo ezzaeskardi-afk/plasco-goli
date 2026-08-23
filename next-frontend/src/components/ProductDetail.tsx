@@ -67,14 +67,14 @@ export function ProductDetail({ product }: { product: Product }) {
         </h1>
 
         {/* امتیاز */}
-        {product.rating != null && product.rating > 0 && (
+        {product.rating != null && product.rating.count > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-base text-gold">
-              {"★".repeat(Math.round(product.rating))}
-              {"☆".repeat(5 - Math.round(product.rating))}
+              {"★".repeat(Math.round(product.rating.avg))}
+              {"☆".repeat(5 - Math.round(product.rating.avg))}
             </span>
             <span className="text-sm text-ink-soft">
-              {product.rating.toFixed(1)} ({toFa(product.reviewCount)} نظر)
+              {product.rating.avg.toFixed(1)} ({toFa(product.rating.count)} نظر)
             </span>
           </div>
         )}

@@ -1,12 +1,13 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import type { FacetCategory } from "@/lib/types";
 
 interface FilterBarProps {
   currentSort?: string;
   currentCategory?: string;
   currentInStockOnly?: boolean;
-  categories: { id: number; name: string; slug: string }[];
+  categories: FacetCategory[];
   minPrice?: number;
   maxPrice?: number;
 }
@@ -79,12 +80,12 @@ export function FilterBar({
       </button>
 
       {categories.slice(0, 6).map((cat) => {
-        const isActive = currentCategory === cat.slug;
+        const isActive = currentCategory === cat.category;
         return (
           <button
-            key={cat.id}
+            key={cat.category}
             onClick={() =>
-              updateParam("category", isActive ? "" : cat.slug)
+              updateParam("category", isActive ? "" : cat.category)
             }
             className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
             style={{
@@ -97,7 +98,7 @@ export function FilterBar({
               border: "1px solid var(--color-line)",
             }}
           >
-            {cat.name}
+            {cat.category}
           </button>
         );
       })}
