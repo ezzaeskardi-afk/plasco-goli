@@ -79,7 +79,11 @@
   --radius-md: 18px;
   --radius-sm: 12px;
 
-  /* سایه */
+  /* سایه — دو مقدارِ اول از style.css نسخهٔ اصلی آمده‌اند. در مهاجرت جا
+     افتاده بودند و LoginForm به var(--shadow) ارجاع می‌داد که تعریف نشده بود،
+     یعنی کارت ورود بی‌سایه رندر می‌شد. */
+  --shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.75);
+  --shadow-sm: 0 14px 30px -18px rgba(0, 0, 0, 0.6);
   --shadow-glow-teal: 0 18px 44px -14px rgba(37, 214, 176, 0.45);
   --shadow-glow-gold: 0 18px 44px -16px rgba(245, 185, 90, 0.4);
 }

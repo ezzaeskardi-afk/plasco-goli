@@ -1,18 +1,32 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { apiBase } from "./site";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+// هشدار: این اکشن‌ها فعلاً از هیچ کامپوننتی صدا زده نمی‌شوند. کامپوننت‌های سبد و
+// پرداخت مسیرِ کلاینتیِ `lib/api.ts` را می‌روند. اینجا نگه داشته شده‌اند تا اگر
+// سبد به Server Action منتقل شد، آماده باشد.
 
 async function serverFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const url = `${API_BASE}${path}`;
+  // نشستِ Express روی کوکیِ polasco.sid است و fetchِ سمتِ سرور هیچ کوکی‌ای را
+  // خودکار حمل نمی‌کند. بدونِ این خط، هر اکشن یک نشستِ ناشناسِ تازه می‌ساخت و
+  // «افزودن به سبد» به سبدی می‌رفت که کاربر هرگز نمی‌بیندش.
+  const jar = await cookies();
+  const cookieHeader = jar
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
+
+  const url = `${apiBase()}${path}`;
   const res = await fetch(url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(cookieHeader ? { cookie: cookieHeader } : {}),
       ...options.headers,
     },
   });
@@ -23,14 +37,6 @@ async function serverFetch<T>(
   }
 
   return res.json();
-}
-
-// این helper برای اینکه بتونیم cookie session رو از کلاینت بگیریم
-// در Server Action، cookieها خودکار میان
-function getCookieHeader(): string {
-  // Server Actions توکن session رو از cookie می‌گیرن
-  // اینجا باید از cookies() از next/headers استفاده کنیم
-  return "";
 }
 
 // ============================================================

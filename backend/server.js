@@ -322,6 +322,24 @@ if (IS_PRODUCTION && !/^https:\/\/[^\s/]+$/.test(SITE_URL)) {
 const SITE_HOST = (() => {
   try { return SITE_URL ? new URL(SITE_URL).host : ''; } catch (e) { return ''; }
 })();
+
+// میزبان‌های اضافیِ مجاز برای «نوشتن» — لیستِ جدا با کاما در CSRF_EXTRA_ORIGINS.
+// چرا لازم است: وقتی frontendِ Next روی یک پورت/دامنه‌ی دیگر نشسته و از
+// rewrites به این سرور پروکسی می‌کند، مرورگر هدر Origin را با مبدأِ *Next*
+// می‌فرستد و پروکسی همان را عبور می‌دهد. پس سدِ CSRF زیر، هدر Origin=:3001 را
+// در برابرِ Host=:3000 غریبه می‌بیند و هر خرید و ورودی را ۴۰۳ می‌کند.
+// پیش‌فرض خالی است، یعنی رفتارِ قبلی دست‌نخورده می‌ماند و این فقط با تنظیمِ
+// صریحِ اپراتور باز می‌شود. در production که Next و Express پشتِ یک دامنه‌اند
+// نیازی به آن نیست.
+const CSRF_EXTRA_HOSTS = String(process.env.CSRF_EXTRA_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
+  .map(s => {
+    try { return new URL(s.includes('://') ? s : `http://${s}`).host; }
+    catch (e) { return ''; }
+  })
+  .filter(Boolean);
 function siteBase(req) {
   if (/^https?:\/\/[^\s/]+$/.test(SITE_URL)) return SITE_URL;
   return `${req.protocol}://${req.get('host')}`;
@@ -411,7 +429,7 @@ app.use('/api', (req, res, next) => {
   // جلو باشد (TRUST_PROXY روشن) این هدر را خودِ پروکسی بازنویسی می‌کند و
   // قابل‌اعتماد است. (بعضی پیکربندی‌های nginx هدر Host را به آدرس داخلی عوض
   // می‌کنند و بدون این، درخواست‌های نوشتنِ کاربران واقعی رد می‌شد.)
-  const allowed = [req.get('host'), SITE_HOST];
+  const allowed = [req.get('host'), SITE_HOST, ...CSRF_EXTRA_HOSTS];
   if (TRUST_PROXY) allowed.push(req.headers['x-forwarded-host']);
   const ok = new Set(allowed.filter(Boolean));
   if (!ok.has(host)) {

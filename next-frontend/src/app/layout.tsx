@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Providers } from "@/components/Providers";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { SITE_URL, OG_IMAGE } from "@/lib/site";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -11,30 +12,40 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  alternates: {
+    canonical: "./",
+  },
   title: {
     default: "پلاسکو گلی — فروشگاه محصولات پلاستیکی",
     template: "%s | پلاسکو گلی",
   },
   description:
     "فروشگاه اینترنتی پلاسکو گلی — خرید محصولات پلاستیکی با کیفیت، ارسال سریع به سراسر کشور، ضمانت اصل بودن کالا و پرداخت امن.",
-  metadataBase: new URL("https://plascogoli.ir"),
   openGraph: {
     type: "website",
     locale: "fa_IR",
     siteName: "پلاسکو گلی",
     title: "پلاسکو گلی — فروشگاه محصولات پلاستیکی",
     description: "خرید محصولات پلاستیکی با کیفیت — ارسال به سراسر کشور",
-    images: [{ url: "/assets/og-image.png", width: 1200, height: 630 }],
+    images: [{ url: OG_IMAGE }],
   },
   twitter: {
-    card: "summary_large_image",
+    // لوگو مربع است، پس summary درست‌تر از summary_large_image است؛
+    // با کارتِ بزرگ، عکسِ مربع بریده و بدشکل نمایش داده می‌شود.
+    card: "summary",
     title: "پلاسکو گلی",
     description: "فروشگاه محصولات پلاستیکی",
-    images: ["/assets/og-image.png"],
+    images: [OG_IMAGE],
   },
   robots: { index: true, follow: true },
-  icons: { icon: "/assets/favicon.png", apple: "/assets/apple-touch-icon.png" },
-  manifest: "/manifest.json",
+  // فایل‌های واقعی در frontend/assets. قبلاً favicon.png نوشته شده بود که
+  // وجود ندارد (۴۰۴) — نسخه‌ی اصلی favicon.svg دارد.
+  icons: {
+    icon: [{ url: "/assets/favicon.svg", type: "image/svg+xml" }],
+    apple: "/assets/apple-touch-icon.png",
+  },
+  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({

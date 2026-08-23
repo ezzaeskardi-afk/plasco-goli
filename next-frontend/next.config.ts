@@ -8,8 +8,11 @@ const nextConfig: NextConfig = {
       { source: "/picture/:path*", destination: "http://localhost:3000/picture/:path*" },
       { source: "/assets/:path*", destination: "http://localhost:3000/assets/:path*" },
       { source: "/sw.js", destination: "http://localhost:3000/sw.js" },
-      { source: "/manifest.json", destination: "http://localhost:3000/manifest.json" },
-
+      // نامِ واقعیِ فایل manifest.webmanifest است؛ قبلاً manifest.json نوشته
+      // شده بود که روی Express ۴۰۴ می‌داد. هر دو نام پروکسی می‌شوند تا اگر
+      // جایی لینکِ قدیمی مانده باشد هم کار کند.
+      { source: "/manifest.webmanifest", destination: "http://localhost:3000/manifest.webmanifest" },
+      { source: "/manifest.json", destination: "http://localhost:3000/manifest.webmanifest" },
     ];
   },
 

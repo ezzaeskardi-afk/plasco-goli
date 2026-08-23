@@ -2,7 +2,7 @@
 // کمک‌کنندهٔ API — SSR (server) و CSR (client)
 // ============================================================
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+import { apiBase } from "./site";
 
 interface FetchOptions extends RequestInit {
   timeout?: number;
@@ -27,9 +27,12 @@ async function fetcher<T>(
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const url = `${API_BASE}${path}`;
+    const url = `${apiBase()}${path}`;
     const res = await fetch(url, {
       ...init,
+      // نشستِ Express روی کوکیِ polasco.sid است. بدونِ این، سبد و ورود و
+      // سفارش‌ها هر بار کاربرِ ناشناس می‌بینند.
+      credentials: "include",
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
@@ -82,6 +85,8 @@ import type {
   CrmSegmentStat,
   CrmRevenueMonth,
   CrmTopCustomer,
+  WholesaleRequestInput,
+  WholesaleRequestResponse,
 } from "./types";
 
 // ============================================================
@@ -315,6 +320,21 @@ export async function cancelOrder(
 }
 
 // ============================================================
+// خرید عمده (B2B)
+// ============================================================
+
+// سقفِ سمتِ سرور ۵ درخواست در ساعت است؛ در آن حالت پیامِ ۴۲۹ همان متنِ
+// فارسیِ خودِ Express است و مستقیم به کاربر نشان داده می‌شود.
+export async function requestWholesale(
+  data: WholesaleRequestInput,
+): Promise<WholesaleRequestResponse> {
+  return fetcher<WholesaleRequestResponse>("/api/wholesale/request", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// ============================================================
 // CRM (admin)
 // ============================================================
 
@@ -337,7 +357,7 @@ export async function crmGetCustomers(params?: {
   if (params?.q) sp.set("q", params.q);
   if (params?.tag) sp.set("tag", params.tag);
   if (params?.filter) sp.set("filter", params.filter);
-  if (params?.sort) sp.set("sort", params.sort || "spent");
+  if (params?.sort) sp.set("sort", params.sort);
   if (params?.limit) sp.set("limit", String(params.limit));
   if (params?.offset) sp.set("offset", String(params.offset));
   const qs = sp.toString();
@@ -445,7 +465,7 @@ export async function crmGetTopCustomers(
 
 export async function crmRecalcCustomer(
   id: number,
-): Promise<{ score: CrmAdvancedSummary extends object ? unknown : unknown }> {
+): Promise<{ score: unknown }> {
   return fetcher(`/api/admin/crm/customers/${id}/recalc`, {
     method: "POST",
   });

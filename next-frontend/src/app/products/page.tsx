@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getProducts, getFacets } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
 import { FilterBar } from "@/components/FilterBar";
+import { CollectionPageJsonLd } from "@/components/JsonLd";
 import type { Product } from "@/lib/types";
 
 // ============================================================
@@ -189,72 +190,78 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const categories = facets?.categories || [];
 
   return (
-    <div className="mx-auto max-w-[1180px] px-6 py-8">
-      {/* breadcrumb */}
-      <div className="flex items-center gap-2 text-xs text-ink-dim mb-6">
-        <Link href="/" className="hover:text-teal transition-colors">
-          خانه
-        </Link>
-        <span>/</span>
-        <span className="text-ink-soft">محصولات</span>
-      </div>
-
-      {/* عنوان + جستجو */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-extrabold text-ink">محصولات</h1>
-          {total > 0 && (
-            <p className="text-xs text-ink-dim mt-1">
-              {toFa(total)} محصول پیدا شد
-            </p>
-          )}
-        </div>
-        <div className="w-full md:w-72">
-          <SearchBar defaultValue={params.q} />
-        </div>
-      </div>
-
-      {/* فیلترها — کلاینت کامپوننت با Suspense */}
-      <div className="mb-6">
-        <Suspense fallback={<FilterBarFallback />}>
-          <FilterBar
-            currentSort={params.sort}
-            currentCategory={params.category}
-            currentInStockOnly={params.inStockOnly === "1"}
-            categories={categories}
-            minPrice={facets?.minPrice}
-            maxPrice={facets?.maxPrice}
-          />
-        </Suspense>
-      </div>
-
-      {/* گرید محصولات */}
-      {products.length > 0 ? (
-        <ProductCardGrid products={products} />
-      ) : (
-        <div className="text-center py-16">
-          <p className="text-ink-soft text-sm mb-3">
-            محصولی با این مشخصات پیدا نشد.
-          </p>
-          <Link
-            href="/products"
-            className="inline-block rounded-full px-4 py-2 text-sm font-medium transition-colors"
-            style={{
-              background: "var(--color-teal-tint)",
-              color: "var(--color-teal)",
-            }}
-          >
-            پاک کردن فیلترها
-          </Link>
-        </div>
-      )}
-
-      {/* صفحه‌بندی */}
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        searchParams={params as Record<string, string>}
+    <>
+      <CollectionPageJsonLd
+        name="محصولات پلاسکو گلی"
+        description="فهرست کامل محصولات پلاستیکی — لوازم خانه، آشپزخانه، نظافت و بیشتر"
       />
-    </div>
+      <div className="mx-auto max-w-[1180px] px-6 py-8">
+        {/* breadcrumb */}
+        <div className="flex items-center gap-2 text-xs text-ink-dim mb-6">
+          <Link href="/" className="hover:text-teal transition-colors">
+            خانه
+          </Link>
+          <span>/</span>
+          <span className="text-ink-soft">محصولات</span>
+        </div>
+
+        {/* عنوان + جستجو */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-extrabold text-ink">محصولات</h1>
+            {total > 0 && (
+              <p className="text-xs text-ink-dim mt-1">
+                {toFa(total)} محصول پیدا شد
+              </p>
+            )}
+          </div>
+          <div className="w-full md:w-72">
+            <SearchBar defaultValue={params.q} />
+          </div>
+        </div>
+
+        {/* فیلترها — کلاینت کامپوننت با Suspense */}
+        <div className="mb-6">
+          <Suspense fallback={<FilterBarFallback />}>
+            <FilterBar
+              currentSort={params.sort}
+              currentCategory={params.category}
+              currentInStockOnly={params.inStockOnly === "1"}
+              categories={categories}
+              minPrice={facets?.minPrice}
+              maxPrice={facets?.maxPrice}
+            />
+          </Suspense>
+        </div>
+
+        {/* گرید محصولات */}
+        {products.length > 0 ? (
+          <ProductCardGrid products={products} />
+        ) : (
+          <div className="text-center py-16">
+            <p className="text-ink-soft text-sm mb-3">
+              محصولی با این مشخصات پیدا نشد.
+            </p>
+            <Link
+              href="/products"
+              className="inline-block rounded-full px-4 py-2 text-sm font-medium transition-colors"
+              style={{
+                background: "var(--color-teal-tint)",
+                color: "var(--color-teal)",
+              }}
+            >
+              پاک کردن فیلترها
+            </Link>
+          </div>
+        )}
+
+        {/* صفحه‌بندی */}
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          searchParams={params as Record<string, string>}
+        />
+      </div>
+    </>
   );
 }

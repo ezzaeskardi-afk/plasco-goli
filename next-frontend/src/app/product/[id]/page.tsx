@@ -2,26 +2,31 @@ import Link from "next/link";
 import { getProduct, getRelatedProducts, getProducts } from "@/lib/api";
 import { ProductDetail } from "@/components/ProductDetail";
 import { ProductCardGrid } from "@/components/ProductCard";
+import { ProductJsonLd, BreadcrumbJsonLd } from "@/components/JsonLd";
 import type { Metadata } from "next";
 
 // ISR: هر ۶۰ ثانیه چک می‌کنه، اما تا وقتی تغییری نکرده از کش استفاده می‌کنه
 export const revalidate = 60;
 
-// pre-render ۱۰۰ محصول در build time
+// pre-render همه‌ی محصولات در زمانِ build
 export async function generateStaticParams() {
   const ids: { id: string }[] = [];
   try {
-    // ۳ صفحه × ۱۲ محصول = ۳۶ محصول. برای ۱۰۰ محصول صفحه‌بندی می‌کنیم
-    for (let page = 1; page <= 4; page++) {
+    // قبلاً حلقه روی «۴ صفحه» ثابت بود و کامنتش «۱۰۰ محصول» می‌گفت — با
+    // limit=۱۲ یعنی سقفِ واقعی ۴۸ بود. الان تعدادِ صفحه‌ها را از خودِ API
+    // می‌پرسد؛ سقفِ ۵۰ صفحه فقط ترمزِ ایمنی در برابرِ باگِ صفحه‌بندی است.
+    for (let page = 1; page <= 50; page++) {
       const data = await getProducts({ page });
       if (!data?.products?.length) break;
       for (const p of data.products) {
         ids.push({ id: String(p.id) });
       }
-      if (ids.length >= 100 || !data.meta?.hasMore) break;
+      if (!data.meta?.hasMore) break;
     }
   } catch {
-    // اگر API در دسترس نبود، حداقل idهای متوالی تولید کن
+    // اگر API بالا نبود، لیست خالی برمی‌گردد: هیچ صفحه‌ی محصولی prerender
+    // نمی‌شود و همه on-demand ساخته می‌شوند. بیلد عمداً نمی‌شکند، ولی یعنی
+    // build با بک‌اندِ خاموش خروجیِ بی‌محصول می‌دهد.
   }
   return ids;
 }
@@ -51,7 +56,7 @@ export async function generateMetadata({
       description: `خرید ${product.title} از فروشگاه پلاسکو گلی`,
       images: product.image ? [{ url: product.image, width: 600, height: 600 }] : [],
     },
-    robots: { index: false }, // محصولات با noindex (طبق robots فعلی)
+    robots: { index: true, follow: true },
   };
 }
 
@@ -99,34 +104,44 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const related = await getRelatedProducts(numId).catch(() => []);
 
   return (
-    <div className="mx-auto max-w-[1180px] px-6 py-8">
-      {/* breadcrumb */}
-      <div className="flex items-center gap-2 text-xs text-ink-dim mb-6">
-        <Link href="/" className="hover:text-teal transition-colors">
-          خانه
-        </Link>
-        <span>/</span>
-        <Link href="/products" className="hover:text-teal transition-colors">
-          محصولات
-        </Link>
-        <span>/</span>
-        <span className="text-ink-soft truncate max-w-[200px]">
-          {product.title}
-        </span>
+    <>
+      <ProductJsonLd product={product} />
+      <BreadcrumbJsonLd
+        items={[
+          { name: "خانه", url: "/" },
+          { name: "محصولات", url: "/products" },
+          { name: product.title, url: `/product/${product.id}` },
+        ]}
+      />
+      <div className="mx-auto max-w-[1180px] px-6 py-8">
+        {/* breadcrumb */}
+        <div className="flex items-center gap-2 text-xs text-ink-dim mb-6">
+          <Link href="/" className="hover:text-teal transition-colors">
+            خانه
+          </Link>
+          <span>/</span>
+          <Link href="/products" className="hover:text-teal transition-colors">
+            محصولات
+          </Link>
+          <span>/</span>
+          <span className="text-ink-soft truncate max-w-[200px]">
+            {product.title}
+          </span>
+        </div>
+
+        {/* جزئیات محصول */}
+        <ProductDetail product={product} />
+
+        {/* محصولات مرتبط */}
+        {related.length > 0 && (
+          <section className="mt-16">
+            <h2 className="text-xl font-extrabold text-ink mb-6">
+              محصولات مرتبط
+            </h2>
+            <ProductCardGrid products={related.slice(0, 5)} />
+          </section>
+        )}
       </div>
-
-      {/* جزئیات محصول */}
-      <ProductDetail product={product} />
-
-      {/* محصولات مرتبط */}
-      {related.length > 0 && (
-        <section className="mt-16">
-          <h2 className="text-xl font-extrabold text-ink mb-6">
-            محصولات مرتبط
-          </h2>
-          <ProductCardGrid products={related.slice(0, 5)} />
-        </section>
-      )}
-    </div>
+    </>
   );
 }

@@ -350,3 +350,22 @@ export interface CrmTopCustomer {
   health: number;
   segment: string;
 }
+
+// ============================================================
+// خرید عمده (B2B) — POST /api/wholesale/request
+// ============================================================
+
+export interface WholesaleRequestInput {
+  name: string;
+  phone: string;
+  productId?: number | null;
+  productTitle?: string;
+  quantity?: number;
+  note?: string;
+}
+
+export interface WholesaleRequestResponse {
+  ok: boolean;
+  id: number;
+  message: string;
+}

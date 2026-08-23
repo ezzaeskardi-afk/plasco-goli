@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { getProducts, getCategories, getShopInfo } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
+import { StoreJsonLd, WebSiteJsonLd, FAQPageJsonLd, ItemListJsonLd } from "@/components/JsonLd";
 import type { Product, ShopCategory } from "@/lib/types";
+
+// ISR — بدونِ این خط صفحه‌ی اصلی فقط یک بار موقعِ build ساخته می‌شد و برای
+// همیشه یخ می‌زد: محصولِ جدید، تغییرِ قیمت، بنرِ جشنواره و دسته‌بندیِ تازه
+// هیچ‌وقت دیده نمی‌شد تا نوبتِ build بعدی. برای یک فروشگاه یعنی صفحه‌ی اولِ
+// اشتباه. پنج دقیقه معامله‌ی معقولی است بین تازگی و بارِ سرور.
+export const revalidate = 300;
 
 // ============================================================
 // SSR — داده‌ها موقع رندر سرور گرفته می‌شوند
@@ -175,6 +182,10 @@ export default async function HomePage() {
 
   return (
     <>
+      <StoreJsonLd />
+      <WebSiteJsonLd />
+      <FAQPageJsonLd />
+      <ItemListJsonLd products={products} />
       <HeroSection banner={shopInfo?.announcement || null} />
       <CategoryBar categories={categories} />
       <BestSellersSection products={products} />
