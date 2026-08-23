@@ -8,6 +8,7 @@ import {
   getAddresses,
   createAddress,
   createOrder,
+  newIdempotencyKey,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import type { CartResponse, Address, User } from "@/lib/types";
@@ -94,20 +95,24 @@ export function CheckoutContent() {
     setPlacing(true);
     setError("");
     try {
-      const idempotencyKey = `ck-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       const result = await createOrder({
         addressId: selectedAddrId,
-        idempotencyKey,
+        idempotencyKey: newIdempotencyKey(),
       });
 
+      // بک‌اند همیشه paymentUrl می‌دهد — حتی در حالت آزمایشی، که آدرسِ
+      // برگشتِ خودِ درگاه است (lib/payment.js:51). پس مسیرِ عادی همین است.
+      // دکمه را عمداً برنمی‌گردانیم؛ صفحه در حال رفتن به درگاه است.
       if (result.paymentUrl) {
         window.location.href = result.paymentUrl;
-      } else if (result.order) {
-        router.push(`/order-success?orderId=${result.order.id}`);
+        return;
       }
+
+      // اگر روزی درگاه غیرفعال شد و سفارش بدونِ لینکِ پرداخت ساخته شد،
+      // مشتری باید وضعیتش را ببیند، نه یک دکمه‌ی خاموش.
+      router.push(`/order-success?orderId=${result.orderId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "خطا در ثبت سفارش");
-    } finally {
       setPlacing(false);
     }
   };

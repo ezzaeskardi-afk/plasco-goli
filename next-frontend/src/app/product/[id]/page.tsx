@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { getProduct, getRelatedProducts, getProducts } from "@/lib/api";
 import { ProductDetail } from "@/components/ProductDetail";
 import { ProductCardGrid } from "@/components/ProductCard";
@@ -67,38 +68,17 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const { id } = await params;
   const numId = Number(id);
 
+  // هر دو حالت — شناسه‌ی بی‌معنی و محصولِ حذف‌شده — با notFound() جواب
+  // می‌گیرند تا متنِ درست (./not-found.tsx) نشان داده شود و آدرس هم عوض نشود.
+  // نکته‌ی مهم درباره‌ی کدِ HTTP در همان فایل توضیح داده شده.
   if (isNaN(numId)) {
-    return (
-      <div className="mx-auto max-w-[1180px] px-6 py-16 text-center">
-        <h1 className="text-2xl font-bold text-ink mb-3">محصول پیدا نشد</h1>
-        <Link href="/products" className="text-teal text-sm">
-          بازگشت به محصولات
-        </Link>
-      </div>
-    );
+    notFound();
   }
 
   const product = await getProduct(numId).catch(() => null);
 
   if (!product) {
-    return (
-      <div className="mx-auto max-w-[1180px] px-6 py-16 text-center">
-        <h1 className="text-2xl font-bold text-ink mb-3">محصول پیدا نشد</h1>
-        <p className="text-sm text-ink-soft mb-4">
-          این محصول حذف شده یا در دسترس نیست.
-        </p>
-        <Link
-          href="/products"
-          className="inline-block rounded-full px-4 py-2 text-sm font-medium transition-colors"
-          style={{
-            background: "var(--color-teal-tint)",
-            color: "var(--color-teal)",
-          }}
-        >
-          مشاهدهٔ محصولات
-        </Link>
-      </div>
-    );
+    notFound();
   }
 
   const related = await getRelatedProducts(numId).catch(() => []);

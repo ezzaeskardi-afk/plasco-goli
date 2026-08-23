@@ -13,6 +13,30 @@ const nextConfig: NextConfig = {
       // جایی لینکِ قدیمی مانده باشد هم کار کند.
       { source: "/manifest.webmanifest", destination: "http://localhost:3000/manifest.webmanifest" },
       { source: "/manifest.json", destination: "http://localhost:3000/manifest.webmanifest" },
+
+      // صفحه‌ی «آفلاین» عمداً به Next تبدیل *نشده*.
+      // sw.js خط ۱۳ این آدرس را به‌عنوان OFFLINE_URL پیش‌کش می‌کند و روی این
+      // مبدأ ۴۰۴ می‌گرفت — یعنی درست همان لحظه‌ای که اینترنت قطع می‌شد،
+      // مشتری به‌جای صفحه‌ی فارسیِ ما صفحه‌ی خطای خشکِ مرورگر را می‌دید.
+      //
+      // چرا صفحه‌ی Next نشد: خودِ offline.html در کامنتش می‌گوید نباید به هیچ
+      // فایلِ بیرونی وابسته باشد (نه CSS، نه فونت)، چون همان فایل هم بارگذاری
+      // نمی‌شود. یک صفحه‌ی Next حتماً به /_next/static/css/… وابسته است، پس
+      // تبدیلش دقیقاً همان چیزی را خراب می‌کرد که دلیلِ وجودش است.
+      { source: "/offline.html", destination: "http://localhost:3000/offline.html" },
+    ];
+  },
+
+  // درگاه پرداخت (routes/orders.js:125-163) کاربر را به آدرسِ نسبیِ
+  // `/order-success.html` برمی‌گرداند — نامی از دنیای Express. روی این مبدأ
+  // ۴۰۴ بود، یعنی مشتری بعد از پرداخت به صفحه‌ی مرده می‌رسید. این ریدایرکت
+  // همان آدرس را به صفحه‌ی Next می‌رساند و کوئری‌استرینگ (orderId / error)
+  // خودکار حفظ می‌شود. عمداً موقت (۳۰۷) است، نه دائمی: مرورگر ریدایرکتِ
+  // دائمی را برای همیشه کش می‌کند و اگر روزی این نقشه عوض شود، دستمان بسته
+  // می‌ماند.
+  async redirects() {
+    return [
+      { source: "/order-success.html", destination: "/order-success", permanent: false },
     ];
   },
 

@@ -86,7 +86,17 @@ router.post('/', requireAuth, rateLimit({ windowMs: 60000, max: 10, keyBy: 'user
     throw err;
   }
 
-  const callbackUrl = `${req.protocol}://${req.get('host')}/api/orders/payment-callback?orderId=${orderId}`;
+  // آدرسی که درگاه، مشتری را بهش برمی‌گرداند.
+  //
+  // اولویت با SITE_URL است — همان قاعده‌ای که siteBase() در server.js:343 دارد.
+  // دلیلش: وقتی فرانت‌اندِ Next روی مبدأ دیگری نشسته و /api را پروکسی می‌کند،
+  // req.get('host') میزبانِ *پروکسی‌شده* (localhost:3000) را می‌دهد، نه میزبانی
+  // که مشتری در نوار آدرس دیده. نتیجه‌اش این بود که مشتری وسطِ پرداخت از سایت
+  // بیرون می‌افتاد و روی نسخه‌ی قدیمیِ Express تمام می‌کرد.
+  const siteBase = /^https?:\/\/[^\s/]+$/.test(String(process.env.SITE_URL || '').trim())
+    ? String(process.env.SITE_URL).trim().replace(/\/+$/, '')
+    : `${req.protocol}://${req.get('host')}`;
+  const callbackUrl = `${siteBase}/api/orders/payment-callback?orderId=${orderId}`;
   const payment = await requestPayment({
     orderId,
     amountToman: grandTotal,

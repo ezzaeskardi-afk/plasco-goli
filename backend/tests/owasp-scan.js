@@ -68,7 +68,10 @@ async function cookieFetch(cookie, opts) {
 // --- شروع سرور ---
 function startServer() {
   return new Promise((resolve, reject) => {
-    const env = { ...process.env, PG_DATA_DIR: SANDBOX_DIR, PORT: String(PORT), LOG_CONSOLE: 'false' };
+    // SITE_URL روی همین سرورِ سندباکس پین می‌شود تا مقدارِ backend/.env
+    // توسعه‌دهنده به اسکن نشت نکند؛ وگرنه canonical و آدرسِ بازگشتِ درگاه به
+    // مبدأی اشاره می‌کنند که جزءِ دامنه‌ی این اسکن نیست.
+    const env = { ...process.env, PG_DATA_DIR: SANDBOX_DIR, PORT: String(PORT), LOG_CONSOLE: 'false', SITE_URL: `http://127.0.0.1:${PORT}` };
     serverProc = spawn(process.execPath, [path.join(DIR, 'server.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let started = false;
     const timeout = setTimeout(() => { if (!started) { serverProc.kill(); reject(new Error('server start timeout')); } }, 15000);

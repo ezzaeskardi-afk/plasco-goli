@@ -208,12 +208,29 @@ export interface OrderItem {
   image?: string;
 }
 
+// دقیقاً همان چیزی که backend/routes/orders.js:111 برمی‌گرداند.
+// قبلاً اینجا `{ ok, order }` نوشته شده بود که بک‌اند هیچ‌وقت نمی‌فرستد؛ نتیجه
+// این بود که checkout به شاخه‌ی `result.order` می‌رفت، مقدارش undefined بود و
+// دکمه‌ی «ثبت سفارش» بی‌صدا هیچ کاری نمی‌کرد.
 export interface CreateOrderResponse {
-  ok: boolean;
-  order?: Order;
-  paymentUrl?: string;
-  error?: string;
-  retriable?: boolean;
+  orderId: number;
+  paymentUrl: string | null;
+  testMode?: boolean;
+  /** درخواستِ تکراری با همان Idempotency-Key: همان سفارشِ قبلی برگشته */
+  repeated?: boolean;
+  status?: string;
+}
+
+/** GET /api/orders/:id — بک‌اند سفارش را داخلِ یک پوشش برمی‌گرداند */
+export interface OrderDetailResponse {
+  order: Order;
+}
+
+/** POST /api/orders/:id/reorder */
+export interface ReorderResponse {
+  added: number;
+  /** کالاهایی که به سبد اضافه نشدند و دلیلش — باید به مشتری *گفته* شود */
+  skipped: { title: string; reason: string }[];
 }
 
 export interface TrackOrderResponse {

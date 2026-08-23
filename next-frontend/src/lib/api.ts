@@ -74,6 +74,8 @@ import type {
   HasPasswordResponse,
   Address,
   CreateOrderResponse,
+  OrderDetailResponse,
+  ReorderResponse,
   TrackOrderResponse,
   OrdersResponse,
   Order,
@@ -280,23 +282,54 @@ export async function deleteAddress(
 // سفارش‌ها
 // ============================================================
 
+// کلیدِ یکتای سفارش **باید در هدر** برود، نه در بدنه.
+// backend/routes/orders.js:41 آن را با req.get('Idempotency-Key') می‌خواند و
+// خط ۴۲ هر چیزی خارج از /^[A-Za-z0-9._:-]{16,128}$/ را رد می‌کند. قبلاً اینجا
+// داخلِ JSON فرستاده می‌شد، پس هدر خالی بود و **هر** تلاشِ ثبتِ سفارش با
+// ۴۰۰ «کلید یکتای سفارش معتبر نیست» برمی‌گشت — یعنی در نسخه‌ی Next هیچ‌کس
+// نمی‌توانست خرید کند.
 export async function createOrder(data: {
   addressId: number;
   couponCode?: string;
   idempotencyKey: string;
 }): Promise<CreateOrderResponse> {
+  const { idempotencyKey, ...body } = data;
   return fetcher<CreateOrderResponse>("/api/orders", {
     method: "POST",
-    body: JSON.stringify(data),
+    headers: { "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(body),
   });
+}
+
+/**
+ * کلیدی می‌سازد که سدِ سمتِ سرور قبولش کند: فقط `[A-Za-z0-9._:-]` و بین ۱۶ تا
+ * ۱۲۸ نویسه. همان کاری که frontend/js/checkout.js:212 می‌کرد.
+ */
+export function newIdempotencyKey(): string {
+  const raw =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}`;
+  return raw.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 128).padEnd(16, "0");
 }
 
 export async function getOrders(): Promise<OrdersResponse> {
   return fetcher<OrdersResponse>("/api/orders/mine");
 }
 
-export async function getOrder(id: number): Promise<Order> {
-  return fetcher<Order>(`/api/orders/${id}`);
+// بک‌اند سفارش را داخل `{ order }` می‌پیچد (routes/orders.js:314). تایپِ قبلی
+// `Promise<Order>` بود، یعنی هر جا استفاده می‌شد فیلدها undefined درمی‌آمدند.
+export async function getOrder(id: number): Promise<OrderDetailResponse> {
+  return fetcher<OrderDetailResponse>(`/api/orders/${id}`);
+}
+
+// سبد را با اقلامِ همان سفارش **جایگزین** می‌کند (ادغام نمی‌کند). کالاهای
+// حذف‌شده/ناموجود در `skipped` برمی‌گردند و باید به مشتری نشان داده شوند،
+// وگرنه سبدی کمتر از انتظارش می‌بیند و فکر می‌کند سایت خراب است.
+export async function reorderOrder(id: number): Promise<ReorderResponse> {
+  return fetcher<ReorderResponse>(`/api/orders/${id}/reorder`, {
+    method: "POST",
+  });
 }
 
 export async function trackOrder(

@@ -19,7 +19,9 @@ const STATUS_LABELS: Record<string, string> = {
   paid: "پرداخت شده",
   shipped: "ارسال شده",
   delivered: "تحویل شده",
-  cancelled: "لغو شده",
+  // بک‌اند «canceled» با یک l می‌نویسد (routes/orders.js). املای دوتایی هرگز
+  // مطابقت نمی‌کرد، پس مشتری به‌جای «لغو شده» رشته‌ی خامِ انگلیسی می‌دید.
+  canceled: "لغو شده",
   failed: "ناموفق",
   return_requested: "درخواست مرجوعی",
   returned: "مرجوع شده",
@@ -30,7 +32,7 @@ const STATUS_COLORS: Record<string, string> = {
   paid: "var(--color-teal)",
   shipped: "var(--color-teal)",
   delivered: "var(--color-teal)",
-  cancelled: "var(--color-coral)",
+  canceled: "var(--color-coral)",
   failed: "var(--color-coral)",
   return_requested: "var(--color-gold)",
   returned: "var(--color-ink-dim)",
