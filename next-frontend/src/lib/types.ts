@@ -11,9 +11,9 @@ export interface Product {
   discountPercent: number;
   badge: string;
   stock: number;
-  category: string; // نام دسته (متن، نه id)
+  category: string;
   icon: string;
-  image: string | null; // مسیر عکس مثل "/picture/products/..."
+  image: string | null;
   images: string[];
   specs: { k: string; v: string }[];
   rating: { count: number; avg: number } | null;
@@ -35,14 +35,13 @@ export interface ProductListResponse {
   meta: ProductListMeta;
 }
 
-/** پاسخ API /products/:id */
 export interface ProductDetailResponse {
   product: Product;
 }
 
 export interface FacetCategory {
-  category: string; // نام دسته
-  n: number; // تعداد
+  category: string;
+  n: number;
   icon: string;
 }
 
@@ -52,7 +51,6 @@ export interface FacetResponse {
   categories: FacetCategory[];
 }
 
-/** پاسخ API /shop/categories */
 export interface CategoriesResponse {
   categories: ShopCategory[];
 }
@@ -65,7 +63,6 @@ export interface ShopCategory {
   count: number;
 }
 
-/** پاسخ API /shop/info */
 export interface ShopInfo {
   shopName: string;
   shopPhone: string;
@@ -76,6 +73,67 @@ export interface ShopInfo {
   lowStockThreshold: number;
   freeShippingOver: number;
   shippingCost: number;
+}
+
+// ============================================================
+// سبد خرید
+// ============================================================
+
+export interface CartItem {
+  productId: number;
+  title: string;
+  icon: string;
+  image: string | null;
+  price: number;
+  oldPrice: number;
+  discountPercent: number;
+  qty: number;
+  maxQty: number;
+  stock: number;
+  hasDiscount: boolean;
+  savings: number;
+  notice?: string;
+}
+
+export interface CartResponse {
+  items: CartItem[];
+  total: number;
+  count: number;
+  savings: number;
+  coupon: string | null;
+  discount: number;
+  shippingCost: number;
+  freeShippingOver: number;
+  shippingFee: number;
+  freeShippingGap: number;
+  payable: number;
+}
+
+// ============================================================
+// احراز هویت
+// ============================================================
+
+export interface ChallengeResponse {
+  token: string;
+}
+
+export interface OtpRequestResponse {
+  ok: boolean;
+  message?: string;
+  cooldown?: number;
+}
+
+export interface OtpVerifyResponse {
+  ok: boolean;
+  user: User;
+  fullName: string | null;
+  isNew: boolean;
+}
+
+export interface PasswordLoginResponse {
+  ok: boolean;
+  user: User;
+  remaining?: number;
 }
 
 export interface User {
@@ -91,26 +149,77 @@ export interface AuthMeResponse {
   user: User | null;
 }
 
-export interface CartItem {
-  productId: number;
-  title: string;
-  icon: string;
-  image: string | null;
-  price: number;
-  oldPrice: number;
-  discountPercent: number;
-  qty: number;
-  maxQty: number;
-  stock: number;
+export interface HasPasswordResponse {
+  hasPassword: boolean;
 }
 
-export interface CartResponse {
-  items: CartItem[];
+// ============================================================
+// آدرس
+// ============================================================
+
+export interface Address {
+  id: number;
+  userId: number;
+  fullName: string;
+  phone: string;
+  province: string;
+  city: string;
+  addressLine: string;
+  postalCode: string;
+}
+
+// ============================================================
+// سفارش
+// ============================================================
+
+export interface Order {
+  id: number;
+  userId: number;
+  items: OrderItem[];
+  address: Address;
   total: number;
   shippingFee: number;
-  freeShippingThreshold: number;
-  gap: number;
-  payable: number;
   couponCode: string;
   discount: number;
+  status: string;
+  authority: string;
+  refId: string;
+  paymentUrl: string;
+  createdAt: string;
+  paidAt: string | null;
+  shippedAt: string | null;
+  deliveredAt: string | null;
+  trackingCode: string;
+  cancelReason: string;
+  returnReason: string;
+  adminNote: string;
+  userPhone?: string;
+  userName?: string;
+  itemCount?: number;
+  city?: string;
+  province?: string;
+}
+
+export interface OrderItem {
+  productId: number;
+  title: string;
+  price: number;
+  qty: number;
+  image?: string;
+}
+
+export interface CreateOrderResponse {
+  ok: boolean;
+  order?: Order;
+  paymentUrl?: string;
+  error?: string;
+  retriable?: boolean;
+}
+
+export interface TrackOrderResponse {
+  order: Order;
+}
+
+export interface OrdersResponse {
+  orders: Order[];
 }
