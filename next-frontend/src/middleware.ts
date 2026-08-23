@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// مسیرهایی که کاربر حتماً باید وارد شده باشد
-const PROTECTED_ROUTES = ["/checkout", "/account"];
+// مسیرهایی که کاربر حتماً باید سشن داشته باشد
+const PROTECTED_ROUTES = ["/checkout", "/account", "/admin"];
 
 // مسیرهایی که کاربر واردشده نباید ببیند
 const GUEST_ONLY_ROUTES = ["/login"];
@@ -32,6 +32,7 @@ export const config = {
   matcher: [
     "/checkout/:path*",
     "/account/:path*",
+    "/admin/:path*",
     "/login/:path*",
   ],
 };

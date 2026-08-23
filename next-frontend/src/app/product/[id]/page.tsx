@@ -1,8 +1,23 @@
 import Link from "next/link";
-import { getProduct, getRelatedProducts } from "@/lib/api";
+import { getProduct, getRelatedProducts, getProducts } from "@/lib/api";
 import { ProductDetail } from "@/components/ProductDetail";
 import { ProductCardGrid } from "@/components/ProductCard";
 import type { Metadata } from "next";
+
+// ISR: هر ۶۰ ثانیه چک می‌کنه، اما تا وقتی تغییری نکرده از کش استفاده می‌کنه
+export const revalidate = 60;
+
+// pre-render محصولات پرفروش در build time
+export async function generateStaticParams() {
+  try {
+    const data = await getProducts({ page: 1 });
+    return (data.products || []).slice(0, 20).map((p) => ({
+      id: String(p.id),
+    }));
+  } catch {
+    return [];
+  }
+}
 
 interface ProductPageProps {
   params: Promise<{ id: string }>;

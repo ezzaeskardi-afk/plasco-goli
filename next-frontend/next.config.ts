@@ -9,8 +9,7 @@ const nextConfig: NextConfig = {
       { source: "/assets/:path*", destination: "http://localhost:3000/assets/:path*" },
       { source: "/sw.js", destination: "http://localhost:3000/sw.js" },
       { source: "/manifest.json", destination: "http://localhost:3000/manifest.json" },
-      { source: "/robots.txt", destination: "http://localhost:3000/robots.txt" },
-      { source: "/sitemap.xml", destination: "http://localhost:3000/sitemap.xml" },
+
     ];
   },
 
