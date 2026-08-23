@@ -7,7 +7,7 @@ import type { Product } from "@/lib/types";
 // ============================================================
 async function getHomepageData() {
   const [productsRes, categories, shopInfo] = await Promise.all([
-    getProducts({ sort: "bestselling", page: 1 }).catch(() => null),
+    getProducts({ sort: "newest", page: 1 }).catch(() => null),
     getCategories().catch(() => []),
     getShopInfo().catch(() => null),
   ]);

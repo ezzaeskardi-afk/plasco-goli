@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { getProducts, getFacets } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
+import { FilterBar } from "@/components/FilterBar";
 import type { Product } from "@/lib/types";
 
 // ============================================================
@@ -79,88 +81,13 @@ function SearchBar({ defaultValue }: { defaultValue?: string }) {
   );
 }
 
-function FilterBar({
-  currentSort,
-  currentCategory,
-  currentInStockOnly,
-  categories,
-  minPrice,
-  maxPrice,
-}: {
-  currentSort?: string;
-  currentCategory?: string;
-  currentInStockOnly?: boolean;
-  categories: { id: number; name: string; slug: string }[];
-  minPrice?: number;
-  maxPrice?: number;
-}) {
+function FilterBarFallback() {
   return (
-    <div className="flex flex-wrap gap-2 items-center">
-      {/* مرتب‌سازی */}
-      <select
-        name="sort"
-        defaultValue={currentSort || "newest"}
-        className="rounded-full px-3 py-1.5 text-xs font-medium outline-none appearance-none cursor-pointer"
-        style={{
-          background: "var(--color-surface)",
-          color: "var(--color-ink-soft)",
-          border: "1px solid var(--color-line)",
-        }}
-        onChange={(e) => {
-          const url = new URL(window.location.href);
-          url.searchParams.set("sort", e.target.value);
-          window.location.href = url.toString();
-        }}
-      >
-        <option value="newest">جدیدترین</option>
-        <option value="bestselling">پرفروش‌ترین</option>
-        <option value="price-asc">ارزان‌ترین</option>
-        <option value="price-desc">گران‌ترین</option>
-      </select>
-
-      {/* فیلتر موجودی */}
-      <a
-        href={`/products?${new URLSearchParams({
-          ...(currentSort ? { sort: currentSort } : {}),
-          ...(currentCategory ? { category: currentCategory } : {}),
-          inStockOnly: currentInStockOnly ? "0" : "1",
-        }).toString()}`}
-        className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
-        style={{
-          background: currentInStockOnly
-            ? "var(--color-teal-tint)"
-            : "var(--color-surface)",
-          color: currentInStockOnly
-            ? "var(--color-teal)"
-            : "var(--color-ink-soft)",
-          border: "1px solid var(--color-line)",
-        }}
-      >
-        فقط موجود
-      </a>
-
-      {/* دسته‌بندی‌ها */}
-      {categories.slice(0, 6).map((cat) => {
-        const isActive = currentCategory === cat.slug;
-        return (
-          <a
-            key={cat.id}
-            href={`/products?category=${cat.slug}`}
-            className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
-            style={{
-              background: isActive
-                ? "var(--color-teal-tint)"
-                : "var(--color-surface)",
-              color: isActive
-                ? "var(--color-teal)"
-                : "var(--color-ink-soft)",
-              border: "1px solid var(--color-line)",
-            }}
-          >
-            {cat.name}
-          </a>
-        );
-      })}
+    <div
+      className="rounded-full px-4 py-1.5 text-xs text-ink-dim"
+      style={{ background: "var(--color-surface)" }}
+    >
+      بارگذاری فیلترها...
     </div>
   );
 }
@@ -285,16 +212,18 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         </div>
       </div>
 
-      {/* فیلترها */}
+      {/* فیلترها — کلاینت کامپوننت با Suspense */}
       <div className="mb-6">
-        <FilterBar
-          currentSort={params.sort}
-          currentCategory={params.category}
-          currentInStockOnly={params.inStockOnly === "1"}
-          categories={categories}
-          minPrice={facets?.minPrice}
-          maxPrice={facets?.maxPrice}
-        />
+        <Suspense fallback={<FilterBarFallback />}>
+          <FilterBar
+            currentSort={params.sort}
+            currentCategory={params.category}
+            currentInStockOnly={params.inStockOnly === "1"}
+            categories={categories}
+            minPrice={facets?.minPrice}
+            maxPrice={facets?.maxPrice}
+          />
+        </Suspense>
       </div>
 
       {/* گرید محصولات */}

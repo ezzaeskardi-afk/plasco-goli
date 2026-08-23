@@ -1,3 +1,5 @@
+"use client";
+
 import type { Product } from "@/lib/types";
 
 function toFa(n: number): string {
