@@ -1,46 +1,33 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { getCart, getMe } from "@/lib/api";
-import type { CartResponse, User } from "@/lib/types";
+import type { CartResponse, AuthMeResponse } from "@/lib/types";
 
 export function Header() {
   const pathname = usePathname();
-  const [user, setUser] = useState<User | null>(null);
-  const [cartCount, setCartCount] = useState(0);
-  const [mounted, setMounted] = useState(false);
 
-  const refreshCart = useCallback(async () => {
-    try {
-      const cart = await getCart();
-      setCartCount(cart.count || 0);
-    } catch {
-      setCartCount(0);
-    }
-  }, []);
+  // TanStack Query — کش خودکار، staleTime ۳۰s
+  const { data: cartData } = useQuery<CartResponse>({
+    queryKey: ["cart"],
+    queryFn: getCart,
+    staleTime: 30_000,
+    retry: false,
+    refetchOnMount: true,
+  });
 
-  const refreshUser = useCallback(async () => {
-    try {
-      const res = await getMe();
-      setUser(res.user);
-    } catch {
-      setUser(null);
-    }
-  }, []);
+  const { data: authData } = useQuery<AuthMeResponse>({
+    queryKey: ["auth"],
+    queryFn: getMe,
+    staleTime: 60_000,
+    retry: false,
+    refetchOnMount: true,
+  });
 
-  useEffect(() => {
-    setMounted(true);
-    refreshCart();
-    refreshUser();
-  }, [refreshCart, refreshUser]);
-
-  // رفرش بعد از برگشت از لاگین
-  useEffect(() => {
-    refreshCart();
-    refreshUser();
-  }, [pathname, refreshCart, refreshUser]);
+  const cartCount = cartData?.count || 0;
+  const user = authData?.user || null;
 
   const isActive = (href: string) => pathname === href;
 
@@ -54,11 +41,11 @@ export function Header() {
     >
       <div className="mx-auto flex max-w-[1180px] items-center gap-4 px-6 py-3">
         {/* لوگو */}
-        <Link
-          href="/"
-          className="flex items-center gap-2 shrink-0"
-        >
-          <span className="text-xl font-extrabold" style={{ color: "var(--color-teal)" }}>
+        <Link href="/" className="flex items-center gap-2 shrink-0">
+          <span
+            className="text-xl font-extrabold"
+            style={{ color: "var(--color-teal)" }}
+          >
             پلاسکو گلی
           </span>
         </Link>
@@ -78,7 +65,8 @@ export function Header() {
           <Link
             href="/products"
             className={`px-3 py-2 rounded-lg transition-colors ${
-              pathname.startsWith("/products") || pathname.startsWith("/product")
+              pathname.startsWith("/products") ||
+              pathname.startsWith("/product")
                 ? "bg-teal-tint text-teal"
                 : "text-ink-soft hover:text-ink hover:bg-surface-2"
             }`}
@@ -117,12 +105,20 @@ export function Header() {
             style={{ color: "var(--color-ink-soft)" }}
             aria-label={`سبد خرید ${cartCount > 0 ? `${cartCount} قلم` : ""}`}
           >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
               <circle cx="7" cy="17" r="1.5" />
               <circle cx="15" cy="17" r="1.5" />
               <path d="M2 3h2.5L7 12h8l2-6H5" />
             </svg>
-            {mounted && cartCount > 0 && (
+            {cartCount > 0 && (
               <span
                 className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold"
                 style={{
@@ -135,9 +131,9 @@ export function Header() {
             )}
           </Link>
 
-          {mounted && user ? (
+          {user ? (
             <Link
-              href={user.isAdmin ? "/admin" : "/account"}
+              href={user.isAdmin ? "/admin/crm" : "/account"}
               className="rounded-full px-4 py-2 text-sm font-semibold transition-colors"
               style={{
                 background: "var(--color-teal)",
@@ -166,7 +162,9 @@ export function Header() {
         <Link
           href="/"
           className={`shrink-0 px-3 py-1.5 rounded-lg ${
-            isActive("/") ? "bg-teal-tint text-teal font-medium" : "text-ink-soft"
+            isActive("/")
+              ? "bg-teal-tint text-teal font-medium"
+              : "text-ink-soft"
           }`}
         >
           خانه
@@ -174,7 +172,9 @@ export function Header() {
         <Link
           href="/products"
           className={`shrink-0 px-3 py-1.5 rounded-lg ${
-            pathname.startsWith("/products") ? "bg-teal-tint text-teal font-medium" : "text-ink-soft"
+            pathname.startsWith("/products")
+              ? "bg-teal-tint text-teal font-medium"
+              : "text-ink-soft"
           }`}
         >
           محصولات
@@ -182,15 +182,27 @@ export function Header() {
         <Link
           href="/cart"
           className={`shrink-0 px-3 py-1.5 rounded-lg ${
-            isActive("/cart") ? "bg-teal-tint text-teal font-medium" : "text-ink-soft"
+            isActive("/cart")
+              ? "bg-teal-tint text-teal font-medium"
+              : "text-ink-soft"
           }`}
         >
-          سبد
+          سبد {cartCount > 0 && `(${cartCount})`}
         </Link>
         <Link
-          href={user ? (user.isAdmin ? "/admin" : "/account") : "/login"}
+          href={
+            user
+              ? user.isAdmin
+                ? "/admin/crm"
+                : "/account"
+              : "/login"
+          }
           className={`shrink-0 px-3 py-1.5 rounded-lg ${
-            isActive("/login") || isActive("/account") || isActive("/admin") ? "bg-teal-tint text-teal font-medium" : "text-ink-soft"
+            isActive("/login") ||
+            isActive("/account") ||
+            isActive("/admin")
+              ? "bg-teal-tint text-teal font-medium"
+              : "text-ink-soft"
           }`}
         >
           {user ? "پروفایل" : "ورود"}

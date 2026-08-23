@@ -7,16 +7,23 @@ import type { Metadata } from "next";
 // ISR: هر ۶۰ ثانیه چک می‌کنه، اما تا وقتی تغییری نکرده از کش استفاده می‌کنه
 export const revalidate = 60;
 
-// pre-render محصولات پرفروش در build time
+// pre-render ۱۰۰ محصول در build time
 export async function generateStaticParams() {
+  const ids: { id: string }[] = [];
   try {
-    const data = await getProducts({ page: 1 });
-    return (data.products || []).slice(0, 20).map((p) => ({
-      id: String(p.id),
-    }));
+    // ۳ صفحه × ۱۲ محصول = ۳۶ محصول. برای ۱۰۰ محصول صفحه‌بندی می‌کنیم
+    for (let page = 1; page <= 4; page++) {
+      const data = await getProducts({ page });
+      if (!data?.products?.length) break;
+      for (const p of data.products) {
+        ids.push({ id: String(p.id) });
+      }
+      if (ids.length >= 100 || !data.meta?.hasMore) break;
+    }
   } catch {
-    return [];
+    // اگر API در دسترس نبود، حداقل idهای متوالی تولید کن
   }
+  return ids;
 }
 
 interface ProductPageProps {
