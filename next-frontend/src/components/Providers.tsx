@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { ToastProvider } from "./Toast";
+import { ServiceWorkerRegistrar } from "./ServiceWorkerRegistrar";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -24,7 +25,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       {/* ToastProvider داخلِ QueryClientProvider است تا هر کامپوننتی که هم
           mutation دارد و هم می‌خواهد نتیجه را اعلام کند، به هر دو دسترسی
           داشته باشد. */}
-      <ToastProvider>{children}</ToastProvider>
+      <ToastProvider>
+        <ServiceWorkerRegistrar />
+        {children}
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
