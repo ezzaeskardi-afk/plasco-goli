@@ -1,0 +1,162 @@
+/* ============================================================
+   پلاسکو گلی — Next.js / Tailwind CSS v4
+   تم تیرهٔ لوکس: فیروزه + طلایی + مرجانی روی زمینهٔ سبز-مشکی
+   ============================================================ */
+
+@import "tailwindcss";
+
+/* ---------- فونت وزیر — لوکال ---------- */
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/assets/fonts/Vazir-Thin-FD-WOL.woff2') format('woff2');
+  font-weight: 100 200;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/assets/fonts/Vazir-Light-FD-WOL.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/assets/fonts/Vazir-FD-WOL.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/assets/fonts/Vazir-Medium-FD-WOL.woff2') format('woff2');
+  font-weight: 500 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/assets/fonts/Vazir-Bold-FD-WOL.woff2') format('woff2');
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- تم تیره — دقیقاً هماهنگ با style.css اصلی ---------- */
+@theme {
+  --font-sans: 'Vazirmatn', Tahoma, 'Segoe UI', sans-serif;
+
+  /* زمینه و سطوح */
+  --color-cream: #0B1411;
+  --color-surface: #121F1A;
+  --color-surface-2: #0E1915;
+
+  /* متن */
+  --color-ink: #EDF6F1;
+  --color-ink-soft: #A4BAB0;
+  --color-ink-dim: #82968C;
+  --color-ink-on-warm: #2B0A03;
+
+  /* رنگ‌های برند */
+  --color-teal: #25D6B0;
+  --color-teal-dark: #17AF92;
+  --color-teal-tint: rgba(37, 214, 176, 0.13);
+  --color-coral: #FF6A4D;
+  --color-coral-dark: #E8503A;
+  --color-coral-tint: rgba(255, 106, 77, 0.14);
+  --color-pink: #F0538F;
+  --color-pink-tint: rgba(240, 83, 143, 0.14);
+  --color-gold: #F5B95A;
+  --color-gold-tint: rgba(245, 185, 90, 0.14);
+
+  /* خطوط */
+  --color-line: rgba(237, 246, 241, 0.09);
+  --color-line-strong: rgba(237, 246, 241, 0.16);
+  --color-line-control: rgba(237, 246, 241, 0.38);
+
+  /* شعاع */
+  --radius-lg: 26px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+
+  /* سایه */
+  --shadow-glow-teal: 0 18px 44px -14px rgba(37, 214, 176, 0.45);
+  --shadow-glow-gold: 0 18px 44px -16px rgba(245, 185, 90, 0.4);
+}
+
+/* ---------- پایه — هماهنگ با style.css ---------- */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-cream);
+    color: var(--color-ink);
+    line-height: 1.8;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  img, svg, video, canvas {
+    max-width: 100%;
+    display: block;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: inherit;
+  }
+
+  ::selection {
+    background: rgba(245, 185, 90, 0.35);
+    color: #fff;
+  }
+
+  /* اسکرول‌بار ظریف */
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-cream);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #22332C;
+    border-radius: 99px;
+    border: 2px solid var(--color-cream);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-teal-dark);
+  }
+}
+
+/* ---------- هاله‌های نوری پس‌زمینه ---------- */
+@layer base {
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(900px 600px at 85% -5%, rgba(37, 214, 176, 0.09), transparent 60%),
+      radial-gradient(700px 520px at -10% 40%, rgba(245, 185, 90, 0.05), transparent 60%),
+      radial-gradient(600px 480px at 70% 110%, rgba(240, 83, 143, 0.05), transparent 60%);
+  }
+}
