@@ -39,6 +39,48 @@ export interface ProductDetailResponse {
   product: Product;
 }
 
+/** GET /api/products/:id/related — بک‌اند آرایه را داخلِ پوشش می‌فرستد (routes/products.js:205) */
+export interface RelatedProductsResponse {
+  products: Product[];
+}
+
+// ============================================================
+// دیدگاه محصول
+// ============================================================
+
+/** خروجی serializeReview در backend/lib/db.js:1964 (نمای عمومی) */
+export interface Review {
+  id: number;
+  productId: number;
+  rating: number;
+  body: string;
+  /** خودِ سرور تشخیص می‌دهد که نویسنده این کالا را خریده یا نه */
+  isBuyer: boolean;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  userName: string;
+}
+
+/** GET /api/products/:id/reviews — getProductReviews در db.js:1991 */
+export interface ProductReviewsResponse {
+  count: number;
+  avg: number;
+  /** فقط دیدگاه‌های تأییدشده، حداکثر ۵۰ تا */
+  items: Review[];
+  /**
+   * دیدگاهِ خودِ کاربرِ واردشده — حتی اگر در انتظار تأیید باشد.
+   * برای مهمان `null` است.
+   */
+  myReview: Review | null;
+}
+
+/** POST /api/products/:id/reviews — routes/products.js:233 */
+export interface ReviewSubmitResponse {
+  ok: boolean;
+  review: Review;
+  message: string;
+}
+
 export interface FacetCategory {
   category: string;
   n: number;

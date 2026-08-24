@@ -174,6 +174,7 @@ export function ProductJsonLd({
     image: string | null;
     images: string[];
     category: string;
+    rating?: { count: number; avg: number } | null;
   };
 }) {
   const productUrl = `${SITE_URL}/product/${product.id}`;
@@ -227,6 +228,24 @@ export function ProductJsonLd({
         img ? `${SITE_URL}${encodeURI(img)}` : "",
       ),
     ].filter(Boolean),
+    // ستاره‌ها در نتایج گوگل. تنها راهِ رسیدنِ این ستاره‌ها به نتایج است و در
+    // نسخه‌ی Next جا افتاده بود (نسخه‌ی Express در server.js:608 و
+    // js/product.js:435 هر دو داشتند).
+    //
+    // شرطِ `count > 0 && avg > 0` عیناً همان شرطِ Express است: schema.org برای
+    // AggregateRating با reviewCount صفر خطا می‌دهد و گوگل کلِ داده‌ی ساخت‌یافته
+    // را کنار می‌گذارد — یعنی حتی Offer و قیمت هم از دست می‌رفت.
+    ...(product.rating && product.rating.count > 0 && product.rating.avg > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: product.rating.avg,
+            reviewCount: product.rating.count,
+            bestRating: 5,
+            worstRating: 1,
+          },
+        }
+      : {}),
   };
   return (
     <script

@@ -61,6 +61,9 @@ import type {
   Product,
   ProductListResponse,
   ProductDetailResponse,
+  RelatedProductsResponse,
+  ProductReviewsResponse,
+  ReviewSubmitResponse,
   FacetResponse,
   ShopInfo,
   ShopCategory,
@@ -123,7 +126,38 @@ export async function getProduct(id: number): Promise<Product> {
 }
 
 export async function getRelatedProducts(id: number): Promise<Product[]> {
-  return fetcher<Product[]>(`/api/products/${id}/related`);
+  // بک‌اند آرایه را داخلِ `{ products: [...] }` می‌فرستد (routes/products.js:205).
+  // نوعِ قبلی `Product[]` بود، پس `related.length` روی آبجکت undefined می‌شد و
+  // بخشِ «محصولات مرتبط» در هیچ صفحه‌ی محصولی نشان داده نمی‌شد — بی‌هیچ خطایی،
+  // که همین پیدا کردنش را سخت کرده بود.
+  const data = await fetcher<RelatedProductsResponse>(
+    `/api/products/${id}/related`,
+  );
+  return data.products ?? [];
+}
+
+// ---------- دیدگاه محصول ----------
+
+/**
+ * عمومی است، ولی اگر کاربر وارد شده باشد دیدگاهِ خودش را هم برمی‌گرداند —
+ * حتی وقتی هنوز تأیید نشده (routes/products.js:210). پس برای فرم باید از
+ * سمتِ کلاینت صدا زده شود، وگرنه `myReview` همیشه null می‌آید.
+ */
+export async function getProductReviews(
+  id: number,
+): Promise<ProductReviewsResponse> {
+  return fetcher<ProductReviewsResponse>(`/api/products/${id}/reviews`);
+}
+
+/** ثبت یا ویرایش دیدگاه. بعد از ویرایش دوباره به صفِ تأیید می‌رود. */
+export async function submitProductReview(
+  id: number,
+  data: { rating: number; body: string },
+): Promise<ReviewSubmitResponse> {
+  return fetcher<ReviewSubmitResponse>(`/api/products/${id}/reviews`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 export async function getFacets(): Promise<FacetResponse> {

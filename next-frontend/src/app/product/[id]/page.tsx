@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProduct, getRelatedProducts, getProducts } from "@/lib/api";
 import { ProductDetail } from "@/components/ProductDetail";
+import { ProductReviews } from "@/components/ProductReviews";
 import { ProductCardGrid } from "@/components/ProductCard";
 import { ProductJsonLd, BreadcrumbJsonLd } from "@/components/JsonLd";
 import type { Metadata } from "next";
@@ -111,6 +112,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
         {/* جزئیات محصول */}
         <ProductDetail product={product} />
+
+        {/* دیدگاه خریداران */}
+        <ProductReviews productId={product.id} />
 
         {/* محصولات مرتبط */}
         {related.length > 0 && (

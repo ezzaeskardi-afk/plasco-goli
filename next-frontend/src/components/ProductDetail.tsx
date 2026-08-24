@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import type { Product } from "@/lib/types";
 import { useAddToCart } from "@/lib/useAddToCart";
+import { StarRow } from "@/components/StarRow";
 
 function toFa(n: number): string {
   return new Intl.NumberFormat("fa-IR").format(n);
@@ -98,15 +99,18 @@ export function ProductDetail({ product }: { product: Product }) {
         </h1>
 
         {product.rating != null && product.rating.count > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-base text-gold">
-              {"★".repeat(Math.round(product.rating.avg))}
-              {"☆".repeat(5 - Math.round(product.rating.avg))}
+          <a
+            href="#reviews"
+            className="flex items-center gap-2 w-fit transition-opacity hover:opacity-80"
+          >
+            <StarRow value={product.rating.avg} size={16} />
+            <span className="text-sm" style={{ color: "var(--color-ink-soft)" }}>
+              {/* عددها فارسی، مثل بقیه‌ی سایت. قبلاً toFixed(1) بود که «4.5»
+                  لاتین می‌داد وسطِ متنِ فارسی. */}
+              <b style={{ color: "var(--color-ink)" }}>{toFa(product.rating.avg)}</b>{" "}
+              ({toFa(product.rating.count)} دیدگاه)
             </span>
-            <span className="text-sm text-ink-soft">
-              {product.rating.avg.toFixed(1)} ({toFa(product.rating.count)} نظر)
-            </span>
-          </div>
+          </a>
         )}
 
         <div className="rounded-[18px] p-4" style={{ background: "var(--color-surface)" }}>
