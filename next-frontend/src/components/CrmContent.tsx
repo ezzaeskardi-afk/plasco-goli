@@ -11,7 +11,6 @@ import {
   crmToggleTask,
   crmDeleteTask,
   crmCreateTag,
-  crmDeleteTag,
   crmSetUserTags,
   crmGetAdvanced,
   crmGetSegments,
@@ -138,18 +137,23 @@ export function CrmContent() {
     }
   }, [custSearch, custSort, custFilter, custTag, custPage]);
 
+  // شناسه‌ی مشتریِ انتخاب‌شده — نه خودِ شیءِ detail: هر setDetail شیءِ تازه
+  // می‌سازد و اگر detail در وابستگی‌ها بود، افکت → fetch → setDetail → افکتِ
+  // دوباره یعنی حلقه‌ی بی‌پایان. با detailId فقط تغییرِ مشتری افکت را می‌گیراند.
+  const detailId = detail?.id;
+
   useEffect(() => {
     setLoading(true);
     setError("");
     if (tab === "dashboard") loadDashboard();
     else if (tab === "customers") loadCustomers();
-    else if (tab === "detail" && detail) {
-      // refresh detail
-      crmGetCustomer(detail.id)
+    else if (tab === "detail" && detailId != null) {
+      // بازگشت به تب جزئیات = تازه‌سازی داده
+      crmGetCustomer(detailId)
         .then((d) => setDetail(d.customer))
         .catch(() => {});
     }
-  }, [tab, loadDashboard, loadCustomers]);
+  }, [tab, loadDashboard, loadCustomers, detailId]);
 
   useEffect(() => {
     if (tab === "customers") loadCustomers();
@@ -161,7 +165,7 @@ export function CrmContent() {
       const d = await crmGetCustomer(id);
       setDetail(d.customer);
       setTab("detail");
-    } catch (err) {
+    } catch {
       setError("مشتری پیدا نشد");
     } finally {
       setLoading(false);
@@ -173,6 +177,18 @@ export function CrmContent() {
     try {
       await crmAddNote(detail.id, noteText.trim());
       setNoteText("");
+      const d = await crmGetCustomer(detail.id);
+      setDetail(d.customer);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "خطا");
+    }
+  };
+
+  // حذف یادداشت — همتای .crm-del-note در نسخه‌ی Express (admin.js:1813)
+  const handleDeleteNote = async (noteId: number) => {
+    if (!detail || !window.confirm("این یادداشت حذف شود؟")) return;
+    try {
+      await crmDeleteNote(noteId);
       const d = await crmGetCustomer(detail.id);
       setDetail(d.customer);
     } catch (err) {
@@ -197,6 +213,18 @@ export function CrmContent() {
     try {
       await crmAddTask(detail.id, taskTitle.trim());
       setTaskTitle("");
+      const d = await crmGetCustomer(detail.id);
+      setDetail(d.customer);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "خطا");
+    }
+  };
+
+  // حذف پیگیری — همتای .crm-task-del در نسخه‌ی Express (admin.js:1835)
+  const handleDeleteTask = async (taskId: number) => {
+    if (!detail || !window.confirm("این پیگیری حذف شود؟")) return;
+    try {
+      await crmDeleteTask(taskId);
       const d = await crmGetCustomer(detail.id);
       setDetail(d.customer);
     } catch (err) {
@@ -462,6 +490,40 @@ export function CrmContent() {
             </select>
           </div>
 
+          {/* فیلتر برچسب — همتای چیپ‌های data-tag در نسخه‌ی Express (admin.js:1585).
+              قبلاً custTag در کوئری ارسال می‌شد ولی هیچ UI‌ای آن را ست نمی‌کرد. */}
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => { setCustTag(""); setCustPage(0); }}
+                className="rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
+                style={
+                  custTag === ""
+                    ? { background: "var(--color-teal)", color: "#04211B" }
+                    : { background: "var(--color-surface-2)", color: "var(--color-ink-dim)", border: "1px solid var(--color-line)" }
+                }
+              >
+                همه
+              </button>
+              {tags.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => { setCustTag(custTag === t.name ? "" : t.name); setCustPage(0); }}
+                  className="rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
+                  style={
+                    custTag === t.name
+                      ? { background: t.color + "30", color: t.color, border: `1px solid ${t.color}` }
+                      : { background: "var(--color-surface-2)", color: "var(--color-ink-dim)", border: "1px solid var(--color-line)" }
+                  }
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* جدول */}
           <div className="rounded-2xl overflow-hidden" style={{ background: "var(--color-surface)" }}>
             <div className="overflow-x-auto">
@@ -655,9 +717,20 @@ export function CrmContent() {
                 {detail.notes?.map((n) => (
                   <div key={n.id} className="rounded-xl p-2 text-[11px]" style={{ background: "var(--color-surface-2)" }}>
                     <p className="text-ink-soft mb-1">{n.body}</p>
-                    <div className="flex justify-between text-ink-dim">
+                    <div className="flex justify-between items-center text-ink-dim">
                       <span>{n.byName}</span>
-                      <span>{shortDate(n.createdAt)}</span>
+                      <span className="flex items-center gap-2">
+                        <span>{shortDate(n.createdAt)}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNote(n.id)}
+                          aria-label="حذف یادداشت"
+                          title="حذف"
+                          className="leading-none transition-colors hover:text-coral"
+                        >
+                          ×
+                        </button>
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -719,6 +792,15 @@ export function CrmContent() {
                     {t.dueAt && (
                       <span className="text-ink-dim">{shortDate(t.dueAt)}</span>
                     )}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteTask(t.id); }}
+                      aria-label="حذف پیگیری"
+                      title="حذف"
+                      className="leading-none transition-colors hover:text-coral shrink-0"
+                    >
+                      ×
+                    </button>
                   </div>
                 ))}
               </div>

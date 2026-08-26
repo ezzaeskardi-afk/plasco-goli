@@ -164,3 +164,76 @@
       radial-gradient(600px 480px at 70% 110%, rgba(240, 83, 143, 0.05), transparent 60%);
   }
 }
+/* ============================================================
+   فاکتور چاپی — صفحه‌ی حساب
+   وقتی <html> کلاسِ printing-invoice دارد، در چاپ همه‌چیز جز
+   #pg-invoice (که با createPortal مستقیم زیرِ <body> است) پنهان
+   می‌شود. روی صفحه فاکتور اصلاً رندر نمی‌شود مگر هنگام چاپ.
+   همتای printing-invoice در frontend/css/invoice.css
+   ============================================================ */
+@media print {
+  html.printing-invoice > body > *:not(#pg-invoice) {
+    display: none !important;
+  }
+  html.printing-invoice {
+    background: #fff !important;
+  }
+}
+
+#pg-invoice {
+  display: none;
+}
+@media print {
+  html.printing-invoice #pg-invoice {
+    display: block !important;
+    direction: rtl;
+    font-family: Vazirmatn, Tahoma, sans-serif;
+    color: #111;
+    background: #fff;
+    padding: 24px;
+  }
+  #pg-invoice .inv-head {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 2px solid #111;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+  #pg-invoice .inv-head h1 { font-size: 20px; font-weight: 800; margin: 0 0 4px; }
+  #pg-invoice .inv-head p { margin: 0; font-size: 12px; color: #444; }
+  #pg-invoice .inv-meta { text-align: left; font-size: 12px; color: #444; }
+  #pg-invoice .inv-meta span { display: block; }
+  #pg-invoice .inv-parties {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 16px;
+    font-size: 12px;
+    margin-bottom: 16px;
+  }
+  #pg-invoice .inv-parties h2 { font-size: 12px; font-weight: 700; margin: 0 0 4px; }
+  #pg-invoice .inv-parties p { margin: 0; color: #333; }
+  #pg-invoice .inv-items { width: 100%; border-collapse: collapse; font-size: 12px; }
+  #pg-invoice .inv-items th, #pg-invoice .inv-items td {
+    border: 1px solid #ddd;
+    padding: 6px 8px;
+    text-align: right;
+  }
+  #pg-invoice .inv-items th { background: #f4f4f4; }
+  #pg-invoice .inv-totals { margin-top: 16px; font-size: 12px; width: 280px; margin-inline-start: auto; }
+  #pg-invoice .inv-totals > div { display: flex; justify-content: space-between; padding: 3px 0; }
+  #pg-invoice .inv-totals .inv-grand {
+    border-top: 1.5px solid #111;
+    margin-top: 6px;
+    padding-top: 6px;
+    font-weight: 800;
+    font-size: 13px;
+  }
+  #pg-invoice .inv-foot {
+    margin-top: 24px;
+    font-size: 10px;
+    color: #777;
+    text-align: center;
+    border-top: 1px solid #eee;
+    padding-top: 8px;
+  }
+}

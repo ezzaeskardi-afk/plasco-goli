@@ -1,7 +1,11 @@
 import Link from "next/link";
-import { getProducts, getCategories, getShopInfo } from "@/lib/api";
+import { getProducts, getCategories, getShopInfo, getRecentReviews } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
+import { StarRow } from "@/components/StarRow";
 import { StoreJsonLd, WebSiteJsonLd, FAQPageJsonLd, ItemListJsonLd } from "@/components/JsonLd";
+import { OrderTrackingSection } from "@/components/home/OrderTracking";
+import { RecentlyViewed } from "@/components/home/RecentlyViewed";
+import { PromoBanner } from "@/components/home/PromoBanner";
 import type { Product, ShopCategory } from "@/lib/types";
 
 // ISR — بدونِ این خط صفحه‌ی اصلی فقط یک بار موقعِ build ساخته می‌شد و برای
@@ -14,16 +18,18 @@ export const revalidate = 300;
 // SSR — داده‌ها موقع رندر سرور گرفته می‌شوند
 // ============================================================
 async function getHomepageData() {
-  const [productsRes, categories, shopInfo] = await Promise.all([
+  const [productsRes, categories, shopInfo, recentReviews] = await Promise.all([
     getProducts({ sort: "newest", page: 1 }).catch(() => null),
     getCategories().catch(() => []),
     getShopInfo().catch(() => null),
+    getRecentReviews().catch(() => ({ reviews: [] })),
   ]);
 
   return {
     products: productsRes?.products?.slice(0, 10) || [],
     categories,
     shopInfo,
+    recentReviews: recentReviews?.reviews?.slice(0, 6) || [],
   };
 }
 
@@ -175,10 +181,57 @@ function TrustBadges() {
 }
 
 // ============================================================
+// حرف مشتری‌ها — دیدگاه‌های واقعیِ تأییدشده (main.js:642)
+// ============================================================
+function TestimonialsSection({
+  reviews,
+}: {
+  reviews: { id: number; rating: number; body: string; userName: string; isBuyer: boolean }[];
+}) {
+  // خالی = مخفی؛ ستونِ تعریفِ خالی اعتماد نمی‌سازد
+  if (!reviews.length) return null;
+
+  return (
+    <section className="mx-auto max-w-[1180px] px-6 pb-16">
+      <h2 className="text-xl md:text-2xl font-extrabold text-ink mb-6">
+        <span className="text-gold">★</span> حرف مشتری‌ها
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {reviews.map((r) => (
+          <figure
+            key={r.id}
+            className="rounded-[18px] p-5 flex flex-col gap-3"
+            style={{ background: "var(--color-surface)" }}
+          >
+            <StarRow value={r.rating} size={14} />
+            <blockquote className="text-xs leading-relaxed text-ink-soft flex-1">
+              {r.body}
+            </blockquote>
+            <figcaption className="flex items-center gap-2 text-[11px]">
+              <span className="font-bold" style={{ color: "var(--color-ink)" }}>
+                {r.userName || "مشتری"}
+              </span>
+              {r.isBuyer && (
+                <span
+                  className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                  style={{ background: "var(--color-teal-tint)", color: "var(--color-teal)" }}
+                >
+                  خریدار
+                </span>
+              )}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
 // صفحه اصلی
 // ============================================================
 export default async function HomePage() {
-  const { products, categories, shopInfo } = await getHomepageData();
+  const { products, categories, shopInfo, recentReviews } = await getHomepageData();
 
   return (
     <>
@@ -189,6 +242,13 @@ export default async function HomePage() {
       <HeroSection banner={shopInfo?.announcement || null} />
       <CategoryBar categories={categories} />
       <BestSellersSection products={products} />
+      {/* بنرِ کد تخفیف — فقط وقتی فروشگاه بنرِ فعالی دارد */}
+      {shopInfo?.promoText && (
+        <PromoBanner text={shopInfo.promoText} code={shopInfo.promoCode || ""} />
+      )}
+      <TestimonialsSection reviews={recentReviews} />
+      <RecentlyViewed />
+      <OrderTrackingSection />
       <TrustBadges />
     </>
   );

@@ -17,7 +17,17 @@ export interface Product {
   images: string[];
   specs: { k: string; v: string }[];
   rating: { count: number; avg: number } | null;
-  wholesale?: unknown;
+  /** پله‌ی قیمت عمده — wholesaleInfo در backend/lib/db.js:737؛ ندارد null */
+  wholesale: WholesaleInfo | null;
+}
+
+/** تخفیف عمده‌ی خودِ محصول (صفحه‌ی محصول) — همان شکلِ CartItemWholesale */
+export interface WholesaleInfo {
+  minQty: number;
+  discount: number;
+  unitPrice: number;
+  /** بدونِ تعدادِ مشخص همیشه true است — فقط نشانه‌ی «پله دارد» */
+  applies: boolean;
 }
 
 export interface ProductListMeta {
@@ -78,6 +88,12 @@ export interface ProductReviewsResponse {
 export interface ReviewSubmitResponse {
   ok: boolean;
   review: Review;
+  message: string;
+}
+
+/** POST /api/products/:id/notify-me — «موجود شد خبرم کن» (routes/products.js:237) */
+export interface NotifyMeResponse {
+  ok: boolean;
   message: string;
 }
 
@@ -310,6 +326,79 @@ export interface TrackOrderResponse {
 
 export interface OrdersResponse {
   orders: Order[];
+}
+
+/** POST /api/orders/:id/cancel و /return — هر دو سفارشِ به‌روزشده برمی‌گردانند */
+export interface OrderMutationResponse {
+  ok: boolean;
+  order: Order;
+}
+
+// ============================================================
+// علاقه‌مندی‌ها — routes/wishlist.js
+// ============================================================
+
+/** GET /api/wishlist/ids — سبک، برای رنگ‌کردنِ قلب‌ها؛ مهمان همیشه [] */
+export interface WishlistIdsResponse {
+  ids: number[];
+}
+
+/** خروجی serializeProduct در routes/wishlist.js:7 — زیرمجموعه‌ای از Product */
+export interface WishlistProduct {
+  id: number;
+  category: string;
+  icon: string;
+  image: string | null;
+  title: string;
+  description: string;
+  price: number;
+  badge: string;
+  stock: number;
+}
+
+export interface WishlistResponse {
+  products: WishlistProduct[];
+}
+
+/** POST /api/wishlist/toggle */
+export interface WishlistToggleResponse {
+  ok: boolean;
+  /** true = اضافه شد، false = حذف شد */
+  inWishlist: boolean;
+  ids: number[];
+}
+
+// ============================================================
+// حساب کاربری — رمز عبور و نشست‌ها (routes/auth.js)
+// ============================================================
+
+/** POST /api/auth/password/set و /password/remove */
+export interface PasswordMutationResponse {
+  ok: boolean;
+  user: User;
+  /** تعداد نشست‌های دیگر که با تغییر رمز بیرون افتادند */
+  revoked: number;
+}
+
+/** POST /api/auth/logout-others */
+export interface LogoutOthersResponse {
+  ok: boolean;
+  revoked: number;
+}
+
+/** GET /api/auth/sessions */
+export interface SessionsResponse {
+  count: number;
+}
+
+/** GET /api/shop/recent-reviews — «حرف مشتری‌ها»ی صفحه‌ی اصلی */
+export interface RecentReviewsResponse {
+  reviews: Review[];
+}
+
+/** GET /api/products/by-ids?ids= — ترتیب خروجی = ترتیب ورودی (تازه‌ترین اول) */
+export interface ProductsByIdsResponse {
+  products: Product[];
 }
 
 // ============================================================

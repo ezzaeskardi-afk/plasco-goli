@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getProducts, getFacets } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
 import { FilterBar } from "@/components/FilterBar";
@@ -51,6 +52,32 @@ function toFa(n: number): string {
 }
 
 // ============================================================
+// سئو — همتای منطقِ products.js:81-97 در نسخه‌ی Express
+// ============================================================
+// فیلترهای عمیق (قیمت/موجودی/جستجو) محتوای یکتا ندارند؛ noindex,follow
+// یعنی «ایندکس نکن ولی از لینک‌ها پیروی کن». کانونیکال هم فقط cat+page را
+// نگه می‌دارد تا هر ترکیبِ فیلتر، URL جداگانه در ایندکس نسازد.
+export async function generateMetadata({
+  searchParams,
+}: ProductsPageProps): Promise<Metadata> {
+  const params = await searchParams;
+  const deepFilter = Boolean(
+    params.q || params.minPrice || params.maxPrice || params.inStockOnly,
+  );
+
+  const sp = new URLSearchParams();
+  if (params.category) sp.set("category", params.category);
+  if (params.page && params.page !== "1") sp.set("page", params.page);
+  const canonical = sp.toString() ? `/products?${sp.toString()}` : "/products";
+
+  return {
+    title: params.category ? `${params.category} — محصولات` : "محصولات",
+    alternates: { canonical },
+    ...(deepFilter ? { robots: { index: false, follow: true } } : {}),
+  };
+}
+
+// ============================================================
 // کامپوننت‌های صفحه
 // ============================================================
 
@@ -91,6 +118,38 @@ function FilterBarFallback() {
     >
       بارگذاری فیلترها...
     </div>
+  );
+}
+
+/** چیپِ فیلترِ فعال — حذفش یک لینکِ سروری است؛ بدون JS هم کار می‌کند */
+function FilterChip({
+  label,
+  removeKey,
+  current,
+}: {
+  label: string;
+  removeKey: string;
+  current: Record<string, string | undefined>;
+}) {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(current)) {
+    if (v && k !== removeKey && k !== "page") sp.set(k, v);
+  }
+  const qs = sp.toString();
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full pl-2 pr-3 py-1 text-[11px] font-medium"
+      style={{ background: "var(--color-teal-tint)", color: "var(--color-teal)" }}
+    >
+      {label}
+      <Link
+        href={qs ? `/products?${qs}` : "/products"}
+        aria-label={`حذف فیلتر ${label}`}
+        className="font-bold leading-none hover:opacity-70"
+      >
+        ×
+      </Link>
+    </span>
   );
 }
 
@@ -208,10 +267,13 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         {/* عنوان + جستجو */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-extrabold text-ink">محصولات</h1>
+            <h1 className="text-2xl font-extrabold text-ink">
+              {params.category || "محصولات"}
+            </h1>
             {total > 0 && (
               <p className="text-xs text-ink-dim mt-1">
                 {toFa(total)} محصول پیدا شد
+                {totalPages > 1 && ` · صفحه‌ی ${toFa(page)} از ${toFa(totalPages)}`}
               </p>
             )}
           </div>
@@ -220,6 +282,44 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
           </div>
         </div>
 
+        {/* پیشنهادِ جستجوی فازی — سرور وقتی نتیجه‌ی دقیق کم بود «منظورت این بود؟»
+            می‌فرستد (meta.suggestion)؛ نشان‌دادنش یعنی نتیجه‌ی خالی بن‌بست نشود */}
+        {meta?.suggestion && (
+          <div
+            className="rounded-full px-4 py-2 text-xs mb-4 inline-block"
+            style={{ background: "var(--color-gold-tint)", color: "var(--color-gold)" }}
+          >
+            منظورتان{" "}
+            <Link
+              href={`/products?q=${encodeURIComponent(meta.suggestion)}`}
+              className="font-bold underline"
+            >
+              «{meta.suggestion}»
+            </Link>{" "}
+            بود؟
+          </div>
+        )}
+
+        {/* چیپ‌های فیلترِ فعال — هر کدام با یک کلیک برداشته می‌شوند
+            (همتای products.js:296) */}
+        {(params.q || params.category || params.minPrice || params.maxPrice || params.inStockOnly) && (
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {params.q && <FilterChip label={`جستجو: ${params.q}`} removeKey="q" current={params} />}
+            {params.category && (
+              <FilterChip label={params.category} removeKey="category" current={params} />
+            )}
+            {params.minPrice && (
+              <FilterChip label={`از ${toFa(Number(params.minPrice))} تومان`} removeKey="minPrice" current={params} />
+            )}
+            {params.maxPrice && (
+              <FilterChip label={`تا ${toFa(Number(params.maxPrice))} تومان`} removeKey="maxPrice" current={params} />
+            )}
+            {params.inStockOnly === "1" && (
+              <FilterChip label="فقط موجود" removeKey="inStockOnly" current={params} />
+            )}
+          </div>
+        )}
+
         {/* فیلترها — کلاینت کامپوننت با Suspense */}
         <div className="mb-6">
           <Suspense fallback={<FilterBarFallback />}>
@@ -227,6 +327,8 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
               currentSort={params.sort}
               currentCategory={params.category}
               currentInStockOnly={params.inStockOnly === "1"}
+              currentMinPrice={params.minPrice ? Number(params.minPrice) : undefined}
+              currentMaxPrice={params.maxPrice ? Number(params.maxPrice) : undefined}
               categories={categories}
               minPrice={facets?.minPrice}
               maxPrice={facets?.maxPrice}

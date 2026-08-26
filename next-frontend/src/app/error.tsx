@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 export default function Error({
   error,
   reset,
@@ -7,6 +9,11 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // بدون این، خطا بی‌صدا قورت داده می‌شد؛ الگوی رسمی Next برای error boundary
+  useEffect(() => {
+    console.error(error);
+  }, [error]);
+
   return (
     <div className="flex items-center justify-center min-h-[60vh] px-4">
       <div className="text-center max-w-md">

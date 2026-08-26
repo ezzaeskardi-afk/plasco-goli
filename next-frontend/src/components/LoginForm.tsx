@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   getChallenge,
   requestOtp,
   verifyOtp,
   passwordLogin,
-  hasPassword,
   saveProfile,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
@@ -21,7 +20,6 @@ export function LoginForm() {
 
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
-  const [challenge, setChallenge] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [otpDigits, setOtpDigits] = useState(["", "", "", "", ""]);
   const [otpError, setOtpError] = useState("");
@@ -29,9 +27,32 @@ export function LoginForm() {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [hasPass, setHasPass] = useState(false);
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // شمارش معکوس cooldown — پایدار در برابر رفرش: زمانِ پایان در
+  // localStorage ذخیره می‌شود (کلید به ازای هر شماره) و موقعِ برگشت به صفحه
+  // از نو محاسبه می‌شود. همتای resendAt در frontend/js/login.js:143.
+  function startCooldown(seconds: number) {
+    const until = Date.now() + seconds * 1000;
+    try {
+      localStorage.setItem(`pg_otp_resend_${phone}`, String(until));
+    } catch {
+      // حالت ناشناس — شمارش فقط در حافظه می‌ماند
+    }
+    setCooldown(seconds);
+  }
+
+  useEffect(() => {
+    if (!phone) return;
+    try {
+      const until = Number(localStorage.getItem(`pg_otp_resend_${phone}`));
+      const remain = Math.ceil((until - Date.now()) / 1000);
+      if (Number.isFinite(remain) && remain > 0) setCooldown(remain);
+    } catch {
+      // بی‌اهمیت
+    }
+  }, [phone]);
 
   // شمارش معکوس cooldown
   useEffect(() => {
@@ -53,24 +74,15 @@ export function LoginForm() {
 
     setLoading(true);
     try {
-      // چک کن رمز داره یا نه
-      try {
-        const hp = await hasPassword(trimmed);
-        setHasPass(hp.hasPassword);
-      } catch {
-        setHasPass(false);
-      }
-
       // دریافت چالش
       const ch = await getChallenge();
-      setChallenge(ch.token);
 
       // درخواست کد
       await requestOtp(trimmed, ch.token);
       setStep("otp");
       setOtpDigits(["", "", "", "", ""]);
       setOtpError("");
-      setCooldown(30);
+      startCooldown(30);
       // فوکوس اولین باکس
       setTimeout(() => otpRefs.current[0]?.focus(), 100);
     } catch (err) {
@@ -86,12 +98,21 @@ export function LoginForm() {
     setLoading(true);
     try {
       const ch = await getChallenge();
-      setChallenge(ch.token);
       await requestOtp(phone.trim(), ch.token);
-      setCooldown(30);
+      startCooldown(30);
       setOtpError("");
     } catch (err) {
+      // ۴۲۹ = کد قبلی هنوز معتبر است؛ پیامِ سرور همین را می‌گوید و
+      // شمارش معکوس هم باید سر جایش بماند (login.js:415).
       setOtpError(err instanceof ApiError ? err.message : "خطا");
+      if (!(err instanceof ApiError && err.status === 429)) {
+        try {
+          localStorage.removeItem(`pg_otp_resend_${phone.trim()}`);
+        } catch {
+          // بی‌اهمیت
+        }
+        setCooldown(0);
+      }
     } finally {
       setLoading(false);
     }

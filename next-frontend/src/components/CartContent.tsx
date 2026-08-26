@@ -8,12 +8,13 @@ import {
   getCart,
   updateCartItem,
   removeFromCart,
+  addToCart,
   applyCoupon,
   removeCoupon,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
-import type { CartResponse, CartItem } from "@/lib/types";
+import type { CartResponse } from "@/lib/types";
 
 function toFa(n: number): string {
   return new Intl.NumberFormat("fa-IR").format(n);
@@ -105,11 +106,36 @@ export function CartContent() {
   });
 
   // Mutation — حذف
+  // برای «بازگرداندن» — همان POST /cart/add؛ پاسخش کلِ سبد است
+  const addMutation = useMutation({
+    mutationFn: ({ productId, qty }: { productId: number; qty: number }) =>
+      addToCart(productId, qty),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["cart"], data);
+    },
+  });
+
   const removeMutation = useMutation({
     mutationFn: (productId: number) => removeFromCart(productId),
     onMutate: async (productId) => {
       await queryClient.cancelQueries({ queryKey: ["cart"] });
       removeItem(productId);
+    },
+    onSuccess: (_data, productId) => {
+      // بازگرداندن با یک کلیک — همتای undo در frontend/js/cart.js:86. حذفِ
+      // اشتباهیِ یک قلم نباید یعنی رفتن به صفحه‌ی محصول و چیدن از اول.
+      const item = cart?.items.find((x) => x.productId === productId);
+      toast("از سبد حذف شد", {
+        tone: "info",
+        action: item
+          ? {
+              label: "بازگرداندن",
+              onClick: () => {
+                addMutation.mutate({ productId, qty: item.qty });
+              },
+            }
+          : undefined,
+      });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["cart"] });

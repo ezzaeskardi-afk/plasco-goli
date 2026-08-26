@@ -64,6 +64,7 @@ import type {
   RelatedProductsResponse,
   ProductReviewsResponse,
   ReviewSubmitResponse,
+  NotifyMeResponse,
   FacetResponse,
   ShopInfo,
   ShopCategory,
@@ -81,7 +82,15 @@ import type {
   ReorderResponse,
   TrackOrderResponse,
   OrdersResponse,
-  Order,
+  OrderMutationResponse,
+  WishlistIdsResponse,
+  WishlistResponse,
+  WishlistToggleResponse,
+  PasswordMutationResponse,
+  LogoutOthersResponse,
+  SessionsResponse,
+  RecentReviewsResponse,
+  ProductsByIdsResponse,
   CrmSummary,
   CrmTag,
   CrmCustomerList,
@@ -106,6 +115,8 @@ export async function getProducts(params?: {
   maxPrice?: number;
   inStockOnly?: boolean;
   search?: string;
+  /** پیش‌فرضِ سرور؛ جستجوی زنده‌ی هدر ۶ تا می‌خواهد */
+  limit?: number;
 }): Promise<ProductListResponse> {
   const sp = new URLSearchParams();
   if (params?.page && params.page > 1) sp.set("page", String(params.page));
@@ -115,6 +126,7 @@ export async function getProducts(params?: {
   if (params?.maxPrice != null) sp.set("maxPrice", String(params.maxPrice));
   if (params?.inStockOnly) sp.set("inStockOnly", "1");
   if (params?.search) sp.set("q", params.search);
+  if (params?.limit) sp.set("limit", String(params.limit));
 
   const qs = sp.toString();
   return fetcher<ProductListResponse>(`/api/products${qs ? `?${qs}` : ""}`);
@@ -162,6 +174,17 @@ export async function submitProductReview(
 
 export async function getFacets(): Promise<FacetResponse> {
   return fetcher<FacetResponse>("/api/products/facets");
+}
+
+/**
+ * «موجود شد خبرم کن» — کالای ناموجود به‌جای بن‌بست، شماره‌ی مشتری را ثبت می‌کند.
+ * سرور با ۴۰۱ (مهمان) و ۴۰۹ (همین حالا موجود شد) جواب می‌دهد؛ هر دو در
+ * NotifyMeButton مدیریت شده‌اند.
+ */
+export async function notifyMeWhenInStock(id: number): Promise<NotifyMeResponse> {
+  return fetcher<NotifyMeResponse>(`/api/products/${id}/notify-me`, {
+    method: "POST",
+  });
 }
 
 // ============================================================
@@ -297,6 +320,42 @@ export async function logout(): Promise<{ ok: boolean }> {
   return fetcher("/api/auth/logout", { method: "POST" });
 }
 
+// ---------- رمز عبور و نشست‌ها (صفحه‌ی حساب) ----------
+
+// اگر حساب رمز داشته باشد سرور `currentPassword` می‌خواهد و بدونش
+// ۴۰۰/۴۰۱ با `needCurrent: true` می‌دهد (routes/auth.js:350).
+export async function setPassword(data: {
+  password: string;
+  currentPassword?: string;
+}): Promise<PasswordMutationResponse> {
+  return fetcher<PasswordMutationResponse>("/api/auth/password/set", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// برداشتنِ رمز — برگشت به ورودِ فقط-پیامکی. همه‌ی نشست‌های دیگر هم بیرون می‌افتند.
+export async function removePassword(
+  currentPassword?: string,
+): Promise<PasswordMutationResponse> {
+  return fetcher<PasswordMutationResponse>("/api/auth/password/remove", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword }),
+  });
+}
+
+// خروج از همه‌ی دستگاه‌های دیگر — بدون عوض‌کردن رمز
+export async function logoutOthers(): Promise<LogoutOthersResponse> {
+  return fetcher<LogoutOthersResponse>("/api/auth/logout-others", {
+    method: "POST",
+  });
+}
+
+// چند نشست هم‌اکنون به این حساب وارد است
+export async function getSessions(): Promise<SessionsResponse> {
+  return fetcher<SessionsResponse>("/api/auth/sessions");
+}
+
 // ============================================================
 // آدرس‌ها
 // ============================================================
@@ -318,6 +377,17 @@ export async function deleteAddress(
   id: number,
 ): Promise<{ ok: boolean }> {
   return fetcher(`/api/addresses/${id}`, { method: "DELETE" });
+}
+
+// ویرایش آدرس — فقط آدرسِ خودِ کاربر؛ سفارش‌های قبلی دست نمی‌خورند
+export async function updateAddress(
+  id: number,
+  data: Omit<Address, "id" | "userId">,
+): Promise<Address> {
+  return fetcher<Address>(`/api/addresses/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 }
 
 // ============================================================
@@ -384,14 +454,73 @@ export async function trackOrder(
   });
 }
 
-export async function cancelOrder(
+// لغو توسط مشتری — فقط سفارشِ paid و قبل از ارسال. سرور بدنه نمی‌خواند
+// (routes/orders.js:269)؛ دلیلِ لغو مالِ فرایند ادمین است.
+export async function cancelOrder(id: number): Promise<OrderMutationResponse> {
+  return fetcher<OrderMutationResponse>(`/api/orders/${id}/cancel`, {
+    method: "POST",
+  });
+}
+
+// درخواست مرجوعی — فقط delivered و تا ۷ روز بعد از تحویل؛ دلیلِ ≥۵ حرف اجباری
+// است (routes/orders.js:291).
+export async function requestOrderReturn(
   id: number,
   reason: string,
-): Promise<{ ok: boolean }> {
-  return fetcher(`/api/orders/${id}/cancel`, {
+): Promise<OrderMutationResponse> {
+  return fetcher<OrderMutationResponse>(`/api/orders/${id}/return`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   });
+}
+
+// ============================================================
+// علاقه‌مندی‌ها — routes/wishlist.js
+// ============================================================
+
+// فقط شناسه‌ها — سبک؛ برای مهمان هم ۲۰۰ با [] می‌دهد (نه ۴۰۱)، پس هدرِ
+// می‌تواند بدونِ سر و صدا بپرسد.
+export async function getWishlistIds(): Promise<WishlistIdsResponse> {
+  return fetcher<WishlistIdsResponse>("/api/wishlist/ids");
+}
+
+// لیست کامل — برای تبِ علاقه‌مندی‌های صفحه‌ی حساب (۴۰۱ برای مهمان)
+export async function getWishlist(): Promise<WishlistResponse> {
+  return fetcher<WishlistResponse>("/api/wishlist");
+}
+
+// افزودن/حذف با یک درخواست؛ پاسخِ سرور آرایه‌ی تازه‌ی شناسه‌ها را هم دارد
+export async function toggleWishlist(
+  productId: number,
+): Promise<WishlistToggleResponse> {
+  return fetcher<WishlistToggleResponse>("/api/wishlist/toggle", {
+    method: "POST",
+    body: JSON.stringify({ productId }),
+  });
+}
+
+export async function removeWishlistItem(
+  productId: number,
+): Promise<WishlistIdsResponse> {
+  return fetcher<WishlistIdsResponse>("/api/wishlist/remove", {
+    method: "POST",
+    body: JSON.stringify({ productId }),
+  });
+}
+
+// «حرف مشتری‌ها»ی صفحه‌ی اصلی — دیدگاه‌های تأییدشده‌ی اخیر
+export async function getRecentReviews(): Promise<RecentReviewsResponse> {
+  return fetcher<RecentReviewsResponse>("/api/shop/recent-reviews");
+}
+
+// Recently-viewed — ترتیبِ خروجی همان ترتیبِ ورودی است (تازه‌ترین اول) و
+// محصولِ حذف‌شده بی‌صدا کنار می‌رود (routes/products.js:156).
+export async function getProductsByIds(
+  ids: number[],
+): Promise<ProductsByIdsResponse> {
+  return fetcher<ProductsByIdsResponse>(
+    `/api/products/by-ids?ids=${ids.join(",")}`,
+  );
 }
 
 // ============================================================

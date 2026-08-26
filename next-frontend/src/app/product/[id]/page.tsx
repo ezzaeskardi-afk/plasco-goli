@@ -4,6 +4,7 @@ import { getProduct, getRelatedProducts, getProducts } from "@/lib/api";
 import { ProductDetail } from "@/components/ProductDetail";
 import { ProductReviews } from "@/components/ProductReviews";
 import { ProductCardGrid } from "@/components/ProductCard";
+import { RecentlyViewed } from "@/components/home/RecentlyViewed";
 import { ProductJsonLd, BreadcrumbJsonLd } from "@/components/JsonLd";
 import type { Metadata } from "next";
 
@@ -125,6 +126,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <ProductCardGrid products={related.slice(0, 5)} />
           </section>
         )}
+
+        {/* اخیراً دیده‌شده — بدونِ خودِ این محصول (js/product.js:41) */}
+        <div className="mt-16">
+          <RecentlyViewed exceptId={product.id} />
+        </div>
       </div>
     </>
   );

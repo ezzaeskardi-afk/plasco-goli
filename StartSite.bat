@@ -2,8 +2,13 @@
 title Polasco Goli - Local Server (closing this window stops the server)
 chcp 65001 >nul
 
-cd /d "E:\claude\polasco-goli\backend"
-if errorlevel 1 echo [ERROR] Could not find folder: E:\claude\polasco-goli\backend & if errorlevel 1 pause & if errorlevel 1 exit /b 1
+rem Path relative to this file's location - works even if the repo moves.
+cd /d "%~dp0backend"
+if errorlevel 1 (
+    echo [ERROR] Could not find folder: %~dp0backend
+    pause
+    exit /b 1
+)
 
 echo ==================================================
 echo    Polasco Goli  -  http://localhost:3000
@@ -14,8 +19,12 @@ echo    Closing this window will STOP the server.
 echo ==================================================
 echo.
 
-rem First run (or new dependency): install packages automatically
-if not exist "node_modules\better-sqlite3" (
+rem First run (or after deleting node_modules): install packages.
+rem Sentinel is the main runtime dep (express). The old check looked for
+rem node_modules\better-sqlite3, a leftover from a previous stack that used
+rem the better-sqlite3 package - this project uses Node's built-in node:sqlite,
+rem so that folder never existed and npm install ran on EVERY launch.
+if not exist "node_modules\express" (
     echo [Setup] Installing dependencies - first run only, takes a minute...
     call npm install
     echo.

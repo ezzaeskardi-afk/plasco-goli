@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Product } from "@/lib/types";
 import { useAddToCart } from "@/lib/useAddToCart";
+import { useShopInfo, lowStockThreshold } from "@/lib/useShopInfo";
+import { useWishlistIds, useToggleWishlist } from "@/lib/useWishlist";
+import { StarRow } from "@/components/StarRow";
+import { NotifyMeButton } from "@/components/NotifyMeButton";
 
 function toFa(n: number): string {
   return new Intl.NumberFormat("fa-IR").format(n);
@@ -16,6 +20,12 @@ function toToman(price: number): string {
 export function ProductCard({ product }: { product: Product }) {
   const outOfStock = product.stock <= 0;
   const hasDiscount = product.discountPercent > 0 && product.oldPrice > 0;
+  const shop = useShopInfo();
+  const { data: wishIds } = useWishlistIds();
+  const wishMutation = useToggleWishlist();
+  const inWishlist = wishIds?.includes(product.id) ?? false;
+  // «فقط N عدد باقی مانده» — آستانه از تنظیماتِ فروشگاه (پیش‌فرض ۵)
+  const lowStock = !outOfStock && product.stock <= lowStockThreshold(shop);
 
   const [justAdded, setJustAdded] = useState(false);
   const addTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -39,6 +49,13 @@ export function ProductCard({ product }: { product: Product }) {
         },
       },
     );
+  }
+
+  function handleWish(e: React.MouseEvent) {
+    // قلب روی لینکِ کارت نشسته؛ بدونِ این کلیک به صفحه‌ی محصول هم می‌رود
+    e.preventDefault();
+    e.stopPropagation();
+    wishMutation.mutate(product.id);
   }
 
   // کلِ کارت قبلاً یک <Link> بود و «دکمه‌ی خرید» در واقع یک <div> بی‌کار داخلش —
@@ -95,6 +112,32 @@ export function ProductCard({ product }: { product: Product }) {
             </span>
           )}
 
+          {/* قلبِ علاقه‌مندی — همتای wishBtnHtml در نسخه‌ی Express (common.js:243).
+              بیرون از <Link> نمی‌شود گذاشت چون گوشه‌ی تصویر است؛ با
+              stopPropagation مسیرِ کلیک از لینک جدا می‌شود. */}
+          <button
+            type="button"
+            onClick={handleWish}
+            disabled={wishMutation.isPending}
+            aria-label={
+              inWishlist ? "حذف از علاقه‌مندی‌ها" : "افزودن به علاقه‌مندی‌ها"
+            }
+            aria-pressed={inWishlist}
+            className="absolute top-2 left-2 z-20 rounded-full p-1.5 transition-colors"
+            style={{
+              background: "rgba(11,20,17,0.55)",
+              color: inWishlist ? "var(--color-coral)" : "var(--color-ink-soft)",
+            }}
+          >
+            <svg
+              width="16" height="16" viewBox="0 0 20 20"
+              fill={inWishlist ? "currentColor" : "none"}
+              stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <path d="M10 17s-6.5-4.1-8.2-8A4.6 4.6 0 0110 5.4 4.6 4.6 0 0118.2 9c-1.7 3.9-8.2 8-8.2 8z" />
+            </svg>
+          </button>
+
           {outOfStock && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60">
               <span className="text-sm font-bold text-gold">ناموجود</span>
@@ -103,9 +146,7 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
 
         {/* بدنهٔ کارت */}
-        <div
-          className={`px-3 pt-3 flex flex-col gap-1.5 ${outOfStock ? "pb-3" : ""}`}
-        >
+        <div className="px-3 pt-3 flex flex-col gap-1.5">
           {product.category && (
             <span className="text-[10px] font-medium text-teal">{product.category}</span>
           )}
@@ -117,14 +158,18 @@ export function ProductCard({ product }: { product: Product }) {
           <div className="flex items-center gap-1 min-h-[1.6em]">
             {product.rating != null && product.rating.count > 0 && (
               <>
-                <span className="text-xs text-gold">
-                  {"★".repeat(Math.round(product.rating.avg))}
-                  {"☆".repeat(5 - Math.round(product.rating.avg))}
-                </span>
+                <StarRow value={product.rating.avg} size={12} />
                 <span className="text-[10px] text-ink-dim">({toFa(product.rating.count)})</span>
               </>
             )}
           </div>
+
+          {/* هشدارِ موجودیِ کم — همتای نسخه‌ی Express (main.js:735) */}
+          {lowStock && (
+            <p className="text-[10px] font-medium text-gold">
+              فقط {toFa(product.stock)} عدد باقی مانده
+            </p>
+          )}
 
           <div className="mt-auto flex items-baseline gap-1.5">
             {hasDiscount ? (
@@ -141,7 +186,7 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
       </Link>
 
-      {!outOfStock && (
+      {!outOfStock ? (
         <div className="mt-auto px-3 pt-2.5 pb-3">
           <button
             type="button"
@@ -174,6 +219,12 @@ export function ProductCard({ product }: { product: Product }) {
             )}
             {justAdded ? "اضافه شد" : busy ? "…" : "خرید"}
           </button>
+        </div>
+      ) : (
+        // کارتِ ناموجود قبلاً پایینش خالی بود و مشتری فقط رد می‌شد. نسخه‌ی
+        // Express این دکمه را در هر سه فهرست داشت (common.js:275).
+        <div className="mt-auto px-3 pt-2.5 pb-3">
+          <NotifyMeButton productId={product.id} size="sm" />
         </div>
       )}
     </article>
