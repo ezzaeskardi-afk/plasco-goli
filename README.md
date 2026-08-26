@@ -7,15 +7,15 @@
 ![deps](https://img.shields.io/badge/runtime%20deps-3-lightgrey)
 ![license](https://img.shields.io/badge/license-proprietary-red)
 
-فروشگاه فارسی محصولات پلاستیکی با frontend ساده‌ی HTML/CSS/JavaScript و backend مبتنی بر Node.js و Express. مشتری محصول را به سبد اضافه می‌کند، با شماره موبایل وارد می‌شود، آدرس تحویل می‌دهد، سفارش ثبت می‌کند و وضعیت سفارش را از حساب کاربری یا صفحه‌ی پیگیری می‌بیند.
+فروشگاه فارسی محصولات پلاستیکی با Next.js (App Router) و backend مبتنی بر Node.js و Express. مشتری محصول را به سبد اضافه می‌کند، با شماره موبایل وارد می‌شود، آدرس تحویل می‌دهد، سفارش ثبت می‌کند و وضعیت سفارش را از حساب کاربری یا صفحه‌ی پیگیری می‌بیند.
 
-> وضعیت فعلی: **۹۵۵ تست خودکار، همه سبز** — ۷۲۲ دود + ۸۶ سئو + ۴۷ OWASP + ۴۵ امنیت + ۳۷ تخفیف + ۱۸ یکپارچگیِ گزارشِ بنچمارک (به‌علاوه‌ی نگهبانِ مرزِ راز که شمارش‌پذیر نیست). CRM پیشرفته با امتیازدهی RFM، وضعیت سیستم در پنل، بنچمارک ۱۰,۰۰۰ کاربر، Cluster Mode (سقف‌های نرخ، قفل حساب و توکن ورود بین workerها مشترک)، و اسکن خودکار OWASP Top 10.
+> وضعیت فعلی: **۹۵۵ تست خودکار، همه سبز** — ۷۲۲ دود + ۸۶ سئو + ۴۷ OWASP + ۴۵ امنیت + ۳۷ تخفیف + ۱۸ یکپارچگیِ گزارشِ بنچمارک (به‌علاوه‌ی نگهبانِ مرزِ راز که شمارش‌پذیر نیست). فرانت‌اند Next.js هم‌اکنون برابری کامل با Express برای فروشگاه مشتری دارد. پنل ادمین در Next.js فقط شامل CRM است و ۱۲ نمای دیگر هنوز در Express باقی مانده‌اند.
 
 ## وضعیت فنی فعلی
 
 - Node.js `>=22.5`، Express و SQLite داخلی Node — **فقط ۳ وابستگیِ اجرا** (`express`، `express-session`، `dotenv`)
+- **Next.js 15.5** با App Router، React 19، TanStack Query 5، Tailwind v4
 - **۱۵۳ تابع** در `db.js` (۲,۹۳۶ خط) — ۲۵ فایل کتابخانه + ۹ مسیر API + ۷ ابزار مدیریتی
-- **۶۰ کامیت** و **۱۹۹ فایل** تحت کنترل نسخه — شمارشِ لحظه‌ی همین کامیت (`git rev-list --count HEAD` و `git ls-files | wc -l`)
 - تست: دود **۷۲۲** | سئو **۸۶** | OWASP **۴۷** | امنیت **۴۵** | تخفیف **۳۷** | یکپارچگیِ بنچمارک **۱۸** = **۹۵۵**
 - بنچمارک: **۱۰,۰۰۰ کاربر همزمان — ۱۰۰٪ موفق، صفر خطا**
 - شاخهٔ اصلی: `main` (تنها شاخه — بدون شاخه‌ی جانبی)
@@ -25,6 +25,10 @@
 نیازمندی: Node.js نسخه‌ی ۲۲.۵ یا بالاتر.
 
 ```bash
+# اجرای سریع (Windows):
+StartSite.bat
+
+# یا دستی:
 cd backend
 npm install
 copy .env.example .env   # Windows
@@ -32,33 +36,38 @@ copy .env.example .env   # Windows
 npm start
 ```
 
-سایت روی `http://localhost:3000` اجرا می‌شود. در حالت توسعه اگر `SESSION_SECRET` تنظیم نشده باشد secret موقت ساخته می‌شود؛ در production این کار ممنوع است.
+سایت روی `http://localhost:3000` اجرا می‌شود. فرانت‌اند Next.js روی `http://localhost:3001` اجرا می‌شود.
 
 ## قابلیت‌های کلیدی
 
-### فروشگاه مشتری
+### فروشگاه مشتری (Next.js — برابری کامل با Express)
 - صفحه اصلی با محصولات پرفروش، جستجوی زنده، و نوار اطلاعیه
 - فهرست محصولات با فیلتر دسته/قیمت/موجودی، مرتب‌سازی و صفحه‌بندی
-- صفحه محصول با گالری چندعکسه، مشخصات، نظرات و محصولات مرتبط
-- سبد خرید با تخفیف و هزینه ارسال
-- ورود با کد پیامکی (OTP) — ۵ باکس واقعی تکرقمی
+- صفحه محصول با گالری چندعکسه (lightbox)، مشخصات، نظرات و محصولات مرتبط
+- سبد خرید با تخفیف و هزینه ارسال (قابلیت بازگرداندن آیتم حذف‌شده)
+- ورود با کد پیامکی (OTP) — ۵ باکس واقعی تکرقمی با cooldown پایدار و مدیریت 429
 - پرداخت از طریق زرین‌پال
-- حساب کاربری با آدرس‌ها، سفارش‌ها و علاقه‌مندی‌ها
+- حساب کاربری با آدرس‌ها، سفارش‌ها و علاقه‌مندی‌ها (۳ تب، با قابلیت لغو سفارش، مرجوعی، فاکتور چاپی)
 - پیگیری سفارش بدون ورود (شماره سفارش + موبایل)
-- فاکتور قابل چاپ
+- علاقه‌مندی‌ها (heart button، صفحه جداگانه، افزودن به سبد)
+- نمایش محصولات اخیراً مشاهده‌شده
+- کد تخفیف قابل کپی در بنر پرومو
+- جستجوی زنده با پیشنهادات (debounced) و ناوبری با کیبورد
 
 ### پنل مدیریت
 - **داشبورد**: فروش، سفارش‌ها، مشتری‌ها، کالاهای رو به اتمام
 - **سفارش‌ها**: مدیریت وضعیت، کد رهگیری، لغو و مرجوعی
 - **انبار**: ویرایش سریع قیمت/موجودی، محصول جدید، آپلود عکس
 - **مشتری‌ها**: لیست با آمار خرید، جستجو و صفحه‌بندی
-- **CRM پیشرفته**: امتیازدهی RFM، سگمنت‌های هوشمند (VIP/پرخطر/بازگشتی)، تایم‌لاین فعالیت، یادداشت و پیگیری
+- **CRM پیشرفته**: امتیازدهی RFM، سگمنت‌های هوشمند (VIP/پرخطر/بازگشتی)، تایم‌لاین فعالیت، یادداشت و پیگیری (با فیلتر تگ، حذف یادداشت/تسک)
 - **نظرات**: مدیریت نظرات با تأیید/رد
 - **تخفیف‌ها**: کد تخفیف درصدی یا ثابت با سقف و تاریخ انقضا
 - **عمده‌فروشی**: درخواست خرید B2B با قیمت پلکانی
 - **گزارش‌ها**: نمودار فروش، محصولات برتر، سهم دسته‌بندی‌ها
 - **وضعیت سیستم**: متریک سرور، سلامت دیتابیس، بکاپ‌ها، لاگ خطاها
 - **تنظیمات**: هزینه ارسال، بنر جشنواره، تعطیلی موقت
+
+> ⚠️ در Next.js فقط نمای CRM پیاده‌سازی شده. ۱۲ نمای دیگر ادمین هنوز در Express frontend باقی مانده‌اند.
 
 ### سئو
 - متاهای og/twitter و canonical **سمت سرور** تزریق می‌شوند
@@ -260,7 +269,7 @@ polasco-goli/
 │   │   ├── css-audit.js       ← بازرسِ ریسپانسیو و متغیرهای CSS
 │   │   └── log-summary.js     ← خلاصه‌ی خطاهای لاگ
 │   └── data/                  ← دیتابیس + بکاپ‌ها (gitignore)
-├── frontend/
+├── frontend/                  ← فرانت‌اند vanilla (Express)
 │   ├── .well-known/
 │   │   └── security.txt       ← responsible disclosure (RFC 9116)
 │   ├── index.html             ← صفحه اصلی
@@ -272,7 +281,7 @@ polasco-goli/
 │   ├── checkout.html          ← پرداخت
 │   ├── order-success.html     ← رسید سفارش پس از پرداخت
 │   ├── account.html           ← حساب کاربری
-│   ├── admin.html             ← پنل مدیریت
+│   ├── admin.html             ← پنل مدیریت (۱۳ نما)
 │   ├── wholesale.html         ← خرید عمده
 │   ├── terms.html             ← قوانین
 │   ├── 404.html               ← صفحه پیدا نشد
@@ -284,6 +293,47 @@ polasco-goli/
 │   ├── css/invoice.css        ← استایلِ فاکتورِ چاپی
 │   ├── js/                    ← اسکریپت‌ها (۱۲ فایل)
 │   └── assets/                ← آیکون‌ها و فونت وزیرمتن
+├── next-frontend/             ← فرانت‌اند Next.js (App Router)
+│   ├── package.json           ← Next.js 15.5, React 19, TanStack Query 5, Tailwind v4
+│   ├── eslint.config.mjs      ← ESLint 9 flat config
+│   ├── src/
+│   │   ├── app/               ← صفحات (App Router)
+│   │   │   ├── page.tsx       ← صفحه اصلی
+│   │   │   ├── layout.tsx     ← Layout اصلی
+│   │   │   ├── globals.css    ← استایل‌ها + print CSS
+│   │   │   ├── products/      ← فهرست محصولات
+│   │   │   ├── product/[id]/  ← صفحه محصول (گالری + wholesale)
+│   │   │   ├── cart/          ← سبد خرید (undo toast)
+│   │   │   ├── login/         ← ورود (cooldown پایدار + 429)
+│   │   │   ├── checkout/      ← پرداخت (closed-shop guard + edit address)
+│   │   │   ├── account/       ← حساب کاربری (۳ تب)
+│   │   │   ├── wholesale/     ← خرید عمده
+│   │   │   ├── admin/crm/     ← CRM پنل ادمین
+│   │   │   └── order-success/ ← رسید سفارش
+│   │   ├── components/        ← کامپوننت‌ها
+│   │   │   ├── Header.tsx     ← هدر (search suggestions + wishlist icon)
+│   │   │   ├── ProductCard.tsx ← کارت محصول (heart + low-stock)
+│   │   │   ├── ProductDetail.tsx ← جزئیات محصول (gallery/lightbox/specs/wholesale)
+│   │   │   ├── AccountContent.tsx ← حساب کاربری (orders/wishlist/profile)
+│   │   │   ├── CartContent.tsx ← سبد خرید (undo toast)
+│   │   │   ├── CheckoutContent.tsx ← پرداخت
+│   │   │   ├── LoginForm.tsx  ← فرم ورود
+│   │   │   ├── FilterBar.tsx  ← فیلتر (price range + Persian digits)
+│   │   │   ├── NotifyMeButton.tsx ← دکمه اطلاع‌رسانی
+│   │   │   ├── CrmContent.tsx ← CRM (note/task delete, tag filter)
+│   │   │   └── home/          ← کامپوننت‌های صفحه اصلی
+│   │   │       ├── OrderTracking.tsx ← پیگیری سفارش (guest)
+│   │   │       ├── RecentlyViewed.tsx ← محصولات اخیر
+│   │   │       └── PromoBanner.tsx ← بنر پرومو
+│   │   └── lib/               ← کتابخانه‌ها
+│   │       ├── api.ts         ← توابع API (products, cart, auth, wishlist, orders, shop)
+│   │       ├── types.ts       ← تایپ‌ها (Product, Order, Wishlist, WholesaleInfo, etc.)
+│   │       ├── queries.ts     ← React Query hooks (useProducts, useCart, etc.)
+│   │       ├── useWishlist.ts ← hooks علاقه‌مندی‌ها
+│   │       ├── useShopInfo.ts ← hook تنظیمات فروشگاه
+│   │       └── recent.ts      ← localStorage محصولات اخیر
+│   ├── eslint.config.mjs      ← ESLint flat config (no warnings)
+│   └── tsconfig.json
 └── picture/                   ← عکس محصولات — بیرونِ frontend
     ├── logo/
     └── products/
@@ -299,11 +349,24 @@ polasco-goli/
 نیاز دارید Node.js **نسخه‌ی ۲۲.۵ به بالا** نصب باشه.
 
 ```bash
+# اجرای سریع (Windows):
+StartSite.bat
+
+# یا دستی:
 cd backend
 npm install
 copy .env.example .env   # Windows
 # یا: cp .env.example .env
 npm start
+```
+
+فرانت‌اند Next.js:
+```bash
+cd next-frontend
+npm install
+npm run dev    # اجرا روی port 3001
+npm run build  # بیلد production
+npm run lint   ← بررسی ESLint (باید 0 warning باشد)
 ```
 
 تست‌ها:
@@ -317,7 +380,7 @@ npm run test:full             # هر شش مجموعه — ۹۵۵ تست
 ## مسیر خرید
 
 ۱. مشتری محصول رو به سبد اضافه می‌کنه (بدون نیاز به ورود)
-۲. وارد صفحه‌ی سبد خرید می‌شه، تعداد رو تنظیم می‌کنه
+۲. وارد صفحه‌ی سبد خرید می‌شه، تعداد رو تنظیم می‌کنه (یا آیتم حذف‌شده را بازگردانی می‌کنه)
 ۳. روی «تکمیل خرید» می‌زنه → اگه وارد نشده، به صفحه‌ی ورود می‌ره
 ۴. با شماره موبایل، کد ۵ رقمی دریافت می‌کنه و وارد می‌شه
 ۵. آدرس تحویل رو وارد می‌کنه (یا از آدرس‌های قبلی انتخاب می‌کنه)
@@ -356,6 +419,13 @@ CLUSTER_ENABLED=true pm2 start ecosystem.config.js
 
 # یا مستقیم:
 CLUSTER_ENABLED=true node backend/server.js
+```
+
+فرانت‌اند Next.js:
+```bash
+cd next-frontend
+npm run build
+npm start       # اجرا روی port 3001
 ```
 
 ## امنیت
