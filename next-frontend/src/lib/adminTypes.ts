@@ -474,3 +474,133 @@ export interface SettingsResponse {
  * که `note()` در رویدادها فقط همان‌ها را ثبت می‌کند.
  */
 export type AdminSettingsInput = Partial<AdminSettings>;
+
+// ============================================================
+// وضعیت سیستم — GET /api/admin/system-status
+// ============================================================
+// عمداً نگاشتِ تنبل نیست: این نما درباره‌ی **سلامت** است، پس اگر شکلی که
+// نمایش می‌دهیم با شکلی که سرور می‌فرستد یکی نباشد، ارزشِ کلِ نما از بین
+// می‌رود (یک صفحه‌ی «همه‌چیز خوب است» که عددهایش اشتباه است، از نبودنش
+// بدتر است). شکل‌ها با اجرای واقعیِ endpoint روی یک سرورِ سندباکس گرفته شدند.
+
+export interface AdminBackupFile {
+  name: string;
+  sizeKb: number;
+  /** ISO — از mtime فایل، پس با منطقه‌ی زمانی محلی نمایش داده می‌شود */
+  createdAt: string;
+}
+
+/** قلبِ این نما: سلامتِ خودِ دیتابیس و آخرین بکاپ */
+export interface AdminDbHealth {
+  ok: boolean;
+  products: number;
+  /** زمانِ یک SELECT واقعی — کندیِ دیسک را قبل از اینکه کاربر حسش کند نشان می‌دهد */
+  queryMs: number;
+  sizeKb: number;
+  /** فایلِ WAL. بزرگشدنش یعنی checkpoint گیر کرده (روی پوشه‌ی همگام‌شده پیش می‌آید) */
+  walKb: number;
+  walWarn: boolean;
+  /** `null` یعنی هیچ بکاپی وجود ندارد — نه «قدیمی است» */
+  lastBackup: { file: string; ageHours: number } | null;
+  /** بیش از ۴۸ ساعت بدون بکاپ */
+  backupStale: boolean;
+}
+
+/** خروجیِ PRAGMA quick_check — فقط با درخواستِ صریح (`?deep=1`) اجرا می‌شود */
+export interface AdminIntegrity {
+  ok: boolean;
+  message: string;
+}
+
+export interface AdminDbHealthResponse {
+  health: AdminDbHealth;
+  /** وقتی `deep=1` نفرستاده باشیم `null` است */
+  integrity: AdminIntegrity | null;
+}
+
+/** متریک‌های درون‌حافظه‌ای سرور — از lib/metrics.js */
+export interface AdminMetrics {
+  uptimeSeconds: number;
+  totalRequests: number;
+  slowRequests: number;
+  avgMs: number;
+  p50Ms: number;
+  p95Ms: number;
+  p99Ms: number;
+  /** کدِ وضعیت → تعداد، مثلاً `{"200": 1200, "404": 31}` */
+  statuses: Record<string, number>;
+  topRoutes: AdminRouteMetric[];
+  routeCount: number;
+}
+
+export interface AdminRouteMetric {
+  route: string;
+  count: number;
+  avgMs: number;
+  maxMs: number;
+  slow: number;
+}
+
+export interface AdminErrorDay {
+  day: string;
+  errors: number;
+  http5xx: number;
+}
+
+/**
+ * یک گروهِ خطا. `stack` و `reason` از **تازه‌ترین** نمونه می‌آیند (نه اولین)
+ * تا تمامِ ردیف یک لحظه را توصیف کند — همان تصمیمی که در lib/error-digest.js
+ * گرفته شده.
+ */
+export interface AdminErrorGroup {
+  key: string;
+  title: string;
+  count: number;
+  first: string;
+  last: string;
+  reason: string;
+  stack: string[];
+}
+
+export interface AdminErrorsDigest {
+  days?: number;
+  since?: string;
+  totals: { errors: number; groups?: number; http5xx?: number; today?: number };
+  daily?: AdminErrorDay[];
+  groups?: AdminErrorGroup[];
+  /**
+   * اگر خواندنِ پوشه‌ی لاگ شکست بخورد، سرور به‌جای ۵۰۰ این را می‌فرستد.
+   * رابط باید نمایش دهدش، وگرنه «۰ خطا» به‌غلط یعنی «همه‌چیز خوب است».
+   */
+  unavailable?: string;
+}
+
+export interface AdminServerInfo {
+  uptime: number;
+  nodeVersion: string;
+  platform: string;
+  pid: number;
+  memory: {
+    rssMb: number;
+    heapUsedMb: number;
+    heapTotalMb: number;
+    externalMb: number;
+  };
+}
+
+export interface AdminSystemStatus {
+  server: AdminServerInfo;
+  metrics: AdminMetrics;
+  health: AdminDbHealth;
+  errors: AdminErrorsDigest;
+  /** تازه‌ترین اول — از همان پوشه‌ای که دکمه‌ی «بکاپ بگیر» می‌نویسد */
+  backups: AdminBackupFile[];
+  /** رویدادهای پنل — همان شکلِ ActivityEntry داشبورد */
+  adminLog: ActivityEntry[];
+}
+
+export interface AdminBackupResponse {
+  ok: boolean;
+  /** فقط نامِ فایل (بدونِ مسیر) */
+  file: string;
+}

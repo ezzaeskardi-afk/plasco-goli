@@ -61,7 +61,16 @@ export function tomanShort(n: number): string {
 // افزودنِ `Z` تا UTC صریح شود.
 function toUtc(v: string | null | undefined): Date | null {
   if (!v) return null;
-  const d = new Date(String(v).replace(" ", "T") + "Z");
+  const raw = String(v);
+  // دو شکلِ زمانیِ متفاوت از سرور می‌آید و اینجا یکی می‌شوند:
+  //   • تایم‌استمپِ دیتابیس: «2026-08-23 21:36:11» — فاصله دارد، Z ندارد
+  //   • مِتی‌امپِ فایلِ بکاپ:  «2026-09-25T13:17:01.084Z» — ISO و کامل
+  // قبلاً به هر دو «Z» افزوده می‌شد؛ روی دومی «...084ZZ» می‌ساخت که تاریخِ
+  // بی‌اعتبار است و نتیجه‌اش «—» بود. فهرستِ بکاپ‌ها همه‌جا «— — —» نشان
+  // می‌داد و خطِ «آخرین خواندن» هم خالی می‌ماند. حالا فقط آن‌که Z ندارد
+  // علامت می‌خورد.
+  const iso = /[TZ]/.test(raw) ? raw : raw.replace(" ", "T") + "Z";
+  const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
