@@ -2825,14 +2825,22 @@ function getDbHealth() {
   const queryMs = Number(process.hrtime.bigint() - t0) / 1e6;
 
   const sizeOf = (f) => { try { return fs.statSync(f).size; } catch (e) { return 0; } };
-  let lastBackup = null;
-  try {
-    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.db')).sort();
-    if (files.length) {
-      const st = fs.statSync(path.join(BACKUP_DIR, files[files.length - 1]));
-      lastBackup = { file: files[files.length - 1], ageHours: Math.round((Date.now() - st.mtimeMs) / 36e5) };
-    }
-  } catch (e) { /* بکاپ هنوز ساخته نشده */ }
+
+  // «آخرین بکاپ» از همان تابعی می‌آید که فهرستِ بکاپ‌ها را هم می‌دهد
+  // (listBackups) — نه از یک خواندنِ جدا از همان پوشه.
+  //
+  // اینجا قبلاً `readdirSync(...).sort()` بود و آخرین عضوِ **الفبایی**
+  // برداشته می‌شد. روی پوشه‌ای که فقط `polasco-YYYY-MM-DD.db` دارد این تصادفاً
+  // درست است، ولی پوشه‌ی واقعی چند فایلِ دستی و پیش‌از‌بازیابی هم دارد و
+  // «pre-…» الفبایی بعد از «polasco-…» می‌آید. نتیجه روی ماشینِ مغازه:
+  // آخرین بکاپ «pre-recovery-20260726-021009.db» گزارش می‌شد (۱۴۷۹ ساعت پیش)
+  // و backupStale به‌غلط true می‌شد، در حالی که بکاپِ همان روزِ کنارش در
+  // فهرست بود — یعنی یک هشدارِ قرمزِ کاذب. حالا معیارِ «تازه‌ترین» در هر دو
+  // مصرف‌کننده یکی است: mtime.
+  const newest = listBackups(1)[0];
+  const lastBackup = newest
+    ? { file: newest.name, ageHours: Math.round((Date.now() - Date.parse(newest.createdAt)) / 36e5) }
+    : null;
 
   // WAL که بی‌رویه بزرگ می‌شود یعنی checkpoint اتفاق نمی‌افتد (روی پوشه‌های
   // همگام‌شونده پیش می‌آید). قبل از اینکه به مشکل تبدیل شود باید دیده شود.
@@ -2848,6 +2856,37 @@ function getDbHealth() {
     lastBackup,
     backupStale: !lastBackup || lastBackup.ageHours > 48
   };
+}
+
+/**
+ * فهرستِ فایل‌های بکاپ — **از همان پوشه‌ای که backupNow می‌نویسد**.
+ *
+ * چرا این تابع لازم شد: routes/admin.js مسیر را خودش دستی می‌ساخت
+ * (`path.join(__dirname, '..', '..', 'data', 'backups')`) و همین یک اشتباه،
+ * یک تناقضِ خاموش تولید می‌کرد. روی سروری که `PG_DATA_DIR` دارد، بکاپ در
+ * `<PG_DATA_DIR>/backups` نوشته می‌شود ولی فهرست از `backend/data/backups`
+ * خوانده می‌شد. نتیجه: بلافاصله بعد از یک بکاپِ دستیِ **موفق**، نمای «وضعیت
+ * سیستم» می‌گفت هیچ بکاپی نیست، در حالی که db-health همان بکاپ را «۰ ساعت
+ * پیش» نشان می‌داد — دو جای یک پنل که درباره‌ی یک چیز دو حرف می‌زدند.
+ *
+ * روی ماشینِ خودِ مغازه (بدونِ PG_DATA_DIR) هر دو مسیر یکی است، پس هیچ‌وقت
+ * دیده نمی‌شد. با اندازه‌گیری روی سرورِ سندباکس پیدا شد: `POST /backup`
+ * موفق بود ولی `backups.length` همان صفر ماند.
+ */
+function listBackups(limit = 20) {
+  try {
+    return fs.readdirSync(BACKUP_DIR)
+      .filter(f => f.endsWith('.db'))
+      .map(f => {
+        const st = fs.statSync(path.join(BACKUP_DIR, f));
+        return { name: f, sizeKb: Math.round(st.size / 1024), createdAt: st.mtime.toISOString() };
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  } catch (e) {
+    // پوشه هنوز نیست یعنی هنوز بکاپی ساخته نشده؛ «خالی» پاسخِ درست است نه خطا
+    return [];
+  }
 }
 
 // بررسی سلامت ساختاری — گران‌تر از getDbHealth، پس فقط با درخواست ادمین
@@ -2893,7 +2932,7 @@ function closeDb(log = console) {
 }
 
 module.exports = {
-  db, DATA_DIR, initDb, closeDb, getDbHealth, checkIntegrity, checkpointWal,
+  db, DATA_DIR, initDb, closeDb, getDbHealth, listBackups, checkIntegrity, checkpointWal,
   flushVisits,
   getProducts, getProduct, upsertProductsTx,
   // نسخه‌های عمومی — پیش‌نویس‌ها را نشان نمی‌دهند (ستون published)

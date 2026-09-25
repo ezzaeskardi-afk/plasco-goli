@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getAdminSettings, updateAdminSettings, getCoupons } from "@/lib/adminApi";
 import { ApiError } from "@/lib/api";
@@ -652,9 +653,17 @@ export function SettingsContent() {
       </div>
 
       <p className="text-[10px] leading-relaxed" style={{ color: "var(--color-ink-dim)" }}>
-        «بازخوانی از سرور» تغییراتِ ذخیره‌نشده را دور می‌ریزد. بکاپِ دستی و خروجیِ
-        اکسل در این نما نیستند؛ آن دو بخشِ «نگهداری» بودند و در نمای «وضعیت سیستم»
-        می‌آیند.
+        «بازخوانی از سرور» تغییراتِ ذخیره‌نشده را دور می‌ریزد. بکاپِ دستی در این
+        نما نیست — «تنظیم» نیست، عمل است و در{" "}
+        <Link
+          href="/admin/system"
+          className="font-bold underline underline-offset-2"
+          style={{ color: "var(--color-teal)" }}
+        >
+          وضعیت سیستم
+        </Link>{" "}
+        کنارِ سلامتِ دیتابیس و فهرست بکاپ‌ها است. خروجیِ اکسل هنوز در پنل Express
+        است.
       </p>
     </div>
   );

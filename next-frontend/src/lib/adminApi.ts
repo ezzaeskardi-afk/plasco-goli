@@ -31,6 +31,9 @@ import type {
   StaffMutationResponse,
   SettingsResponse,
   AdminSettingsInput,
+  AdminSystemStatus,
+  AdminDbHealthResponse,
+  AdminBackupResponse,
 } from "./adminTypes";
 
 // ============================================================
@@ -328,6 +331,40 @@ export async function setReviewStatus(
     method: "POST",
     body: JSON.stringify({ status }),
   });
+}
+
+// ============================================================
+// وضعیت سیستم
+// ============================================================
+
+/**
+ * همه‌ی وضعیتِ سرور در یک درخواست: متریک‌ها، سلامت دیتابیس، بکاپ‌ها،
+ * خطاهای هفت روزِ اخیر و رویدادهای اخیرِ پنل.
+ *
+ * سرور برای همین مسیر `Cache-Control: no-store` می‌گذارد؛ اینجا هم هیچ
+ * کشی نمی‌خواهیم — عددِ کهنه در نمای سلامت، گمراه‌کننده است.
+ */
+export async function getSystemStatus(): Promise<AdminSystemStatus> {
+  return fetcher<AdminSystemStatus>("/api/admin/system-status");
+}
+
+/**
+ * سلامتِ دیتابیس، و با `deep` یک `PRAGMA quick_check` واقعی.
+ *
+ * چرا عمیق پیش‌فرض نیست: quick_check کلِ فایل را می‌خواند. همان مسیر روی
+ * مانیتورینگ می‌تواند سرور را زمین بزند، پس فقط با کلیکِ صریحِ مدیر اجرا
+ * می‌شود (routes/admin.js → /db-health با `?deep=1`).
+ */
+export async function getDbHealth(deep = false): Promise<AdminDbHealthResponse> {
+  return fetcher<AdminDbHealthResponse>(`/api/admin/db-health${deep ? "?deep=1" : ""}`);
+}
+
+/**
+ * بکاپِ دستی. اگر بکاپِ امروز از قبل باشد، سرور همان را برمی‌گرداند و
+ * کاری نمی‌کند (lib/db.js → backupNow یک فایل در روز).
+ */
+export async function runBackup(): Promise<AdminBackupResponse> {
+  return fetcher<AdminBackupResponse>("/api/admin/backup", { method: "POST" });
 }
 
 // دوباره صادر می‌شود تا کامپوننت‌ها یک مسیرِ import داشته باشند

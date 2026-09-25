@@ -22,7 +22,7 @@ const {
   adminListCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon, getCouponById,
   getCategoriesFull, ensureCategory, adminCreateCategory, adminUpdateCategoryTx, adminDeleteCategory, adminMoveCategoryTx,
   getProductsWithSales, getUserDetail, logAdminAction, getAdminLog,
-  getSettings, setSettingsTx, backupNow, getDbHealth, checkIntegrity,
+  getSettings, setSettingsTx, backupNow, getDbHealth, listBackups, checkIntegrity,
   findOrCreateUser, updateUserName, createManualOrderTx,
   getPendingStockAlerts, markStockAlertsNotified,
   crmGetSummary, crmSearchCustomers, crmGetCustomer,
@@ -1207,21 +1207,15 @@ router.get('/system-status', (req, res) => {
   try {
     errors = errorDigest({ logDir: log.LOG_DIR, rootDir: path.join(__dirname, '..', '..'), days: 7 });
   } catch (e) { errors = { totals: { errors: 0 }, groups: [], unavailable: e.message }; }
-  // فایل‌های بکاپ
-  let backups = [];
-  try {
-    const backupDir = path.join(__dirname, '..', '..', 'data', 'backups');
-    if (fs.existsSync(backupDir)) {
-      backups = fs.readdirSync(backupDir)
-        .filter(f => f.endsWith('.db'))
-        .map(f => {
-          const st = fs.statSync(path.join(backupDir, f));
-          return { name: f, sizeKb: Math.round(st.size / 1024), createdAt: st.mtime.toISOString() };
-        })
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .slice(0, 20);
-    }
-  } catch (e) { /* ignore */ }
+  // فایل‌های بکاپ — از `listBackups` و نه از یک مسیرِ دستیِ همین‌جا.
+  //
+  // اینجا قبلاً `path.join(__dirname, '..', '..', 'data', 'backups')` بود و
+  // روی سروری که PG_DATA_DIR دارد، فهرست از پوشه‌ی اشتباه خوانده می‌شد: بکاپ
+  // در `<PG_DATA_DIR>/backups` نوشته می‌شد ولی این نما پوشه‌ی "backend/data"
+  // را می‌خواند. یعنی بعد از یک بکاپِ دستیِ موفق، همین صفحه "بکاپی نیست"
+  // می‌گفت در حالی که `db-health` همان بکاپ را "۰ ساعت پیش" نشان می‌داد.
+  // حالا هر دو از یک تعریف می‌خوانند (lib/db.js → listBackups).
+  const backups = listBackups();
   // لاگ ادمین اخیر
   let adminLog = [];
   try { adminLog = getAdminLog(30); } catch (e) { /* ignore */ }
