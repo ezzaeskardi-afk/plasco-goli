@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -27,6 +27,7 @@ import {
   faDateTime,
   faNum,
   toman,
+  useIsNarrow,
 } from "@/components/admin/AdminBits";
 import type { AdminOrder, OrderStatus } from "@/lib/adminTypes";
 
@@ -49,6 +50,18 @@ import type { AdminOrder, OrderStatus } from "@/lib/adminTypes";
 //  ۳. جزئیات از یک کوئریِ جداگانه می‌آید، نه از ردیفِ فهرست. وگرنه به‌محضِ
 //     اینکه سفارش از فیلترِ فعلی خارج شود (مثلاً «ارسال‌شده» را می‌زنی و فیلتر
 //     روی «پرداخت‌شده» است) پنلِ جزئیات زیرِ دست ناپدید می‌شد.
+//
+// ============================================================
+// موبایل: چرا جزئیات یک «برگه» شد
+// ============================================================
+// چیدمانِ دوستونه روی موبایل به یک ستون تبدیل می‌شود، یعنی جزئیات **زیر**
+// فهرست می‌افتد. اندازه‌گیری روی همان سرور با ۳۹۰ پیکسل عرض: با ۲۵ سفارش،
+// فهرست ۲۷۰۰ پیکسل بود و پنلِ جزئیات از ۳۱۸۳ پیکسل شروع می‌شد. یعنی مدیر
+// روی سفارش می‌زد و **هیچ اتفاقی نمی‌افتاد** — جزئیات چهار صفحه پایین‌تر بود.
+//
+// حالا روی موبایل جزئیات یک برگه‌ی تمام‌صفحه است که با «بستن» یا Escape
+// بسته می‌شود، و روی دسکتاپ دقیقاً همان ستونِ چسبانِ کنارِ فهرست می‌ماند.
+// یک گرهِ DOM و دو نمایش، نه دو کامپوننت.
 
 type Filter = "all" | "active" | OrderStatus;
 
@@ -88,6 +101,56 @@ export function OrdersContent() {
   const onMutationError = (err: unknown, fallback: string) => {
     toast(err instanceof ApiError ? err.message : fallback, { tone: "error" });
   };
+
+  const detailOpen = selectedId != null;
+  const narrow = useIsNarrow();
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // روی موبایل برگه تمام‌صفحه است، پس:
+  //   • اسکرولِ پشتِ آن قفل می‌شود — وگرنه انگشت روی برگه، فهرستِ زیرش را
+  //     می‌کشد و مدیر نمی‌فهمد کدام دارد حرکت می‌کند.
+  //   • Escape می‌بنددش؛ همان انتظاری که از هر دیالوگی می‌رود.
+  // روی دسکتاپ هیچ‌کدام لازم نیست: جزئیات یک ستونِ کنارِ فهرست است.
+  //
+  // ⚠️ قفل روی **هر دو** عنصر گذاشته می‌شود: `body` تنها کافی نیست، چون عنصرِ
+  // اسکرول‌شونده در این چیدمان `html` است.
+  //
+  // و یک هشدار درباره‌ی سنجشش: `window.scrollBy` این را نشان نمی‌دهد، چون
+  // `overflow: hidden` جلوی اسکرولِ *کاربر* را می‌گیرد نه اسکرولِ کد را؛
+  // آزمونِ اولم با همین اشتباه «قفل نشده» گزارش داد. با چرخِ واقعیِ ماوس
+  // سنجیده شد: صفحه روی ۰ می‌ماند و خودِ برگه اسکرول می‌شود.
+  useEffect(() => {
+    if (!detailOpen || !narrow) return;
+    const html = document.documentElement;
+    const prevHtml = html.style.overflow;
+    const prevBody = document.body.style.overflow;
+    html.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      html.style.overflow = prevHtml;
+      document.body.style.overflow = prevBody;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [detailOpen, narrow]);
+
+  // برگه از بالا باز شود. بدونِ این، اگر سفارشِ قبلی را تا پایین اسکرول کرده
+  // باشی، برگه‌ی سفارشِ بعدی هم از همان‌جا شروع می‌شود و سرِ سفارش (شماره،
+  // وضعیت، اقلام) بیرون از دید می‌ماند.
+  useEffect(() => {
+    if (narrow) sheetRef.current?.scrollTo({ top: 0 });
+  }, [selectedId, narrow]);
+
+  // فوکوس روی «بستن» تا راهِ خروج با کیبورد/صفحه‌خوان هم باز باشد.
+  // توجه: تلهٔ کاملِ فوکوس پیاده نشده؛ این یک برگه‌ی کارِ روزمره است و نه
+  // یک مودالِ حساب‌شده، ولی حداقلِ درست (خروج با Escape و فوکوسِ اولیه) هست.
+  useEffect(() => {
+    if (detailOpen && narrow) closeRef.current?.focus();
+  }, [detailOpen, narrow]);
 
   const statusMutation = useMutation({
     mutationFn: ({ id, from, to }: { id: number; from: OrderStatus; to: OrderStatus }) =>
@@ -143,7 +206,8 @@ export function OrdersContent() {
                   setFilter(t.key);
                   setOffset(0);
                 }}
-                className="rounded-full px-3 py-1.5 text-xs font-bold transition-colors"
+                // ۳۶ پیکسل روی موبایل، ۲۸ روی دسکتاپ — همان استدلالِ `Btn`.
+                className="rounded-full px-3 py-2 text-xs font-bold transition-colors sm:py-1.5"
                 style={
                   on
                     ? { background: "var(--color-teal-tint)", color: "var(--color-teal)" }
@@ -158,8 +222,11 @@ export function OrdersContent() {
           })}
         </div>
 
+        {/* روی موبایل جستجو یک ردیفِ کاملِ خودش را می‌گیرد و دکمه زیرش می‌آید؛
+            روی دسکتاپ همان ردیفِ کنارِ هم. قبلاً در یک ردیفِ ۳۴۲ پیکسلی جا
+            می‌شد و جای‌نگهدارِ بلند وسط کلمه بریده می‌شد. */}
         <form
-          className="flex gap-2"
+          className="flex flex-col gap-2 sm:flex-row"
           onSubmit={(e) => {
             e.preventDefault();
             setSearch(q.trim());
@@ -169,16 +236,17 @@ export function OrdersContent() {
           <Input
             value={q}
             onChange={setQ}
-            placeholder="جستجو: شماره سفارش، موبایل، نام، کد رهگیری…"
+            placeholder="شماره سفارش، موبایل، نام…"
             ariaLabel="جستجوی سفارش"
-            className="flex-1 min-w-0"
+            className="min-w-0 flex-1"
           />
-          <Btn type="submit" tone="teal">
+          <Btn type="submit" tone="teal" className="w-full sm:w-auto">
             جستجو
           </Btn>
           {search && (
             <Btn
               tone="dim"
+              className="w-full sm:w-auto"
               onClick={() => {
                 setQ("");
                 setSearch("");
@@ -291,7 +359,66 @@ export function OrdersContent() {
         </div>
 
         {/* ---------- جزئیات ---------- */}
-        <div className="lg:col-span-2 lg:sticky lg:top-4">
+        {/*
+          `z-[60]` عمدی است: هدرِ خودِ سایت `sticky z-50` است و اگر برگه
+          هم z-50 بود، هدر روی سرِ برگه می‌افتاد. توست‌ها zIndex ۲۰۰ دارند،
+          پس پیامِ «ذخیره شد» روی برگه دیده می‌شود — که مهم است، چون تغییرِ
+          وضعیت داخلِ همین برگه انجام می‌شود.
+
+          `lg:` همه‌ی خواصِ برگه را برمی‌گرداند (inset-auto، z-auto، overflow و
+          برگشت به sticky). بدونِ آن یک عنصرِ fixed روی صفحه‌ی بزرگ هم تمام‌صفحه
+          می‌ماند.
+        */}
+        <div
+          ref={sheetRef}
+          role={detailOpen && narrow ? "dialog" : undefined}
+          aria-modal={detailOpen && narrow ? true : undefined}
+          aria-label={detailOpen && narrow ? "جزئیات سفارش" : undefined}
+          // فاصلة جانبی عمداً روی خودِ برگه نیست، روی جعبة محتواست.
+          // اگر برگه `p-4` داشت، نوارِ چسبانِ سر با `top-0` در ۱۶ پیکسل پایین‌تر
+          // گیر می‌کرد و محتوای اسکرول‌شده از آن نوارِ باریکِ بالای سرش بیرون
+          // می‌زد. در مرورگر دیده شد: ردیفِ «ارسال / مبلغ کل» بالای سربرگ
+          // لیز می‌خورد. حالا نوارِ چسبان دقیقاً از لبة بالایی شروع می‌شود.
+          className={
+            detailOpen
+              ? "fixed inset-0 z-[60] overflow-y-auto pb-24 lg:sticky lg:inset-auto lg:top-4 lg:z-auto lg:col-span-2 lg:overflow-visible"
+              : "hidden lg:block lg:col-span-2 lg:sticky lg:top-4"
+          }
+          style={
+            detailOpen && narrow ? { background: "var(--color-cream)" } : undefined
+          }
+        >
+          {selectedId != null && (
+            <div
+              className="lg:hidden sticky top-0 z-10 flex items-center gap-3 border-b px-4 py-3"
+              style={{
+                background: "var(--color-surface)",
+                borderColor: "var(--color-line)",
+              }}
+            >
+              <span
+                className="text-sm font-extrabold"
+                style={{ color: "var(--color-ink)" }}
+              >
+                سفارش #{faNum(selectedId)}
+              </span>
+              <button
+                ref={closeRef}
+                type="button"
+                onClick={() => setSelectedId(null)}
+                className="mr-auto flex min-h-11 items-center gap-1.5 rounded-full px-4 text-xs font-bold"
+                style={{
+                  background: "var(--color-surface-2)",
+                  color: "var(--color-ink-soft)",
+                }}
+              >
+                <span aria-hidden="true">✕</span> بستن
+              </button>
+            </div>
+          )}
+
+          {/* فاصلة موبایل اینجاست، نه روی خودِ برگه — به همان دلیلِ بالا. */}
+          <div className="px-4 pt-4 lg:px-0 lg:pt-0">
           {selectedId == null ? (
             <Panel title="یک سفارش را انتخاب کن">
               <p className="text-xs leading-relaxed" style={{ color: "var(--color-ink-dim)" }}>
@@ -321,6 +448,7 @@ export function OrdersContent() {
               onError={onMutationError}
             />
           ) : null}
+          </div>
         </div>
       </div>
     </div>
@@ -553,7 +681,7 @@ function OrderDetail({
           onChange={(e) => setNote(e.target.value)}
           rows={3}
           placeholder="فقط در پنل دیده می‌شود و به مشتری نمی‌رود."
-          className="w-full rounded-[14px] px-3 py-2 text-xs outline-none resize-y"
+          className="w-full rounded-[14px] px-3 py-2 text-[16px] outline-none resize-y sm:text-xs"
           style={{
             background: "var(--color-surface-2)",
             color: "var(--color-ink)",

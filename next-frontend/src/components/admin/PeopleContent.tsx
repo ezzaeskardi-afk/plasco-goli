@@ -222,7 +222,7 @@ export function PeopleContent() {
                 key={f.key}
                 type="button"
                 onClick={() => resetToFirstPage(setFilter)(f.key)}
-                className="rounded-full px-3 py-1.5 text-xs font-bold"
+                className="rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
                 style={
                   on
                     ? { background: "var(--color-teal-tint)", color: "var(--color-teal)" }
@@ -241,7 +241,7 @@ export function PeopleContent() {
           <select
             value={sort}
             onChange={(e) => resetToFirstPage(setSort)(e.target.value as Sort)}
-            className="rounded-full px-3 py-1.5 text-xs outline-none"
+            className="rounded-full px-3 py-2 text-[16px] outline-none min-h-10 sm:min-h-0 sm:py-1.5 sm:text-xs"
             style={{
               background: "var(--color-surface-2)",
               color: "var(--color-ink)",
@@ -367,7 +367,7 @@ export function PeopleContent() {
                   <div className="flex flex-wrap items-center gap-1.5">
                     <Link
                       href={`/admin/crm?customer=${u.id}`}
-                      className="rounded-full px-3.5 py-1.5 text-xs font-bold"
+                      className="rounded-full px-3.5 py-2 text-xs font-bold sm:py-1.5"
                       style={{ background: "var(--color-teal-tint)", color: "var(--color-teal)" }}
                     >
                       پرونده در CRM
@@ -455,7 +455,7 @@ function Pager({
             type="button"
             onClick={() => onGo(n)}
             aria-current={n === page ? "page" : undefined}
-            className="rounded-full px-3 py-1.5 text-xs font-bold"
+            className="rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
             style={
               n === page
                 ? { background: "var(--color-teal)", color: "#04211B" }

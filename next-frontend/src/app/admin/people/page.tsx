@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 
 export default function AdminPeoplePage() {
   return (
-    <div className="mx-auto max-w-[1180px] px-6 py-8">
+    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
       <h1 className="text-2xl font-extrabold text-ink mb-6">مشتری‌ها</h1>
       <PeopleContent />
     </div>
