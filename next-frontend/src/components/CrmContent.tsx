@@ -297,7 +297,7 @@ export function CrmContent() {
           <button
             key={t}
             onClick={() => { setTab(t); setDetail(null); }}
-            className="rounded-full px-4 py-1.5 text-xs font-medium transition-colors"
+            className="rounded-full px-4 py-2 text-xs font-medium transition-colors sm:py-1.5"
             style={{
               background: tab === t ? "var(--color-teal)" : "transparent",
               color: tab === t ? "#04211B" : "var(--color-ink-soft)",
@@ -518,7 +518,7 @@ export function CrmContent() {
               <button
                 type="button"
                 onClick={() => { setCustTag(""); setCustPage(0); }}
-                className="rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
+                className="rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors sm:py-1"
                 style={
                   custTag === ""
                     ? { background: "var(--color-teal)", color: "#04211B" }
@@ -532,7 +532,7 @@ export function CrmContent() {
                   key={t.id}
                   type="button"
                   onClick={() => { setCustTag(custTag === t.name ? "" : t.name); setCustPage(0); }}
-                  className="rounded-full px-3 py-1 text-[11px] font-medium transition-colors"
+                  className="rounded-full px-3 py-1.5 text-[11px] font-medium transition-colors sm:py-1"
                   style={
                     custTag === t.name
                       ? { background: t.color + "30", color: t.color, border: `1px solid ${t.color}` }
@@ -762,13 +762,13 @@ export function CrmContent() {
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
                   placeholder="یادداشت جدید..."
-                  className="flex-1 rounded-full px-3 py-1.5 text-[11px] outline-none"
+                  className="min-h-10 flex-1 rounded-full px-3 py-2 text-[16px] outline-none sm:min-h-0 sm:py-1.5 sm:text-[11px]"
                   style={{ background: "var(--color-surface-2)", color: "var(--color-ink)", border: "1px solid var(--color-line-control)" }}
                   onKeyDown={(e) => e.key === "Enter" && handleAddNote()}
                 />
                 <button
                   onClick={handleAddNote}
-                  className="rounded-full px-3 py-1.5 text-[11px] font-bold"
+                  className="min-h-10 rounded-full px-3 py-2 text-[11px] font-bold sm:min-h-0 sm:py-1.5"
                   style={{ background: "var(--color-teal)", color: "#04211B" }}
                 >
                   ثبت
@@ -831,13 +831,13 @@ export function CrmContent() {
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
                   placeholder="پیگیری جدید..."
-                  className="flex-1 rounded-full px-3 py-1.5 text-[11px] outline-none"
+                  className="min-h-10 flex-1 rounded-full px-3 py-2 text-[16px] outline-none sm:min-h-0 sm:py-1.5 sm:text-[11px]"
                   style={{ background: "var(--color-surface-2)", color: "var(--color-ink)", border: "1px solid var(--color-line-control)" }}
                   onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
                 />
                 <button
                   onClick={handleAddTask}
-                  className="rounded-full px-3 py-1.5 text-[11px] font-bold"
+                  className="min-h-10 rounded-full px-3 py-2 text-[11px] font-bold sm:min-h-0 sm:py-1.5"
                   style={{ background: "var(--color-gold)", color: "#04211B" }}
                 >
                   +

@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 
 export default function AdminSettingsPage() {
   return (
-    <div className="mx-auto max-w-[1180px] px-6 py-8">
+    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
       <h1 className="text-2xl font-extrabold text-ink mb-2">تنظیمات فروشگاه</h1>
       <p className="text-xs mb-6" style={{ color: "var(--color-ink-dim)" }}>
         این مقادیر در دیتابیس ذخیره می‌شوند و بدونِ دست زدن به کد قابل تغییرند.

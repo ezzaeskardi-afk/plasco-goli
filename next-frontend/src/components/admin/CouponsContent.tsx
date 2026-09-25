@@ -198,7 +198,7 @@ export function CouponsContent() {
                 key={f.key}
                 type="button"
                 onClick={() => setFilter(f.key)}
-                className="rounded-full px-3 py-1.5 text-xs font-bold"
+                className="rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
                 style={
                   on
                     ? { background: "var(--color-teal-tint)", color: "var(--color-teal)" }
@@ -589,7 +589,7 @@ function CouponForm({
                   key={key}
                   type="button"
                   onClick={() => set("type", key)}
-                  className="rounded-full px-3.5 py-1.5 text-xs font-bold"
+                  className="rounded-full px-3.5 py-2 text-xs font-bold sm:py-1.5"
                   style={
                     on
                       ? { background: "var(--color-teal-tint)", color: "var(--color-teal)" }
@@ -684,13 +684,16 @@ function CouponForm({
         می‌شود)، نه «مقدار پیش‌فرض». کدی که انقضا ندارد همیشه معتبر می‌ماند.
       </p>
 
-      <label className="flex items-center gap-2 text-xs cursor-pointer"
+      {/* کلِ برچسب هدفِ لمس است، نه فقط مربعِ ۱۳ پیکسلیِ خودِ checkbox:
+          `min-h-11` روی برچسب یعنی ۴۴ پیکسل، و مربع هم بزرگ‌تر شده. با
+          انگشت، زدنِ یک مربعِ ۱۳ پیکسلی تقریباً قرعه‌کشی است. */}
+      <label className="flex min-h-11 items-center gap-2 text-xs cursor-pointer"
              style={{ color: "var(--color-ink-soft)" }}>
         <input
           type="checkbox"
           checked={f.active}
           onChange={(e) => set("active", e.target.checked)}
-          className="accent-[var(--color-teal)]"
+          className="w-5 h-5 shrink-0 accent-[var(--color-teal)]"
         />
         فعال باشد (اگر خاموش باشد، مشتری با این کد تخفیف نمی‌گیرد)
       </label>

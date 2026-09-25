@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { OrderStatus } from "@/lib/adminTypes";
 
@@ -9,6 +10,29 @@ import type { OrderStatus } from "@/lib/adminTypes";
 // عمداً یک فایلِ کوچک است و نه یک کتابخانه‌ی کامپوننت: چهار نمای این پنل به
 // همان چهار قطعه نیاز دارند (کارتِ آمار، پنل، برچسب، حالتِ خطا/در دسترس نبودن).
 // تنها دلیلی که اینجا «use client» است، دکمه‌ی «دوباره تلاش کن» است.
+
+// ============================================================
+// موبایل
+// ============================================================
+// آیا کاربر همین حالا روی صفحه‌ی باریک است؟
+//
+// چرا با matchMedia و نه با CSS: خیلی از چیزها با کلاس حل می‌شوند (چیدمان،
+// اندازه)، ولی بعضی تصمیم‌ها نمی‌شوند — مثلاً «جزئیاتِ سفارش در موبایل باید
+// یک برگه‌ی تمام‌صفحه باشد» یعنی رندرِ یک دکمه‌ی بستن و قفل‌کردن اسکرولِ صفحه.
+//
+// مقدارِ اولیه false است و در effect ست می‌شود: رندرِ سرور و اولین رندرِ کلاینت
+// یکی می‌مانند، پس هیدریشن نمی‌شکند.
+export function useIsNarrow(query = "(max-width: 1023px)"): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const sync = () => setNarrow(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [query]);
+  return narrow;
+}
 
 // ---------- عدد و پول ----------
 
@@ -176,7 +200,7 @@ export function ErrorBox({
         <button
           type="button"
           onClick={onRetry}
-          className="shrink-0 rounded-full px-3 py-1.5 text-xs font-bold"
+          className="shrink-0 rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
           style={{ background: "var(--color-coral)", color: "var(--color-ink-on-warm)" }}
         >
           دوباره تلاش کن
@@ -293,6 +317,7 @@ export function Btn({
   disabled,
   type = "button",
   title,
+  className = "",
 }: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -300,6 +325,7 @@ export function Btn({
   disabled?: boolean;
   type?: "button" | "submit";
   title?: string;
+  className?: string;
 }) {
   const style = TONE_STYLE[tone];
   return (
@@ -308,7 +334,10 @@ export function Btn({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="rounded-full px-3.5 py-1.5 text-xs font-bold transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+      // `min-h-10` یعنی ۴۰ پیکسل روی موبایل. استانداردِ لمسی ۴۴ است، ولی
+      // ۴۰ همان جایی است که «اشتباهی نخورد» را می‌دهد بدونِ اینکه دکمه‌ها
+      // روی دسکتاپ چاق شوند؛ `sm:min-h-0` ارتفاع را به حالتِ قبلی برمی‌گرداند.
+      className={`rounded-full px-4 py-2 text-xs font-bold transition-opacity disabled:cursor-not-allowed disabled:opacity-50 min-h-10 sm:min-h-0 sm:px-3.5 sm:py-1.5 ${className}`}
       style={{ background: style.background, color: style.color }}
     >
       {children}
@@ -345,7 +374,10 @@ export function Input({
       placeholder={placeholder}
       dir={dir}
       aria-label={ariaLabel}
-      className={`rounded-full px-3 py-1.5 text-xs outline-none ${className}`}
+      // چرا ۱۶ پیکسل روی موبایل: اگر فونتِ ورودی کمتر از ۱۶ باشد، iOS در
+      // لحظه‌ی فوکوس کلِ صفحه را زوم می‌کند و پنل زیرِ انگشت جابه‌جا می‌شود.
+      // `sm:text-xs` ظاهرِ دسکتاپ را دست‌نخورده نگه می‌دارد.
+      className={`rounded-full px-3 py-2 text-[16px] outline-none min-h-10 sm:min-h-0 sm:py-1.5 sm:text-xs ${className}`}
       style={{
         background: "var(--color-surface-2)",
         color: "var(--color-ink)",

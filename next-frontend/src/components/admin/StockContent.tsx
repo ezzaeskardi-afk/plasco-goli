@@ -247,7 +247,7 @@ export function StockContent() {
                 key={f.key}
                 type="button"
                 onClick={() => setFilter(f.key)}
-                className="rounded-full px-3 py-1.5 text-xs font-bold"
+                className="rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
                 style={
                   on
                     ? { background: "var(--color-teal-tint)", color: "var(--color-teal)" }
@@ -265,7 +265,7 @@ export function StockContent() {
           onChange={setQ}
           placeholder="جستجوی نام یا دسته…"
           ariaLabel="جستجوی کالا"
-          className="w-48"
+          className="w-full min-w-0 sm:w-48"
         />
         <div className="flex gap-1.5 mr-auto">
           {SORTS.map((s) => {
@@ -275,7 +275,7 @@ export function StockContent() {
                 key={s.key}
                 type="button"
                 onClick={() => setSort(s.key)}
-                className="text-[11px] font-bold rounded-full px-2.5 py-1"
+                className="text-[11px] font-bold rounded-full px-2.5 py-2 sm:py-1"
                 style={
                   on
                     ? { background: "var(--color-surface-2)", color: "var(--color-ink)" }
@@ -383,7 +383,12 @@ function ProductRow({
         border: `1px solid ${isDraft ? "var(--color-gold)" : "var(--color-line)"}`,
       }}
     >
-      <div className="flex items-start gap-3">
+      {/* `flex-wrap` + ستونِ قیمتِ تمام‌عرض روی موبایل: اندازه‌گیری روی ۳۹۰
+          پیکسل نشان داد در حالتِ ویرایش، ورودی‌های قیمت و موجودی (شینک‌نشدنی)
+          ستونِ عنوان را به عرضِ صفر می‌رساندند — عنوانِ کالا کامل ناپدید می‌شد و
+          «فروش: ۲۵ عدد» کلمه‌به‌کلمه می‌شکست. حالا ویرایشگر یک ردیفِ تمام‌عرض
+          زیرِ عنوان است (متن زیرِ عکس، همان‌طور که باید). */}
+      <div className="flex flex-wrap items-start gap-3">
         <span
           className="w-11 h-11 rounded-lg shrink-0 overflow-hidden grid place-items-center"
           style={{ background: "var(--color-surface-2)" }}
@@ -420,9 +425,9 @@ function ProductRow({
         </div>
 
         {/* قیمت و موجودی — در حالتِ ویرایش ورودی می‌شوند */}
-        <div className="shrink-0 text-left">
+        <div className="w-full shrink-0 text-right sm:w-auto sm:text-left">
           {editing ? (
-            <div className="flex items-center gap-1.5">
+            <div className="flex w-full items-center gap-1.5 sm:w-auto">
               <label className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>
                 قیمت
               </label>
@@ -432,7 +437,7 @@ function ProductRow({
                 type="number"
                 dir="ltr"
                 ariaLabel="قیمت"
-                className="w-24"
+                className="min-w-0 flex-1 sm:w-24 sm:flex-none"
               />
               <label className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>
                 موجودی
@@ -443,7 +448,7 @@ function ProductRow({
                 type="number"
                 dir="ltr"
                 ariaLabel="موجودی"
-                className="w-16"
+                className="min-w-0 flex-1 sm:w-16 sm:flex-none"
               />
             </div>
           ) : (

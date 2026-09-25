@@ -345,7 +345,7 @@ export function SettingsContent() {
                       type="button"
                       onClick={() => set("shop_open", v)}
                       aria-pressed={on}
-                      className="rounded-full px-3.5 py-1.5 text-xs font-bold"
+                      className="rounded-full px-3.5 py-2 text-xs font-bold sm:py-1.5"
                       style={
                         on
                           ? v === "1"

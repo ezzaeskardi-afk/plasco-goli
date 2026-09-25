@@ -101,7 +101,7 @@ export function ReviewsContent() {
               key={f.key}
               type="button"
               onClick={() => setFilter(f.key)}
-              className="rounded-full px-3 py-1.5 text-xs font-bold"
+              className="rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
               style={
                 on
                   ? { background: "var(--color-teal-tint)", color: "var(--color-teal)" }

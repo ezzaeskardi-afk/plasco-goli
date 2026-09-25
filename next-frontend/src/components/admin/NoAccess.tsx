@@ -26,7 +26,7 @@ export function NoAccess({ role, phone }: { role: PanelRole; phone: string }) {
   const staff = role === "staff";
 
   return (
-    <div className="mx-auto max-w-[680px] px-6 py-16">
+    <div className="mx-auto max-w-[680px] px-4 py-10 sm:px-6 sm:py-16">
       <div
         className="rounded-[26px] p-6 sm:p-8"
         style={{ background: "var(--color-surface)", border: "1px solid var(--color-line)" }}
