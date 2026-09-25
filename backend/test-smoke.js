@@ -1623,7 +1623,19 @@ function shutdown(code) {
       JSON.stringify(probeDel.data).slice(0, 80));
 
     // ---------- چرخش بکاپ ----------
-    const bkDir = path.join(__dirname, 'data', 'backups');
+    // پوشه‌ی بکاپِ **سندباکس**، نه پوشه‌ی واقعیِ مغازه. قبلاً اینجا
+    // `path.join(__dirname, 'data', 'backups')` بود؛ یعنی تست به‌جای سنجیدنِ
+    // کاری که سرورِ خودش می‌کند، به پوشه‌ی بکاپِ کامپیوترِ توسعه‌دهنده نگاه
+    // می‌کرد. نتیجه: روی هر ماشینی که هرگز سایت را بالا نیاورده بود — از جمله
+    // CI و هر clone تازه — این بخش قرمز می‌شد. دو شکست از یک ریشه، چون دو خط
+    // پایین‌تر (`bkDaily` و `bkManual`) `fs.readdirSync` بی‌نگهبان دارند و روی
+    // پوشه‌ی ناموجود ENOENT می‌دهند و به catch بیرونی می‌رسند.
+    //
+    // سرورِ تست با `PG_DATA_DIR` روی سندباکس بالا می‌آید و همان‌جا روی اولین
+    // بوت `polasco-YYYY-MM-DD.db` را می‌سازد (lib/db.js → backupNow). یعنی این
+    // پوشه در این نقطه‌ی تست حتماً پر است، و چیزی که سنجیده می‌شود دقیقاً
+    // رفتارِ خودِ سرور است، نه وضعیتِ اتفاقیِ ماشینِ ما.
+    const bkDir = path.join(SANDBOX_DATA, 'backups');
     const bkSrc = fs.readFileSync(path.join(__dirname, 'lib', 'db.js'), 'utf8');
     check('V14 بکاپ: چرخش فقط وقتی دیتابیس سالم است انجام می‌شود',
       /const rotate = health\.ok/.test(bkSrc) && /if \(rotate\) \{/.test(bkSrc));
