@@ -142,10 +142,30 @@ const nextConfig: NextConfig = {
           { key: "Reporting-Endpoints", value: 'csp="/api/csp-report"' },
         ],
       },
-      {
-        source: "/_next/static/:path*",
-        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
-      },
+      // ⚠️ فقط در production — و این یک باگِ واقعی بود که خودش را جای دیگری
+      // نشان می‌داد: الهای هوشمندِ Turbopack در حالتِ dev چانک‌ها را با نامِ
+      // **بدونِ هش** می‌فرستد (`chunks/app/order-success/page.js`)، در حالی که
+      // `next build` نام را هش می‌کند (`page-7a2ef452e77f87b5.js`).
+      //
+      // با `immutable` روی نامِ بدونِ هش، مرورگر همان فایل را یک سال کش می‌کرد
+      // و هر ویرایشی در کد **هرگز دیده نمی‌شد** — یعنی دولوپر فکر می‌کرد کدش کار
+      // نمی‌کند، یا کد را دستکاری می‌کرد که خطای دیگری را می‌ساخت. کش بدونِ
+      // راهِ پاک کردن، ضررش از کدِ کهنه بیشتر است.
+      //
+      // در dev هیچ هدری نمی‌گذاریم تا خودِ Next سیاستِ درستِ خودش را اعمال کند؛
+      // سنجیده شد: با همین گیت، همان فایل‌ها `no-store, must-revalidate`
+      // می‌گیرند — یعنی این هدرِ ما بود که آن سیاست را کنار می‌زد.
+      ...(process.env.NODE_ENV === "production"
+        ? [
+            {
+              source: "/_next/static/:path*",
+              headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+            },
+          ]
+        : []),
+      // نکته: `public/assets` را دست نمی‌زنیم؛ در dev خودِ Next همان
+      // `max-age=2592000, immutable` را می‌فرستد (اندازه‌گیری شد)، پس گیت‌کردنش
+      // اینجا فقط یک شاخه‌ی تکراری می‌ساخت و چیزی را عوض نمی‌کرد.
       {
         source: "/assets/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=2592000, immutable" }],
