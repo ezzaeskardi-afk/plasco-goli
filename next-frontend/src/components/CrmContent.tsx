@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   crmGetSummary,
   crmGetCustomers,
@@ -159,7 +160,7 @@ export function CrmContent() {
     if (tab === "customers") loadCustomers();
   }, [tab, loadCustomers]);
 
-  const openDetail = async (id: number) => {
+  const openDetail = useCallback(async (id: number) => {
     try {
       setLoading(true);
       const d = await crmGetCustomer(id);
@@ -170,7 +171,27 @@ export function CrmContent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // ==================== پیوندِ مستقیم به پرونده‌ی یک مشتری ====================
+  // نمای «مشتری‌ها» به `/admin/crm?customer=<id>` لینک می‌دهد تا مدیر با یک
+  // کلیک به پرونده برسد. بدونِ این، آن لینک فقط تبِ مشتری‌ها را باز می‌کرد و
+  // مدیر باید خودش دوباره همان آدم را پیدا می‌کرد — یعنی لینکی که کار نمی‌کند
+  // ولی به‌نظر می‌رسد کار می‌کند، که از نبودنش بدتر است.
+  //
+  // `deepLinkDone` نگه می‌دارد *کدام* شناسه مصرف شده، نه فقط «مصرف شد»: بدونِ
+  // آن هر به‌روزرسانیِ کامپوننت مدیر را به همان پرونده برمی‌گرداند و نمی‌گذاشت
+  // از آن بیرون بیاید. با نگه‌داشتنِ شناسه، پرش به مشتریِ *دیگری* کار می‌کند و
+  // پرشِ تکراری به همان یکی نه.
+  const searchParams = useSearchParams();
+  const deepLinkId = Number(searchParams.get("customer")) || null;
+  const deepLinkDone = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!deepLinkId || deepLinkDone.current === deepLinkId) return;
+    deepLinkDone.current = deepLinkId;
+    openDetail(deepLinkId);
+  }, [deepLinkId, openDetail]);
 
   const handleAddNote = async () => {
     if (!detail || !noteText.trim()) return;
