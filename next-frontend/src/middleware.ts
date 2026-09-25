@@ -122,7 +122,14 @@ export async function middleware(request: NextRequest) {
 
   if (needsAuth && !loggedIn) {
     const url = new URL("/login", request.url);
-    url.searchParams.set("redirect", pathname);
+    // کوئری‌استرینگ هم با مسیر می‌رود. قبلاً فقط `pathname` می‌رفت و نتیجه این
+    // بود که پیوندی مثل `/admin/crm?customer=12` بعد از ورود به خودِ `/admin/crm`
+    // می‌رسید — یعنی مدیر مشتری را پیدا می‌کرد، لینک را می‌زد، وارد می‌شد و
+    // به داشبوردِ CRM می‌رسید. خودِ پرونده گم می‌شد بدونِ هیچ پیامی.
+    //
+    // امن است چون سمتِ گیرنده `safeRedirectPath` (lib/redirect.ts) هر چیزی
+    // جز یک مسیرِ نسبیِ هم‌مبدأ را دور می‌ریزد؛ کوئری هم عمداً حفظ می‌شود.
+    url.searchParams.set("redirect", pathname + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
 
