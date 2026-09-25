@@ -49,7 +49,25 @@ function sectionsFor(role: PanelRole) {
 //
 // حالا روی موبایل: نوار فقط **بخشِ جاری** را نشان می‌دهد و یک دکمه‌ی «بخش‌ها»
 // فهرستِ کامل را در یک شبکه‌ی دوستونه باز می‌کند. هیچ بخشی پنهان نمی‌ماند و
-// هر ردیف ۴۴ پیکسل ارتفاع دارد. روی دسکتاپ همان نوارِ افقیِ قبلی است.
+// هر ردیف ۴۴ پیکسل ارتفاع دارد.
+//
+// ============================================================
+// دسکتاپ هم سرریز بود — فقط کسی اندازه‌اش را نگرفته بود
+// ============================================================
+// نوارِ دسکتاپ `max-w-[1180px]` است و ۱۳ بخش، با پدینگِ ۱۲ پیکسلیِ هر طرف،
+// می‌شود ۱۲۴۲ پیکسل؛ به‌علاوه‌ی ۴۸ پیکسل فاصله‌ها (۱۲ درز × ۴) و ۴۸ پیکسل
+// پدینگِ خودِ نوار = **۱۳۳۶ پیکسل**. یعنی ۱۵۶ پیکسل بیشتر از ظرف.
+//
+// آن نوار `overflow-x-auto` داشت، پس «کار می‌کرد» — ولی بخشِ سیزدهم
+// («وضعیت سیستم»، در RTL سمتِ چپ) بیرون از کادر می‌افتاد و بدونِ اسکرولِ
+// افقی دیده نمی‌شد؛ و هیچ نشانه‌ای هم نبود که این نوار اسکرول می‌شود. یعنی
+// همان بیماریِ موبایل، فقط با علامت‌های خفیف‌تر.
+//
+// دو تغییر، و هر دو اندازه‌گیری شده: پدینگِ ردیف‌ها ۱۲→۸ و فاصله‌ها ۴→۲
+// پیکسل شد و فونت یک پله کوچک‌تر (۱۳ پیکسل) تا هر ۱۳ بخش داخلِ همان ۱۱۸۰
+// جا شود؛ و `overflow-x-auto` جایش را به `flex-wrap` داد. حالا اگر روزی یک
+// بخشِ چهاردهم اضافه شود یا پنجره باریک‌تر از آن باشد، نوار **می‌شکند** نه
+// اینکه ببرد. اسکرولِ افقی دیگر جایی ندارد که بخشی را پنهان کند.
 export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -182,7 +200,7 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
       </div>
 
       {/* ---------- دسکتاپ: نوارِ افقی ---------- */}
-      <ul className="mx-auto hidden max-w-[1180px] items-center gap-1 overflow-x-auto px-6 py-2 text-sm lg:flex">
+      <ul className="mx-auto hidden max-w-[1180px] flex-wrap items-center gap-0.5 px-6 py-2 text-[13px] lg:flex">
         {sections.map((section) => {
           if (section.href === null) {
             return (
@@ -190,7 +208,7 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
                 <span
                   aria-disabled="true"
                   title={`«${section.label}» هنوز به نسخه‌ی Next منتقل نشده — فعلاً از پنل Express استفاده کنید`}
-                  className="flex shrink-0 cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 font-medium"
+                  className="flex shrink-0 cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 font-medium"
                   style={{ color: "var(--color-ink-dim)", opacity: 0.6 }}
                 >
                   {section.label}
@@ -215,7 +233,7 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
               <Link
                 href={section.href}
                 aria-current={active ? "page" : undefined}
-                className="block shrink-0 whitespace-nowrap rounded-lg px-3 py-2 font-medium transition-colors"
+                className="block shrink-0 whitespace-nowrap rounded-lg px-2 py-2 font-medium transition-colors"
                 style={
                   active
                     ? {
