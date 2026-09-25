@@ -10,13 +10,19 @@ import {
   saveProfile,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
+import { safeRedirectPath } from "@/lib/redirect";
 
 type Step = "phone" | "otp" | "password" | "name";
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/";
+  // مقصدِ بازگشت از خودِ آدرس می‌آید، پس هرگز نباید بدونِ بررسی استفاده شود:
+  // `/login?redirect=https://evil.example` کاربر را بعد از ورودِ موفق به
+  // دامنه‌ی مهاجم می‌برد. `safeRedirectPath` فقط مسیرِ هم‌مبدأ را رد می‌کند و
+  // برای هر چیزِ دیگر `null` می‌دهد — آن‌وقت پیش‌فرضِ امن، صفحه‌ی اصلی است.
+  // هر سه نقطه‌ی `router.push` پایین از همین یک مقدار می‌خوانند.
+  const redirect = safeRedirectPath(searchParams.get("redirect")) ?? "/";
 
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
