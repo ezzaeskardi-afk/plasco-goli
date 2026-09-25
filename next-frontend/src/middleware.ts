@@ -21,11 +21,22 @@ import { apiBase } from "@/lib/site";
 const PROTECTED_ROUTES = ["/checkout", "/account", "/admin"];
 const GUEST_ONLY_ROUTES = ["/login"];
 
-async function isLoggedIn(request: NextRequest): Promise<boolean> {
+/**
+ * کاربرِ نشست — همان چیزی که `/api/auth/me` برمی‌گرداند (`publicUser`).
+ *
+ * این تابع قبلاً فقط یک بولین برمی‌گرداند و همین باعث دو کارِ تکراری می‌شد:
+ * middleware برای دانستنِ «وارد شده یا نه» یک درخواست می‌زد و پوسته‌ی پنل برای
+ * دانستنِ «ادمین یا نه» باید دوباره می‌پرسید. حالا خودِ شیءِ کاربر برمی‌گردد و
+ * نقش هم از همان یک درخواست می‌آید.
+ */
+type SessionUser = { isAdmin: boolean; isStaff: boolean; phone: string };
+type Session = { kind: "user"; user: SessionUser } | { kind: "anon" };
+
+async function readSession(request: NextRequest): Promise<Session> {
   const cookie = request.headers.get("cookie");
 
   // بدونِ کوکیِ نشست قطعاً وارد نشده — بی‌خود به بک‌اند درخواست نمی‌زنیم.
-  if (!cookie || !cookie.includes("polasco.sid")) return false;
+  if (!cookie || !cookie.includes("polasco.sid")) return { kind: "anon" };
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 2500);
@@ -35,26 +46,79 @@ async function isLoggedIn(request: NextRequest): Promise<boolean> {
       cache: "no-store",
       signal: controller.signal,
     });
-    if (!res.ok) return false;
-    const data = (await res.json()) as { user?: unknown };
-    return Boolean(data.user);
+    if (!res.ok) return { kind: "anon" };
+    const data = (await res.json()) as { user?: SessionUser | null };
+    if (!data.user) return { kind: "anon" };
+    return {
+      kind: "user",
+      user: {
+        isAdmin: Boolean(data.user.isAdmin),
+        isStaff: Boolean(data.user.isStaff),
+        // فقط ارقام: مقدارِ هدرِ HTTP باید ASCII باشد و در نامِ فارسی
+        // (`fullName`) سرور یا مرورگر خطا می‌دهد. شماره برای پیامِ «با این
+        // حساب وارد شده‌اید» کافی است.
+        phone: String(data.user.phone || ""),
+      },
+    };
   } catch {
     // بک‌اند خواب است یا کند: «وارد نشده» فرض می‌کنیم. یعنی کاربر به صفحه‌ی
     // ورود می‌رود (قابل فهم) و نه به یک صفحه‌ی شکسته.
-    return false;
+    return { kind: "anon" };
   } finally {
     clearTimeout(timer);
   }
 }
+
+// ============================================================
+// مرزِ دسترسیِ پنل مدیریت
+// ============================================================
+// **این یک سدِ امنیتی نیست.** سدِ واقعی سمتِ Express است (`routes/admin.js:68`)
+// و هیچ‌چیز اینجا آن را شل نمی‌کند: هر درخواستِ API مستقیم به Express می‌رود و
+// خودش نقش را چک می‌کند. کاری که اینجا می‌شود، **گفتنِ درست** به کاربر است.
+//
+// دلیلِ وجودش: بدونِ این، مشتریِ واردشده‌شده به `/admin` می‌رسید، نوارِ پنل را
+// با هفت تب می‌دید، و هر تب یک کادرِ «دسترسی به پنل مدیریت ندارید» نشان می‌داد.
+// یعنی هفت بار یک پیام، و هیچ‌جا نگفته بود که کلِ پنل برای او نیست.
+//
+// قاعده عیناً همان قاعده‌ی Express است (‏`router.use` در خط ۱۳۲): مسیرهای
+// سفارش برای کارمند باز است، بقیه فقط ادمین. اگر روزی آن قاعده عوض شد، همین
+// تابع باید عوض شود — و تنها همین یک جا است.
+function panelAccess(pathname: string, user: SessionUser): "full" | "orders" | "none" {
+  if (user.isAdmin) return "full";
+  if (user.isStaff && /^\/admin\/orders(\/|$)/.test(pathname)) return "orders";
+  return "none";
+}
+
+/**
+ * هدرهایی که پوسته‌ی پنل (`app/admin/layout.tsx`) می‌خواند.
+ *
+ * چرا هدر و نه یک درخواستِ دوم در پوسته: پوسته نمی‌تواند مسیرِ جاری را بداند
+ * و middleware هم نمی‌تواند صفحه رندر کند. این هدرها همان تصمیمِ گرفته‌شده را
+ * به پوسته می‌رسانند، بدونِ یک `/api/auth/me` دوم برای هر بازدیدِ پنل.
+ *
+ * ⚠️ مقدارِ هدر باید ASCII باشد — پس نقش و مسیر اینجا رمزگذاری می‌شوند و
+ * نامِ فارسی هرگز در هدر نمی‌رود.
+ */
+const PANEL_HEADERS = ["x-panel-access", "x-panel-role", "x-panel-phone"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const needsAuth = PROTECTED_ROUTES.some((r) => pathname.startsWith(r));
   const guestOnly = GUEST_ONLY_ROUTES.some((r) => pathname.startsWith(r));
-  if (!needsAuth && !guestOnly) return NextResponse.next();
 
-  const loggedIn = await isLoggedIn(request);
+  // هدرهای `x-panel-*` را **همیشه** دور می‌ریزیم، حتی وقتی کاری با پنل نداریم.
+  // بدونِ این، یک کاربر می‌توانست `x-panel-access: full` را خودش بفرستد و در
+  // مسیری که ما مقدار نمی‌گذاریم، مقدارِ خودش را به پوسته برساند. (امروز چنین
+  // مسیری وجود ندارد، ولی این یک باگِ خفته است که یک خط جلوگیری می‌کند.)
+  const requestHeaders = new Headers(request.headers);
+  for (const h of PANEL_HEADERS) requestHeaders.delete(h);
+  const pass = () => NextResponse.next({ request: { headers: requestHeaders } });
+
+  if (!needsAuth && !guestOnly) return pass();
+
+  const session = await readSession(request);
+  const loggedIn = session.kind === "user";
 
   if (needsAuth && !loggedIn) {
     const url = new URL("/login", request.url);
@@ -66,18 +130,42 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  return NextResponse.next();
+  // فقط اینجا — یعنی بعد از اینکه ورود *تأیید شد* — نقش را به پوسته می‌گوییم.
+  // مسیرهای `/admin` در `PROTECTED_ROUTES` هستند، پس کاربرِ بی‌نشست هرگز به
+  // این خط نمی‌رسد و همیشه اول به صفحه‌ی ورود می‌رود.
+  if (pathname.startsWith("/admin") && session.kind === "user") {
+    const access = panelAccess(pathname, session.user);
+    requestHeaders.set("x-panel-access", access);
+    requestHeaders.set(
+      "x-panel-role",
+      session.user.isAdmin ? "admin" : session.user.isStaff ? "staff" : "customer",
+    );
+    if (session.user.phone) requestHeaders.set("x-panel-phone", session.user.phone);
+  }
+
+  return pass();
 }
 
 export const config = {
   matcher: [
     "/checkout/:path*",
     "/account/:path*",
+    "/admin",
+    // `/admin/:path*` با صفر بخش هم `/admin` را می‌گیرد، ولی صریح نوشتنش
+    // یک مزیت دارد: پیشخوانِ پنل (`admin/page.tsx`) تنها صفحه‌ای است که خودِ
+    // آدرسش دقیقاً `/admin` است، و اگر روزی نگهبانِ مسیر عوض شود، نباید
+    // سرنوشتش به معنای ضمنیِ `*` گره بخورد.
     "/admin/:path*",
     "/login/:path*",
   ],
 };
 
-// /admin در اینجا فقط «واردشده بودن» را چک می‌کند، نه ادمین بودن. مجوزِ
-// واقعیِ ادمین سمتِ Express اعمال می‌شود و از اینجا قابل دور زدن نیست؛
-// این لایه صرفاً برای این است که کاربرِ عادی صفحه‌ی خالی نبیند.
+// این لایه دو کار می‌کند و هیچ‌کدام «مجوز» نیست:
+//
+//   ۱. نگهبانیِ ورود — کاربرِ بی‌نشستِ `/admin` به صفحه‌ی ورود می‌رود
+//      (همان کاری که از قبل می‌کرد؛ کاربرِ عادی صفحه‌ی خالی نبیند).
+//   ۲. گفتنِ نقش به پوسته‌ی پنل — از `x-panel-access` استفاده می‌کند تا مشتریِ
+//      عادی به‌جای هفت کادرِ «دسترسی ندارید» یک پیامِ روشن ببیند.
+//
+// مجوزِ واقعیِ ادمین سمتِ Express اعمال می‌شود و از اینجا قابل دور زدن نیست:
+// حتی اگر کسی هدرها را جعل کند، اولین درخواستِ API سمتِ سرور ۴۰۳ می‌گیرد.
