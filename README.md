@@ -1,7 +1,7 @@
 # پلاسکو گلی — فروشگاه آنلاین
 
 [![Security scan](https://github.com/ezzaeskardi-afk/plasco-goli/actions/workflows/security.yml/badge.svg)](https://github.com/ezzaeskardi-afk/plasco-goli/actions/workflows/security.yml)
-![tests](https://img.shields.io/badge/tests-955%20passing-brightgreen)
+[![CI](https://github.com/ezzaeskardi-afk/plasco-goli/actions/workflows/ci.yml/badge.svg)](https://github.com/ezzaeskardi-afk/plasco-goli/actions/workflows/ci.yml)
 ![OWASP](https://img.shields.io/badge/OWASP%20Top%2010-47%20checks-blue)
 ![node](https://img.shields.io/badge/node-%3E%3D22.5-339933)
 ![deps](https://img.shields.io/badge/runtime%20deps-3-lightgrey)

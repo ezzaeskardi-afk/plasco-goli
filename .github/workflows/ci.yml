@@ -1,0 +1,177 @@
+name: CI
+
+# ============================================================
+# چرا این فایل وجود دارد
+# ============================================================
+# تا امروز تنها workflow پروژه `security.yml` بود (gitleaks) و هیچ‌کدام از
+# تست‌ها هیچ‌وقت خودکار اجرا نمی‌شدند. بجِ «tests passing» در README هم یک بجِ
+# دستیِ shields.io بود که هیچ ربطی به وضعیتِ واقعیِ کد نداشت — یعنی می‌شد کد را
+# بشکنی و بج سبز بماند.
+#
+# این workflow همان چیزی را اجرا می‌کند که خودت دستی اجرا می‌کنی:
+#   • هفت مجموعه‌ی تستِ بک‌اند (هیچ‌کدام به `.env` یا دیتابیسِ واقعی نیاز ندارند)
+#   • تایپ‌چک، لینت و بیلدِ Next.js
+#
+# یک نکته‌ی مهم درباره‌ی تست‌ها: هر مجموعه روی **کپیِ** دیتابیس اجرا می‌شود
+# (backend/tests/sandbox.js در پوشه‌ی موقتِ سیستم)، و روی یک checkout تازه که
+# `backend/data` ندارد، سرورِ تست دیتابیس را از صفر می‌سازد و `lib/seed.js`
+# محصولات را می‌کارد. پس CI به هیچ داده‌ی از پیش موجودی وابسته نیست.
+# (همین وابستگی یک بار پنهان بود: تستِ بکاپ به پوشه‌ی واقعیِ مغازه نگاه می‌کرد
+# و روی هر ماشینِ نو و روی CI قرمز می‌شد. باگ اینجا پیدا و رفع شد.)
+
+on:
+  push:
+  pull_request:
+  # تا بتوانی بدونِ commit هم دستی اجرا کنی
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# اگر روی یک شاخه دو بار پشت‌سرهم push کنی، اجرای قدیمیِ بی‌فایده لغو می‌شود.
+# بدونِ این، صفِ runnerها با اجراهای تکراری پر می‌شود.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+
+    # دو نسخه، و `fail-fast: false` تا اگر یکی قرمز شد نسخه‌ی دیگر هم اجرا شود:
+    # آن‌وقت معلوم می‌شود مشکل از کد است یا از نسخه‌ی Node. تفاوتِ نسخه‌ها
+    # دقیقاً چیزِ گران‌قیمتی است که اواخر معلوم می‌شود.
+    #
+    # چرا ۲۲ و ۲۴: `README` و `engines` می‌گویند «Node >= 22.5» و ۲۴ همان
+    # نسخه‌ای است که توسعه روی آن انجام می‌شود. اگر کد ناخواسته روی نسخه‌ی
+    # جدیدتر بیفتد، این ماتریس قبل از کاربر می‌فهمد.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.x', '24.x']
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ---------- هفت مجموعه‌ی تست ----------
+      # هر کدام یک stepِ جدا: اگر یکی بشکند، در خلاصه‌ی اجرا مستقیم معلوم است
+      # کدام مجموعه قرمز شده، نه اینکه یک لاگِ چندهزارخطی را بگردی.
+      # ترتیب از سنگین‌ترین به سبک‌ترین است تا زودترین شکست، بیشترین وقت را
+      # نجات دهد.
+
+      - name: Smoke tests
+        run: node test-smoke.js
+
+      - name: SEO tests
+        run: node test-seo.js
+
+      - name: OWASP Top 10 scan
+        run: node tests/owasp-scan.js
+
+      - name: Security tests
+        run: node tests/security.js
+
+      - name: Discount tests
+        run: node tests/discount.js
+
+      - name: Benchmark report integrity
+        run: node tests/bench-report-integrity.js
+
+      - name: Secret boundary guard
+        run: node tests/secrets.js
+
+  frontend:
+    name: Next.js typecheck, lint and build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: next-frontend
+
+    env:
+      # تلهمتریِ Next در CI بی‌فایده است و فقط لاگ را شلوغ می‌کند
+      NEXT_TELEMETRY_DISABLED: '1'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: next-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      # ---------- بیلد، با بک‌اندِ زنده ----------
+      # چرا بک‌اند را بالا می‌آوریم: `product/[id]/page.tsx` محصولات را در
+      # زمانِ build پیش‌رندر می‌کند (`generateStaticParams`). بدونِ بک‌اند،
+      # بیلد عمداً نمی‌شکند (خطای API قورت داده می‌شود) ولی **صفر** صفحه‌ی
+      # محصول می‌سازد — یعنی یک بیلدِ سبزِ توخالی. اینجا همان مسیرِ production
+      # اجرا می‌شود و بعد تعدادِ صفحه‌های ساخته‌شده واقعاً شمرده می‌شود.
+      #
+      # همه‌چیز در یک step است تا پروسه‌ی بک‌اند قطعاً تا آخرِ بیلد زنده بماند؛
+      # اگر به stepِ بعد سپرده شود، به رفتارِ runner در زنده‌نگه‌داشتنِ پروسه‌های
+      # پس‌زمینه گره می‌خورد.
+      - name: Build against a live backend
+        run: |
+          set -euo pipefail
+
+          # بک‌اند روی پورتِ پیش‌فرض (۳۰۰۰) بالا می‌آید و دیتابیس را از صفر
+          # می‌سازد؛ `lib/seed.js` محصولات را می‌کارد. بدونِ این، سرور فقط
+          # می‌گوید «بالا آمدم» ولی چیزی برای پیش‌رندر کردن وجود ندارد.
+          ( cd ../backend && node server.js > /tmp/backend.log 2>&1 & )
+
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1 && break
+            sleep 1
+          done
+
+          if ! curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
+            echo '::error::backend never became healthy'
+            cat /tmp/backend.log
+            exit 1
+          fi
+
+          echo "backend is healthy; products visible:"
+          curl -fsS 'http://127.0.0.1:3000/api/products?limit=1' | head -c 200
+          echo
+
+          npm run build
+
+          # گاردِ واقعی: بیلدِ سبز با صفر صفحه‌ی محصول یعنی SSG کار نکرده.
+          prerendered=$(find .next/server/app/product -name '*.html' 2>/dev/null | wc -l)
+          echo "prerendered product pages: $prerendered"
+          if [ "$prerendered" -lt 1 ]; then
+            echo '::error::no product pages were prerendered - the SSG path is broken'
+            exit 1
+          fi
