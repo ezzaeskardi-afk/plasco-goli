@@ -342,17 +342,22 @@ polasco-goli/
 │   └── assets/                ← آیکون‌ها و فونت وزیرمتن
 ├── next-frontend/             ← فرانت‌اند Next.js (App Router)
 │   ├── package.json           ← Next 15.5، React 19، TanStack Query 5، Tailwind v4
-│   ├── next.config.ts         ← rewrites به Express + هدرِ کشِ چانک‌ها (فقط production)
+│   ├── next.config.ts         ← فقط دو rewrite: /api و /picture + هدرِ کشِ چانک‌ها (فقط production)
 │   ├── vitest.config.mts      ← پیکربندیِ تست (jsdom + JSXِ خودکار)
 │   ├── eslint.config.mjs      ← ESLint 9 flat config (no warnings)
 │   ├── postcss.config.mjs
 │   ├── tsconfig.json
 │   ├── .env.example           ← API_ORIGIN و NEXT_PUBLIC_SITE_URL
+│   ├── public/                ← فایل‌های ثابتِ خودِ Next — دیگر از Express پروکسی نمی‌شوند
+│   │   ├── assets/            ← فونت وزیرمتن، آیکون‌ها، favicon.svg، icons.svg، راهنمای عکس‌ها
+│   │   ├── manifest.webmanifest / sw.js / offline.html ← PWA
+│   │   └── .well-known/security.txt ← responsible disclosure (RFC 9116)
 │   └── src/
 │       ├── middleware.ts      ← «واردشده بودن»؛ مجوزِ ادمین سمتِ Express است
 │       ├── app/               ← صفحات (App Router)
 │       │   ├── page.tsx       ← صفحه اصلی
 │       │   ├── layout.tsx     ← Layout اصلی
+│       │   ├── global-error.tsx ← مرزِ خطای ریشه (۵۰۰) — جای frontend/500.html
 │       │   ├── globals.css    ← استایل‌ها + print CSS
 │       │   ├── products/      ← فهرست محصولات
 │       │   ├── product/[id]/  ← صفحه محصول (گالری + wholesale + «دیگر موجود نیست»)
@@ -518,8 +523,9 @@ npm run security:gitleaks      # gitleaks با تنظیماتِ خودِ پرو�
 
 ### گزارشِ آسیب‌پذیری
 اگر ایرادِ امنیتی پیدا کردید، لطفاً به‌صورت عمومی issue نسازید.
-راهِ درستش در [SECURITY.md](SECURITY.md) و `frontend/.well-known/security.txt`
-(طبق RFC 9116) نوشته شده.
+راهِ درستش در [SECURITY.md](SECURITY.md) نوشته شده. فایلِ RFC 9116 دو نسخه دارد:
+`next-frontend/public/.well-known/security.txt` (که سایتِ Next سرو می‌کند) و
+`frontend/.well-known/security.txt` — محتوایشان یکی است.
 
 ### Gitleaks دستی
 ```bash

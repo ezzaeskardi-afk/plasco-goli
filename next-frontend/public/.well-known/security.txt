@@ -1,0 +1,5 @@
+Contact: https://polasco-goli.ir/contact
+Expires: 2027-08-22T00:00:00.000Z
+Preferred-Languages: fa, en
+Canonical: https://polasco-goli.ir/.well-known/security.txt
+Policy: https://polasco-goli.ir/terms.html
