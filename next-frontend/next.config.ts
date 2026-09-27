@@ -63,29 +63,31 @@ const CSP = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  // پروکسی به Express
+  // ============================================================
+  // پروکسی به Express — فقط دو چیز: API و عکس‌های محصول
+  // ============================================================
+  // پیش‌تر پنج rewriteِ دیگر هم اینجا بود (`/assets/*`، `/sw.js`،
+  // `/manifest.webmanifest`، `/manifest.json`، `/offline.html`). آن پنج دارند
+  // محتوای *فرانت‌اندِ* Express را سرو می‌کردند نه داده‌ی مغازه — یعنی تا وقتی
+  // اینجا بودند، پوشه‌ی `frontend/` قابلِ حذف نبود: با حذفش فونت و فاوآیکون و
+  // سرویس‌ورکر و صفحه‌ی آفلاین می‌رفت، در حالی که هیچ‌کدام کارِ بک‌اند نبودند.
+  //
+  // حالا همه در `next-frontend/public/` هستند. `public/` به‌هرحال بر
+  // rewriteهای `afterFiles` اولویت دارد، ولی حذفِ خودِ rewrite عمدی است: اگر
+  // روزی فایلی از `public` جا بماند، باید ۴۰۴ بگیری و بفهمی — نه اینکه خاموش
+  // از Expressِ در حالِ خروج سرو شود و ماه‌ها بعد، روزِ بازنشستگیِ آن، یک‌جا
+  // بشکند.
+  //
+  // `/manifest.json` هم عمداً حذف شد: نه HTMLهای Express و نه layoutِ Next به
+  // آن لینک نمی‌دهند و نامِ واقعی `manifest.webmanifest` است.
+  //
+  // چیزی که *می‌ماند* دو مورد است و هر دو داده‌ی مغازه‌اند نه فرانت‌اند:
+  // `/api/*` خودِ سرور، و `/picture/*` عکسِ محصول‌ها که بیرونِ `frontend/`
+  // زندگی می‌کند (`backend/lib/paths.js`) و پنل مدیریت روی همان آپلود می‌کند.
   async rewrites() {
     return [
       { source: "/api/:path*", destination: `${API_ORIGIN}/api/:path*` },
       { source: "/picture/:path*", destination: `${API_ORIGIN}/picture/:path*` },
-      { source: "/assets/:path*", destination: `${API_ORIGIN}/assets/:path*` },
-      { source: "/sw.js", destination: `${API_ORIGIN}/sw.js` },
-      // نامِ واقعیِ فایل manifest.webmanifest است؛ قبلاً manifest.json نوشته
-      // شده بود که روی Express ۴۰۴ می‌داد. هر دو نام پروکسی می‌شوند تا اگر
-      // جایی لینکِ قدیمی مانده باشد هم کار کند.
-      { source: "/manifest.webmanifest", destination: `${API_ORIGIN}/manifest.webmanifest` },
-      { source: "/manifest.json", destination: `${API_ORIGIN}/manifest.webmanifest` },
-
-      // صفحه‌ی «آفلاین» عمداً به Next تبدیل *نشده*.
-      // sw.js خط ۱۳ این آدرس را به‌عنوان OFFLINE_URL پیش‌کش می‌کند و روی این
-      // مبدأ ۴۰۴ می‌گرفت — یعنی درست همان لحظه‌ای که اینترنت قطع می‌شد،
-      // مشتری به‌جای صفحه‌ی فارسیِ ما صفحه‌ی خطای خشکِ مرورگر را می‌دید.
-      //
-      // چرا صفحه‌ی Next نشد: خودِ offline.html در کامنتش می‌گوید نباید به هیچ
-      // فایلِ بیرونی وابسته باشد (نه CSS، نه فونت)، چون همان فایل هم بارگذاری
-      // نمی‌شود. یک صفحه‌ی Next حتماً به /_next/static/css/… وابسته است، پس
-      // تبدیلش دقیقاً همان چیزی را خراب می‌کرد که دلیلِ وجودش است.
-      { source: "/offline.html", destination: `${API_ORIGIN}/offline.html` },
     ];
   },
 
