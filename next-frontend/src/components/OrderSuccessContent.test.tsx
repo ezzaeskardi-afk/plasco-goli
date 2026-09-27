@@ -11,6 +11,19 @@
 //   ۳) پنجره‌ی صبر — وقتی نتیجه هیچ‌وقت روشن نمی‌شود، حلقه بعد از سقفِ تعیین‌شده
 //      می‌ایستد، به مشتری می‌گوید، و با «بررسی دوباره» از سر می‌گیرد.
 //
+// و بعد حالت‌های باقی‌مانده‌ی همین صفحه، که هیچ‌کدام ربطی به حلقه ندارند ولی
+// همان‌قدر می‌توانند مشتری را گم کنند:
+//
+//   ۴) کاربرِ واردنشده — باید به ورود برود و بعد از ورود به همین سفارش
+//      برگردد، نه اینکه کارتِ خطا ببیند یا صفحه سفید بماند.
+//   ۵) کارتِ «سفارشی پیدا نشد» **فقط** برای ۴۰۴؛ هر خطای دیگری «وضعیت را
+//      نتوانستیم بگیریم» است با دکمه‌ی تلاش دوباره. اگر قطعیِ لحظه‌ایِ اینترنت
+//      پیامِ «سفارشی نیست» بدهد، برای کسی که همین حالا پول داده یعنی «پولم رفت
+//      و سفارشی هم نیست».
+//   ۶) سفارشِ دوباره — و مهم‌تر از خودش: وقتی بخشی از کالاها ناموجود شده‌اند،
+//      دلیلش باید *گفته* شود؛ وگرنه مشتری سبدی کمتر از انتظارش می‌بیند و فکر
+//      می‌کند سایت خراب است.
+//
 // چرا تایمرِ جعلی و نه تزریقِ ثابت‌ها: با تایمرِ جعلی همین اعدادِ *واقعیِ روی
 // دیسک* سنجیده می‌شوند (۱۵ ثانیه، ۶۰ ثانیه، سقفِ ۴۰ بررسی). پس اگر روزی کسی
 // ۱۵ را ۲۰ کند یا سقف را بردارد، آزمون می‌شکند. تزریقِ ثابت این محافظت را از
@@ -32,7 +45,7 @@ import { createRoot, type Root } from "react-dom/client";
 
 import { OrderSuccessContent } from "@/components/OrderSuccessContent";
 import { ToastProvider } from "@/components/Toast";
-import { getMe, getOrder } from "@/lib/api";
+import { ApiError, getMe, getOrder, reorderOrder } from "@/lib/api";
 import type { Order } from "@/lib/types";
 
 // React بدونِ این پرچم روی هر رندر هشدار می‌دهد که «act» دورِ خودت لازم است.
@@ -189,6 +202,17 @@ function buttonLabels(container: HTMLElement): string[] {
   );
 }
 
+/**
+ * مقصدِ لینک‌ها. `next/link` در این آزمون به یک `<a>` ساده تبدیل شده، پس همان
+ * hrefها قابلِ خواندن‌اند — و برای کارت‌های خطا مهم‌اند: دکمه‌ی اشتباه یعنی
+ * مشتریِ نگران به صفحه‌ی نامربوط می‌رود.
+ */
+function linkHrefs(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll("a")).map(
+    (a) => a.getAttribute("href") ?? "",
+  );
+}
+
 /** برچسبِ وضعیت روی کارتِ جزئیات — همان چیزی که مشتری به‌جای کدِ انگلیسی می‌بیند */
 function statusPill(container: HTMLElement): string {
   return container.querySelector("span.rounded-full")?.textContent?.trim() ?? "";
@@ -248,6 +272,11 @@ beforeEach(() => {
     }
     return { order: makeOrder(currentStatus) };
   });
+  // پیش‌فرضِ سفارشِ دوباره: موفق و بی‌کالای جاافتاده. هر آزمونی که رفتارِ
+  // دیگری می‌خواهد خودش بازنویسی می‌کند (mockResolvedValue/mockRejectedValue
+  // پیاده‌سازیِ قبلی را جایگزین می‌کنند). این خط برای این است که آزمون‌ها به
+  // هم نشت نکنند؛ `clearMocks` فقط *فراخوانی‌ها* را پاک می‌کند نه پیاده‌سازی را.
+  vi.mocked(reorderOrder).mockResolvedValue({ added: 1, skipped: [] });
 
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -496,5 +525,175 @@ describe("پیگیریِ خودکار — پنجره‌ی صبر", () => {
     const afterUnmount = orderFetches();
     await advance(FULL_WINDOW_MS);
     expect(orderFetches()).toBe(afterUnmount);
+  });
+});
+
+// ============================================================
+// ۴) کاربرِ واردنشده
+// ============================================================
+describe("درِ ورود", () => {
+  it("کاربرِ واردنشده را به ورود می‌فرستد و کاری به سفارش ندارد", async () => {
+    vi.mocked(getMe).mockResolvedValue({ user: null });
+
+    await mount();
+
+    // مقصد عمداً کامل است (با redirect) تا بعد از ورود به *همین* سفارش برگردد،
+    // نه به صفحه‌ی اصلی. رشته‌ی دقیق سنجیده می‌شود چون هر تغییرِ کوچکی در
+    // ساختش یعنی بازگشتِ مشتری به صفحه‌ی اشتباه.
+    expect(nav.push).toHaveBeenCalledTimes(1);
+    expect(nav.push).toHaveBeenCalledWith(
+      "/login?redirect=%2Forder-success%3ForderId%3D42",
+    );
+    expect(decodeURIComponent(nav.push.mock.calls[0][0] as string)).toContain(
+      "/order-success?orderId=42",
+    );
+
+    // تا وقتی کاربر معلوم نیست هیچ درخواستِ سفارشی نمی‌رود
+    expect(orderFetches()).toBe(0);
+    // و مهم‌تر: هیچ کارتِ قرمزی نباید بگوید «سفارشی پیدا نشد» — این دو حالت
+    // شبیه‌هم‌اند و اشتباه‌گرفتنشان یعنی ترساندنِ بی‌دلیلِ مشتری.
+    expect(container.querySelector("h1")).toBeNull();
+    expect(bodyOf(container)).not.toContain("سفارشی پیدا نشد");
+  });
+
+  it("لینکِ بی‌orderId کارتِ «لینک نامعتبر» می‌دهد، نه ۴۰۴", async () => {
+    nav.orderId = null;
+
+    await mount();
+
+    expect(titleOf(container)).toBe("سفارشی پیدا نشد");
+    expect(bodyOf(container)).toContain("لینک نامعتبر است");
+    // این خطا از خودِ آدرس می‌آید: نه به ورود می‌رود و نه درخواستی می‌فرستد
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(vi.mocked(getMe)).not.toHaveBeenCalled();
+    expect(orderFetches()).toBe(0);
+    expect(linkHrefs(container)).toContain("/");
+  });
+});
+
+// ============================================================
+// ۵) کارتِ خطای بارگذاری — ۴۰۴ در برابر هر چیزِ دیگر
+// ============================================================
+describe("کارتِ خطای بارگذاری", () => {
+  it("فقط ۴۰۴ می‌گوید «سفارشی پیدا نشد» و راهِ سفارش‌های من را می‌دهد", async () => {
+    vi.mocked(getOrder).mockRejectedValue(
+      new ApiError(404, "سفارشِ مورد نظر یافت نشد"),
+    );
+
+    await mount();
+
+    expect(titleOf(container)).toBe("سفارشی پیدا نشد");
+    expect(bodyOf(container)).toContain("برای حساب شما نیست");
+    const hrefs = linkHrefs(container);
+    expect(hrefs).toContain("/account");
+    expect(hrefs).toContain("/");
+    // «تلاش دوباره» اینجا بی‌معناست: سفارش واقعاً وجود ندارد
+    expect(buttonLabels(container)).not.toContain("تلاش دوباره");
+    // و حلقه‌ی پیگیری هم هرگز روشن نمی‌شود
+    const n = orderFetches();
+    await advance(FULL_WINDOW_MS);
+    expect(orderFetches()).toBe(n);
+  });
+
+  it("خطای غیرِ ۴۰۴ کارتِ «وضعیت خوانده نشد» می‌دهد و تلاش دوباره از سر می‌گیرد", async () => {
+    // بارگذاریِ اول قطعیِ شبکه؛ فراخوانیِ بعدی موفق
+    vi.mocked(getOrder).mockRejectedValueOnce(new Error("قطعیِ لحظه‌ایِ شبکه"));
+
+    await mount();
+
+    expect(titleOf(container)).toContain("نتوانستیم بگیریم");
+    // پیامِ خودِ خطا باید دیده شود نه یک متنِ کلی؛ وگرنه دیباگ‌کردنش غیرممکن است
+    expect(bodyOf(container)).toContain("قطعیِ لحظه‌ایِ شبکه");
+    // و باید خیالِ مشتری را راحت کند که سفارشش از بین نرفته
+    expect(bodyOf(container)).toContain("سر جایش است");
+    // این کارت حق ندارد ادعای قطعیِ «سفارشی نیست» بکند
+    expect(bodyOf(container)).not.toContain("برای حساب شما نیست");
+    expect(buttonLabels(container)).toContain("تلاش دوباره");
+
+    const before = orderFetches();
+    await act(async () => {
+      clickButton("تلاش دوباره").click();
+    });
+    await flush();
+
+    expect(orderFetches()).toBe(before + 1);
+    expect(titleOf(container)).toContain("هنوز مشخص نیست");
+  });
+});
+
+// ============================================================
+// ۶) سفارشِ دوباره
+// ============================================================
+describe("سفارشِ دوباره", () => {
+  it("سبدِ کامل فوراً به سبد خرید می‌رود", async () => {
+    currentStatus = "canceled";
+    vi.mocked(reorderOrder).mockResolvedValue({ added: 3, skipped: [] });
+
+    await mount();
+    await act(async () => {
+      clickButton("دوباره سفارش بده").click();
+    });
+
+    expect(vi.mocked(reorderOrder)).toHaveBeenCalledWith(42);
+    // بی‌تأخیر: وقتی چیزی جا نیفتاده، معطل‌کردنِ مشتری فقط بی‌حوصلگی است
+    expect(nav.push).toHaveBeenCalledWith("/cart");
+  });
+
+  it("کالاهای ناموجود را با دلیلش نام می‌برد و با تأخیر می‌رود", async () => {
+    currentStatus = "canceled";
+    vi.mocked(reorderOrder).mockResolvedValue({
+      added: 1,
+      skipped: [
+        { title: "دستکش لاتکس", reason: "ناموجود شد" },
+        { title: "سبد پلاستیکی", reason: "از فروشگاه برداشته شد" },
+      ],
+    });
+
+    await mount();
+    await act(async () => {
+      clickButton("دوباره سفارش بده").click();
+    });
+
+    const text = bodyOf(container);
+    expect(text).toContain("چیده");
+    // ⚠️ مهم‌ترین بخشِ این آزمون: *چرا* گفته می‌شود، نه فقط اینکه چیزی نمانده.
+    // بدونِ این، مشتری سبدی کمتر از انتظارش می‌بیند و فکر می‌کند سایت خراب است.
+    expect(text).toContain("«دستکش لاتکس» ناموجود شد");
+    expect(text).toContain("«سبد پلاستیکی» از فروشگاه برداشته شد");
+
+    // هنوز نرفته: مشتری باید فرصتِ خواندنِ این پیام را داشته باشد
+    expect(nav.push).not.toHaveBeenCalled();
+    await advance(2200);
+    expect(nav.push).toHaveBeenCalledWith("/cart");
+  });
+
+  it("خطای چیدنِ سبد گفته می‌شود و مشتری در همان صفحه می‌ماند", async () => {
+    currentStatus = "failed";
+    vi.mocked(reorderOrder).mockRejectedValue(
+      new ApiError(400, "موجودی کافی نیست"),
+    );
+
+    await mount();
+    await act(async () => {
+      clickButton("دوباره سفارش بده").click();
+    });
+
+    expect(bodyOf(container)).toContain("موجودی کافی نیست");
+    expect(nav.push).not.toHaveBeenCalled();
+    // دکمه باید به حالتِ عادی برگردد تا بشود دوباره تلاش کرد
+    expect(buttonLabels(container)).toContain("دوباره سفارش بده");
+  });
+
+  it("خطای غیرِ API هم متنِ خوانا می‌گیرد، نه رشته‌ی خالی", async () => {
+    currentStatus = "failed";
+    vi.mocked(reorderOrder).mockRejectedValue(new Error("boom"));
+
+    await mount();
+    await act(async () => {
+      clickButton("دوباره سفارش بده").click();
+    });
+
+    expect(bodyOf(container)).toContain("خطا در چیدن سبد");
+    expect(nav.push).not.toHaveBeenCalled();
   });
 });
