@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   getChallenge,
@@ -11,8 +11,17 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { safeRedirectPath } from "@/lib/redirect";
+import { hardNavigate } from "@/lib/navigation";
 
 type Step = "phone" | "otp" | "password" | "name";
+
+/**
+ * مهلتِ ناوبریِ نرم بعد از ورود. دلیلِ وجودش در `goToRedirect` آمده.
+ *
+ * ۴ ثانیه: کوتاه‌تر از گاردِ اسکلتونِ `app/loading.tsx` (۶ ثانیه) چون در این
+ * نقطه دقیقاً می‌دانیم که باید *فوراً* یک انتقال شروع شود — یا می‌شود یا نمی‌شود.
+ */
+export const NAV_FALLBACK_MS = 4000;
 
 export function LoginForm() {
   const router = useRouter();
@@ -35,6 +44,36 @@ export function LoginForm() {
   const [error, setError] = useState("");
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // ============================================================
+  // رفتن به مقصدِ بازگشت — با سقفِ زمانی
+  // ============================================================
+  // `router.push` یک وعده‌ی نرم است: اگر درخواستِ صفحه‌ی مقصد هیچ‌وقت پاسخ
+  // نگیرد، هیچ خطایی پرتاب نمی‌شود، هیچ promiseای رد نمی‌شود و این کامپوننت هم
+  // unmount نمی‌شود — یعنی مشتری بعد از وارد شدن، روی همان فرم می‌ماند و
+  // نمی‌فهمد چه شد. (یا بدتر: اگر انتقال شروع شود ولی معلّق بماند، به
+  // اسکلتونِ بی‌زبانِ بارگذاری می‌رسد.)
+  //
+  // پس یک مهلت می‌گذاریم: اگر تا این مدت انتقال *شروع* نشده باشد — یعنی این
+  // کامپوننت unmount نشده باشد — همان آدرس را با ناوبریِ کاملِ مرورگر باز
+  // می‌کنیم. همان صفحه، ولی این بار با نوارِ پیشرفتِ خودِ مرورگر و بدونِ هیچ
+  // حالتِ معلّقِ روتر. آدرسِ مقصد از `safeRedirectPath` عبور کرده و هم‌مبدأ است.
+  const navFallback = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // unmount یعنی انتقال شروع شده → تایمر باید برود. وگرنه وسطِ بارگذاریِ
+  // صفحه‌ی مقصد یک بارگذاریِ کاملِ تازه اجرا می‌شود و کارِ انجام‌شده را از نو
+  // از صفر می‌کند.
+  useEffect(() => {
+    return () => {
+      if (navFallback.current) clearTimeout(navFallback.current);
+    };
+  }, []);
+
+  const goToRedirect = useCallback(() => {
+    if (navFallback.current) clearTimeout(navFallback.current);
+    router.push(redirect);
+    navFallback.current = setTimeout(() => hardNavigate(redirect), NAV_FALLBACK_MS);
+  }, [router, redirect]);
 
   // شمارش معکوس cooldown — پایدار در برابر رفرش: زمانِ پایان در
   // localStorage ذخیره می‌شود (کلید به ازای هر شماره) و موقعِ برگشت به صفحه
@@ -172,14 +211,14 @@ export function LoginForm() {
       const res = await verifyOtp(ph, code);
       if (res.isNew || !res.fullName) {
         setStep("name");
+        setLoading(false);
       } else {
-        router.push(redirect);
+        goToRedirect();
       }
     } catch (err) {
       setOtpError(err instanceof ApiError ? err.message : "کد اشتباه است");
       setOtpDigits(["", "", "", "", ""]);
       otpRefs.current[0]?.focus();
-    } finally {
       setLoading(false);
     }
   };
@@ -191,10 +230,13 @@ export function LoginForm() {
     setError("");
     try {
       await passwordLogin(phone.trim(), password);
-      router.push(redirect);
+      // ⚠️ دکمه عمداً در حالتِ «در حال رفتن» می‌ماند و `setLoading(false)`
+      // صدا زده نمی‌شود: فرمی که بعد از زدنِ دکمه به حالتِ عادی برگردد، در
+      // همان لحظه‌ای که انتقال معلّق است، به کاربر می‌گوید «هیچ اتفاقی
+      // نیفتاد» و او دوباره دکمه را می‌زند.
+      goToRedirect();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "رمز اشتباه است");
-    } finally {
       setLoading(false);
     }
   };
@@ -209,10 +251,11 @@ export function LoginForm() {
     setLoading(true);
     try {
       await saveProfile(fullName.trim());
-      router.push(redirect);
+      // مثلِ مرحله‌ی رمز: تا وقتی ناوبری تعیین‌تکلیف نشده، دکمه در حالتِ
+      // انتظار می‌ماند.
+      goToRedirect();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "خطا");
-    } finally {
       setLoading(false);
     }
   };
