@@ -11,12 +11,15 @@
    گزارش خصوصی می‌ماند و فقط مالکِ مخزن می‌بیندش.
 
 ۲. **مسیرهای `security.txt`**
-   طبقِ RFC 9116 در `frontend/.well-known/security.txt` نگه داشته می‌شود:
+   طبقِ RFC 9116 در `next-frontend/public/.well-known/security.txt` نگه داشته
+   می‌شود — همان فایلی که سایتِ Next روی دامنه سرو می‌کند. نسخه‌ی Express هم
+   همان را در `frontend/.well-known/security.txt` دارد، با یک تفاوتِ عمدی:
+   `Policy` آن‌جا به `/terms.html` می‌رود چون Express همان نام را سرو می‌کند.
 
    | فیلد | مقدار |
    |---|---|
-   | Contact | `https://polasco-goli.ir/contact` |
-   | Policy | `https://polasco-goli.ir/terms.html` |
+   | Contact | `https://github.com/ezzaeskardi-afk/plasco-goli/security/advisories/new` |
+   | Policy | `https://polasco-goli.ir/terms` |
    | Preferred-Languages | فارسی، انگلیسی |
 
 ## در گزارش چه بنویسید
@@ -72,7 +75,7 @@ npm run test:secrets           # نگهبانِ مرزِ راز
 
 Please **do not open a public issue**. Use GitHub's private reporting:
 **Security → Report a vulnerability** in this repository, or the contact
-listed in `frontend/.well-known/security.txt` (RFC 9116).
+listed in `next-frontend/public/.well-known/security.txt` (RFC 9116).
 
 Include the commit you tested, step-by-step reproduction (a raw `curl` is
 ideal), and the concrete impact. We acknowledge within 72 hours and aim to

@@ -1,5 +1,21 @@
-Contact: https://polasco-goli.ir/contact
+# نسخه‌ای که سایتِ Next سرو می‌کند (مبدأِ عمومی).
+#
+# دو تفاوتِ عمدی با `frontend/.well-known/security.txt` (نسخه‌ی Express) دارد،
+# چون نامِ مسیرها در دو فرانت‌اند یکی نیست — کپی‌کردنِ یکی روی دیگری هر دو را
+# می‌شکند:
+#
+#   • `Policy`: روی Express نامِ صفحه `/terms.html` است، روی این مبدأ `/terms`.
+#     نسخه‌ی قبلی همین‌جا `/terms.html` بود، یعنی روی مبدأِ Next ۴۰۴ می‌گرفت.
+#   • `Contact`: قبلاً به `https://polasco-goli.ir/contact` اشاره می‌کرد که روی
+#     *هیچ* مبدأیی وجود ندارد (نه صفحه‌ای به آن نام در Next، نه در Express —
+#     بخشِ تماس در `frontend/index.html#contact` است). حالا به مسیرِ
+#     «گزارشِ خصوصیِ گیت‌هاب» می‌رسد که همان راهِ اولی است که SECURITY.md
+#     پیشنهاد می‌کند و گزارش را فقط به دستِ مالکِ مخزن می‌رساند.
+#
+# آزمونِ `src/app/internalLinks.test.ts` این فایل را می‌خواند: هر آدرسِ هم‌مبدأ
+# در آن باید به یک مسیر یا فایلِ واقعیِ Next برسد.
+Contact: https://github.com/ezzaeskardi-afk/plasco-goli/security/advisories/new
 Expires: 2027-08-22T00:00:00.000Z
 Preferred-Languages: fa, en
 Canonical: https://polasco-goli.ir/.well-known/security.txt
-Policy: https://polasco-goli.ir/terms.html
+Policy: https://polasco-goli.ir/terms

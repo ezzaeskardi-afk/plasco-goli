@@ -151,5 +151,10 @@ export async function createOrderAction(data: {
 export async function revalidateProducts() {
   revalidatePath("/");
   revalidatePath("/products");
-  revalidatePath("/product");
+  // ⚠️ پیش‌تر اینجا `revalidatePath("/product")` بود و **هیچ کاری نمی‌کرد**:
+  // مسیرِ محصول‌ها داینامیک است (`/product/[id]`)، پس Next برچسبِ کشی به نامِ
+  // `/product` ندارد که باطل شود. خودِ پیاده‌سازیِ Next هم برای مسیرِ داینامیک
+  // بدونِ آرگومانِ دوم هشدار می‌دهد («has no effect by default»). با `"page"`
+  // همه‌ی نمونه‌های آن مسیرِ داینامیک یک‌جا باطل می‌شوند.
+  revalidatePath("/product/[id]", "page");
 }
