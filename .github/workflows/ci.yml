@@ -96,6 +96,12 @@ jobs:
       - name: Secret boundary guard
         run: node tests/secrets.js
 
+      # سبک‌ترین آزمون (فقط خواندنِ سورس)، پس آخر می‌آید: چیزی نمی‌سنجد که
+      # به سرور یا دیتابیس نیاز داشته باشد، ولی پنجره‌ی صبرِ فرانت‌اند را به
+      # مهلتِ پرداخت و تیکِ تطبیقِ بک‌اند گره می‌زند.
+      - name: Order window guard
+        run: node tests/order-window-integrity.js
+
   frontend:
     name: Next.js typecheck, lint, test and build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
