@@ -34,6 +34,12 @@ import type {
   AdminSystemStatus,
   AdminDbHealthResponse,
   AdminBackupResponse,
+  WholesaleRequestsResponse,
+  WholesaleStatus,
+  AdminReportsResponse,
+  MonthlySalesResponse,
+  ActivityResponse,
+  AdminErrorsResponse,
 } from "./adminTypes";
 
 // ============================================================
@@ -365,6 +371,104 @@ export async function getDbHealth(deep = false): Promise<AdminDbHealthResponse> 
  */
 export async function runBackup(): Promise<AdminBackupResponse> {
   return fetcher<AdminBackupResponse>("/api/admin/backup", { method: "POST" });
+}
+
+// ============================================================
+// عمده‌فروشی (B2B)
+// ============================================================
+
+/**
+ * صفِ درخواست‌های عمده — تازه‌ترین اول، حداکثر ۳۰۰ تا.
+ *
+ * ⚠️ این مسیر پارامتر ندارد: نه فیلتر وضعیت، نه صفحه‌بندی. سقفِ ۳۰۰ در خودِ
+ * سرور است (`listWholesaleRequests(300)` در routes/admin.js:381) و آن‌چه از
+ * ۳۰۰ قدیمی‌تر باشد **اصلاً برنمی‌گردد**. پس فیلتر و شمارشِ وضعیت‌ها اینجا
+ * سمتِ مرورگر انجام می‌شود و فقط تعداد ردیفِ روی صفحه را کم می‌کند، نه بارِ
+ * شبکه را — و اگر روزی ۳۰۰ ردیف برگشت، یعنی ممکن است قدیمی‌ترها گم شده باشند.
+ * نمای عمده‌فروشی همین را هشدار می‌دهد.
+ */
+export async function getWholesaleRequests(): Promise<WholesaleRequestsResponse> {
+  return fetcher<WholesaleRequestsResponse>("/api/admin/wholesale/requests");
+}
+
+/**
+ * تغییر وضعیتِ یک درخواست.
+ *
+ * فقط `new` / `contacted` / `done` قبول می‌شود؛ هر رشته‌ی دیگری ۴۰۰ می‌گیرد
+ * (بررسی سمتِ سرور است، نه در UI). `۴۰۴` یعنی درخواست در همین فاصله حذف شده
+ * — مثلاً یک مدیرِ دیگر همان را پاک کرده — و باید بی‌خبر از صف برود.
+ */
+export async function setWholesaleRequestStatus(
+  id: number,
+  status: WholesaleStatus,
+): Promise<{ ok: boolean }> {
+  return fetcher<{ ok: boolean }>(`/api/admin/wholesale/requests/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
+/** حذفِ کاملِ درخواست (اسپم/تکراری) — برگشت‌ناپذیر */
+export async function deleteWholesaleRequest(id: number): Promise<{ ok: boolean }> {
+  return fetcher<{ ok: boolean }>(`/api/admin/wholesale/requests/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// ============================================================
+// گزارش‌ها
+// ============================================================
+
+/**
+ * گزارشِ بازه‌ی روزانه: نمودار فروش + برترین‌های کالا و مشتری + سهم دسته‌ها.
+ *
+ * بازه در سرور به **۷ تا ۳۶۵** محدود می‌شود و `series` همیشه دقیقاً همان
+ * تعداد روز است (روزهای بی‌فروش صفر می‌خورند).
+ */
+export async function getAdminReports(days: number): Promise<AdminReportsResponse> {
+  return fetcher<AdminReportsResponse>(`/api/admin/reports?days=${days}`);
+}
+
+/** گزارشِ ماه‌به‌ماه — ماهِ شمسی، نه میلادی. سقفِ ۲ تا ۳۶ ماه. */
+export async function getMonthlySales(months: number): Promise<MonthlySalesResponse> {
+  return fetcher<MonthlySalesResponse>(`/api/admin/reports/monthly?months=${months}`);
+}
+
+/**
+ * آدرسِ خروجیِ اکسلِ گزارشِ ماهانه.
+ *
+ * چرا یک رشته‌ی آدرس و نه تابعِ دانلود: این لینک باید یک **ناوبریِ معمولیِ
+ * مرورگر** باشد (مثل نسخه‌ی Express که `location.href` می‌گذاشت)، وگرنه فایل
+ * را در حافظه می‌گیریم و باید خودمان blob و لینکِ دانلود بسازیم. چون `/api/*`
+ * در next.config.ts به Express پروکسی می‌شود، آدرسِ نسبی هم‌مبدأ است و کوکیِ
+ * نشست خودش می‌رود.
+ */
+export function monthlyCsvHref(months: number): string {
+  return `/api/admin/export/monthly.csv?months=${months}`;
+}
+
+// ============================================================
+// دفتر رویدادها
+// ============================================================
+
+/** تازه‌ترین رویدادهای پنل. سرور `limit` را به ۱ تا ۳۰۰ محدود می‌کند. */
+export async function getActivity(limit: number): Promise<ActivityResponse> {
+  return fetcher<ActivityResponse>(`/api/admin/activity?limit=${limit}`);
+}
+
+// ============================================================
+// خطاهای سرور
+// ============================================================
+
+/**
+ * خطاهای گروه‌بندی‌شده.
+ *
+ * بازه به ۱۴ روز محدود است (فقط ۱۴ روز لاگ نگه داشته می‌شود) و این یکی از دو
+ * مسیری است که کارمند هم از آن ۴۰۳ می‌گیرد — پس نمای خطاها باید ۴۰۳ را
+ * «دسترسی نداری» ترجمه کند، نه «خطای سرور».
+ */
+export async function getAdminErrors(days: number): Promise<AdminErrorsResponse> {
+  return fetcher<AdminErrorsResponse>(`/api/admin/errors?days=${days}`);
 }
 
 // دوباره صادر می‌شود تا کامپوننت‌ها یک مسیرِ import داشته باشند
