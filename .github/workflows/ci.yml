@@ -97,8 +97,22 @@ jobs:
         run: node tests/secrets.js
 
   frontend:
-    name: Next.js typecheck, lint, test and build
+    name: Next.js typecheck, lint, test and build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+
+    # همان ماتریسِ jobِ بک‌اند، با همان `fail-fast: false` و همان دلیل‌ها:
+    # `engines` می‌گوید >=22.5 ولی توسعه روی ۲۴ انجام می‌شود، و اگر یکی قرمز شد
+    # باید نسخه‌ی دیگر هم اجرا شود تا معلوم شود مشکل از کد است یا از Node.
+    #
+    # یک نکته که فقط مخصوصِ فرانت‌اند است: ابزارِ آزمونِ تازه کفِ نسخه‌ی خودش را
+    # دارد — Vitest 5 روی `^22.12.0` و jsdom 30 روی `^22.22.2`. مقدارِ `22.x` در
+    # setup-node آخرین ۲۲ را نصب می‌کند، پس اینجا قبول می‌شود؛ ولی توسعه‌دهنده‌ای
+    # که روی ۲۲٫۵ باشد می‌تواند سایت را اجرا کند و **نمی‌تواند** `npm test` بزند.
+    # این ناهم‌خوانی باید *دیده* شود، نه حدس زده — و همین ماتریس جای دیدنش است.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.x', '24.x']
 
     defaults:
       run:
@@ -112,10 +126,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node ${{ matrix.node }}
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: next-frontend/package-lock.json
 
