@@ -28,7 +28,7 @@
 // دیسک* سنجیده می‌شوند (۱۵ ثانیه، ۶۰ ثانیه، سقفِ ۴۰ بررسی). پس اگر روزی کسی
 // ۱۵ را ۲۰ کند یا سقف را بردارد، آزمون می‌شکند. تزریقِ ثابت این محافظت را از
 // بین می‌برد و کدِ اصلی را هم فقط برای آزمون‌پذیرشدن دست‌کاری می‌کرد.
-// ۳۴ دقیقه‌ی زمانیِ این حلقه در عمل در چند میلی‌ثانیه اجرا می‌شود.
+// ۴۱ دقیقه‌ی زمانیِ این حلقه در عمل در چند میلی‌ثانیه اجرا می‌شود.
 //
 // تکرارِ عددها پایین (POLL_MS_FAST و…) عمدی است: آزمون باید انتظاراتش را
 // مستقل بگوید، وگرنه «همان ثابتی که کد می‌خواند» را می‌سنجد و تغییرِ آن دیده
@@ -120,12 +120,29 @@ vi.mock("@/lib/api", () => {
 const POLL_MS_FAST = 15_000;
 const POLL_MS_SLOW = 60_000;
 const POLL_CHECKS_FAST = 8;
-const POLL_CHECKS_TOTAL = 40;
+const POLL_CHECKS_TOTAL = 47;
 
-/** کلِ پنجره: ۸ بررسیِ ۱۵ ثانیه‌ای + ۳۲ بررسیِ یک‌دقیقه‌ای ≈ ۳۴ دقیقه */
+/** کلِ پنجره: ۸ بررسیِ ۱۵ ثانیه‌ای + ۳۹ بررسیِ یک‌دقیقه‌ای ≈ ۴۱ دقیقه */
 const FULL_WINDOW_MS =
   POLL_CHECKS_FAST * POLL_MS_FAST +
   (POLL_CHECKS_TOTAL - POLL_CHECKS_FAST) * POLL_MS_SLOW;
+
+/** همان کلیدی که روی دیسک است — منبع: OrderSuccessContent.tsx */
+const WINDOW_KEY = "pg_order_window_";
+
+/**
+ * پنجره‌ای که `ms` پیش شروع شده را جعل می‌کند — یعنی «تبِ قبلی» یا «تباز
+ * صفحه‌ی وسطِ انتظار».
+ */
+function seedWindowAgo(ms: number) {
+  localStorage.setItem(WINDOW_KEY + "42", String(Date.now() - ms));
+}
+
+/** آغازِ پنجره‌ی ذخیره‌شده، یا `null` اگر چیزی نمانده باشد */
+function storedWindowStart(): number | null {
+  const raw = localStorage.getItem(WINDOW_KEY + "42");
+  return raw === null ? null : Number(raw);
+}
 
 const TOAST_PAID = "تأیید شد و سفارش ثبت شد";
 /** بدنه‌ی خطِ «در حال بررسی» — بدونِ نیم‌فاصله انتخاب شده */
@@ -250,6 +267,10 @@ beforeEach(() => {
     ],
   });
 
+  // پنجره‌ی صبر در localStorage می‌ماند (تا رفرش آن را از سر نگیرد)، پس
+  // بدونِ این خط، پنجره‌ی آزمونِ قبلی به آزمونِ بعدی نشت می‌کند.
+  localStorage.clear();
+
   currentStatus = "pending_payment";
   failNextPolls = 0;
   nav.orderId = "42";
@@ -364,7 +385,7 @@ describe("پیگیریِ خودکار — بازیابیِ دیرهنگام", ()
     expect(toastsSeen).toHaveLength(1);
     expect(toastsSeen[0]).toContain(TOAST_PAID);
 
-    // و حلقه ایستاده: پنجره‌ی کاملِ ۳۴ دقیقه‌ای جلو می‌رود بی‌آنکه درخواستی برود
+    // و حلقه ایستاده: پنجره‌ی کاملِ ۴۱ دقیقه‌ای جلو می‌رود بی‌آنکه درخواستی برود
     const settled = orderFetches();
     await advance(FULL_WINDOW_MS);
     expect(orderFetches()).toBe(settled);
@@ -444,7 +465,7 @@ describe("پیگیریِ خودکار — پنجره‌ی صبر", () => {
   it("بعد از سقفِ پنجره می‌ایستد، به مشتری می‌گوید، و با «بررسی دوباره» از سر می‌گیرد", async () => {
     await mount();
 
-    // سقف: بررسیِ چهلم سرِ ۳۴ دقیقه انجام می‌شود و همان‌جا می‌ایستد
+    // سقف: بررسیِ چهل و هفتم سرِ ۴۱ دقیقه انجام می‌شود و همان‌جا می‌ایستد
     await advance(FULL_WINDOW_MS - 1);
     expect(orderFetches()).toBe(1 + (POLL_CHECKS_TOTAL - 1));
 
@@ -525,6 +546,116 @@ describe("پیگیریِ خودکار — پنجره‌ی صبر", () => {
     const afterUnmount = orderFetches();
     await advance(FULL_WINDOW_MS);
     expect(orderFetches()).toBe(afterUnmount);
+  });
+});
+
+// ============================================================
+// ۳-ب) پنجره‌ای که باید از تازه‌کردنِ صفحه جان سالم ببرد
+// ============================================================
+// باگی که این آزمون‌ها می‌گیرند: پنجره با «چند بار در همین صفحه پرسیده‌ایم»
+// اندازه گرفته می‌شد، پس یک F5 کافی بود تا مشتری پنجره‌ی ۴۱ دقیقه‌ایِ تازه
+// بگیرد — بی‌آنکه چیزی بگوید و بی‌آنکه خودش بفهمد. یعنی همان سقفی که برای
+// «حلقه‌ی بی‌پایان نشود» گذاشته شده بود، با رفرش دور زده می‌شد. حالا موعدها
+// به آغازِ پنجره (ذخیره‌شده برای همان سفارش) گره خورده‌اند.
+describe("پنجره‌ی صبر — بازماندن از تازه‌کردنِ صفحه", () => {
+  it("تازه‌کردنِ صفحه پنجره را از سر شروع نمی‌کند", async () => {
+    // مشتری ۲۰ دقیقه است روی همین صفحه است: ۲۶ بررسی از ۴۰ گذشته.
+    seedWindowAgo(20 * 60_000);
+
+    await mount();
+    expect(orderFetches()).toBe(1); // فقط بارگذاریِ اول
+
+    // ریتمِ سریع (۱۵ ثانیه‌ای) از نو شروع نمی‌شود: بررسیِ بیست‌وهفتم موعدش ۲۱
+    // دقیقه از آغازِ پنجره است، یعنی یک دقیقه بعد از این تازه‌کردن.
+    await advance(POLL_MS_FAST);
+    expect(orderFetches()).toBe(1);
+    await advance(POLL_MS_SLOW - POLL_MS_FAST);
+    expect(orderFetches()).toBe(2); // t=۲۱:۰۰ از آغازِ پنجره
+
+    // و پنجره سرِ همان ۴۱ دقیقه‌ی قبلی تمام می‌شود — ۲۱ دقیقه بعد از این
+    // تازه‌کردن، نه ۴۱ دقیقه‌ی تازه. (همین یک خط، تفاوتِ «ادامه» و «از سر» است.)
+    await advance(FULL_WINDOW_MS - 20 * 60_000 - POLL_MS_SLOW);
+    expect(orderFetches()).toBe(1 + (POLL_CHECKS_TOTAL - 26));
+    expect(bodyOf(container)).toContain(GAVE_UP);
+
+    // و بعد از آن هم دیگر نمی‌پرسد.
+    const stopped = orderFetches();
+    await advance(30 * 60_000);
+    expect(orderFetches()).toBe(stopped);
+  });
+
+  it("اگر پنجره در بازدیدِ قبلی تمام شده باشد، همان‌جا می‌ایستد و راهِ بیرون را می‌دهد", async () => {
+    // مشتری دو ساعت پیش این صفحه را باز کرده بود و پنجره‌اش همان موقع تمام شد.
+    seedWindowAgo(120 * 60_000);
+
+    await mount();
+
+    // یک بار — فقط برای دیدنِ وضعیتِ *الان* — و بعد بدونِ هیچ بررسیِ خودکاری
+    // همان پیامِ «ایستادم» و دکمه‌ی دستی.
+    expect(orderFetches()).toBe(1);
+    expect(bodyOf(container)).toContain(GAVE_UP);
+    expect(buttonLabels(container)).toContain("بررسی دوباره");
+
+    await advance(FULL_WINDOW_MS);
+    expect(orderFetches()).toBe(1);
+
+    // ولی دستِ مشتری باز است: «بررسی دوباره» یک پنجره‌ی تازه می‌سازد و
+    // همان لحظه هم یک بررسی می‌فرستد.
+    await act(async () => {
+      clickButton("بررسی دوباره").click();
+    });
+    expect(orderFetches()).toBe(2);
+    expect(bodyOf(container)).not.toContain(GAVE_UP);
+
+    await advance(POLL_MS_FAST);
+    expect(orderFetches()).toBe(3); // ریتمِ سریع دوباره سوار شد
+    // و آغازش هم بازنویسی شده، وگرنه رفرشِ بعدی دوباره «تمام‌شده» می‌دید.
+    expect(storedWindowStart()).not.toBeNull();
+    expect(storedWindowStart() ?? 0).toBeGreaterThan(Date.now() - 60_000);
+  });
+
+  it("غیبتِ طولانیِ مشتری را با سیلِ درخواست جبران نمی‌کند", async () => {
+    await mount();
+    expect(orderFetches()).toBe(1);
+
+    // بیست دقیقه تب پنهان بود: هیچ درخواستی نرفت.
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => true,
+    });
+    await advance(20 * 60_000);
+    expect(orderFetches()).toBe(1);
+
+    // مشتری برمی‌گردد: *یک* بررسی — نه ۲۶ تای عقب‌افتاده. وگرنه همان سقفِ
+    // پنجره با یک برگشت به تب دور زده می‌شد.
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => false,
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(orderFetches()).toBe(2);
+
+    // و پنجره سرِ همان ۴۱ دقیقه‌ی آغازین تمام می‌شود، نه دیرتر.
+    await advance(FULL_WINDOW_MS - 20 * 60_000 - 1);
+    expect(bodyOf(container)).not.toContain(GAVE_UP);
+    await advance(1);
+    expect(bodyOf(container)).toContain(GAVE_UP);
+    // ۱ بارگذاریِ اول + ۲۲ بررسی (بیست‌وششمین همان لحظه‌ی برگشت رفت تا
+    // چهل و هفتمین) — نه یک درخواست برای هر بررسیِ ازدست‌رفته.
+    expect(orderFetches()).toBe(1 + (POLL_CHECKS_TOTAL - 26) + 1);
+  });
+
+  it("با تعیین‌تکلیف‌شدنِ سفارش، کلیدِ پنجره پاک می‌شود", async () => {
+    await mount();
+    expect(storedWindowStart()).not.toBeNull();
+
+    currentStatus = "paid";
+    await advance(POLL_MS_FAST);
+
+    expect(titleOf(container)).toBe("پرداخت با موفقیت انجام شد");
+    expect(storedWindowStart()).toBeNull();
   });
 });
 

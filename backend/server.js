@@ -34,7 +34,7 @@ const { boolEnv, boundedIntEnv, validateProductionConfig, newRequestId, validate
 const { staticCompress, compressJson, sendHtml } = require('./lib/static-compress');
 const { webpNegotiate } = require('./lib/webp-negotiate');
 const { isLive: paymentLive } = require('./lib/payment');
-const { reconcileStaleOrders } = require('./lib/reconcile');
+const { reconcileStaleOrders, RECONCILE_INTERVAL_MS } = require('./lib/reconcile');
 const { metricsMiddleware } = require('./lib/metrics');
 
 const productsRoute = require('./routes/products');
@@ -964,8 +964,8 @@ process.on('uncaughtException', (err) => {
 // جزئیاتِ چراییِ مرحله‌ی دوم در lib/reconcile.js نوشته شده.
 //
 // نگهبانِ reconcileRunning لازم است: اگر درگاه کند باشد ممکن است یک اجرا بیش
-// از پنج دقیقه طول بکشد و اجرای بعدی رویش سوار شود — یعنی پرسیدنِ هم‌زمانِ یک
-// سفارش از درگاه و دو برابر شدنِ بارِ شبکه بدونِ هیچ فایده‌ای.
+// از `RECONCILE_INTERVAL_MS` طول بکشد و اجرای بعدی رویش سوار شود — یعنی
+// پرسیدنِ هم‌زمانِ یک سفارش از درگاه و دو برابر شدنِ بارِ شبکه بدونِ فایده.
 let reconcileRunning = false;
 setInterval(() => {
   try {
@@ -980,7 +980,7 @@ setInterval(() => {
   reconcileStaleOrders()
     .catch(e => log.error('Order reconciliation failed', e))
     .finally(() => { reconcileRunning = false; });
-}, 5 * 60 * 1000).unref();
+}, RECONCILE_INTERVAL_MS).unref();
 
 // بکاپ روزانه‌ی دیتابیس + پاکسازی لاگ‌ها و آمار بازدید قدیمی (هر ۶ ساعت چک می‌شود)
 setInterval(() => {

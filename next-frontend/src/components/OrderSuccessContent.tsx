@@ -62,12 +62,110 @@ const CAN_REORDER = ["failed", "canceled", "pending_payment"];
 // این صفحه حالا خودش می‌پرسد و به‌محضِ روشن‌شدنِ نتیجه خودش عوض می‌شود.
 //
 // پنجره‌ی بررسی عمداً با ریتمِ بک‌اند هماهنگ است: ۸ بررسیِ ۱۵ ثانیه‌ای (۲
-// دقیقه، برای تأییدیه‌های دیررسی که کال‌بکشان گم شده) و بعد ۳۲ بررسیِ یک‌دقیقه‌ای.
-// مجموعاً ≈ ۳۴ دقیقه — یعنی همان پنجره‌ای که تطبیق می‌تواند سفارش را روشن کند.
+// دقیقه، برای تأییدیه‌های دیررسی که کال‌بکشان گم شده) و بعد ۳۹ بررسیِ یک‌دقیقه‌ای.
+// مجموعاً ≈ ۴۱ دقیقه — یعنی همان پنجره‌ای که تطبیق می‌تواند سفارش را روشن کند.
 const POLL_MS_FAST = 15_000;
 const POLL_MS_SLOW = 60_000;
 const POLL_CHECKS_FAST = 8;
-const POLL_CHECKS_TOTAL = 40;
+const POLL_CHECKS_TOTAL = 47;
+
+// ۴۷ = ۸ + ۳۹ → ۲ دقیقه ریتمِ سریع + ۳۹ دقیقه ریتمِ آرام = ≈ ۴۱ دقیقه.
+//
+// این عدد تنها نیست و از دو عددِ بک‌اند جدا نمی‌شود:
+//
+//   • مهلتِ پرداخت `ORDER_TTL_MS = ۳۰ دقیقه` در `lib/db.js` — تا انقضا، سفارش
+//     حتی کاندیدِ تطبیق با درگاه هم نیست.
+//   • فاصله‌ی تیکِ تطبیق `RECONCILE_INTERVAL_MS = ۵ دقیقه` در `lib/reconcile.js`.
+//
+// بدترین حالتِ رسیدنِ خبرِ خوب: انقضا + یک تیک (اولین تطبیق)، و اگر درگاه همان
+// لحظه در دسترس نبود یک تیکِ دیگر (تلاشِ جبرانی) = ۴۰ دقیقه. پس پنجره باید از
+// آن رد شود؛ ۴۱ دقیقه یعنی یک دقیقه هم بعد از آن. اگر پنجره کوتاه‌تر بود، صفحه
+// دقیقاً همان‌جا تسلیم می‌شد که سفارش می‌خواست روشن شود — بی‌آنکه کسی بفهمد.
+//
+// و اگر روزی یکی از این سه عدد عوض شود، نگهبانِ
+// `backend/tests/order-window-integrity.js` قرمز می‌شود. این کامنت عمداً همین
+// جا آمده تا کسی که این عدد را دست می‌زند بداند طرفِ دیگرِ قرارداد کجاست.
+
+/**
+ * موعدِ بررسیِ شماره‌ی n (۱-پایه)، نسبت به **آغازِ پنجره**.
+ *
+ * چرا تابع و نه فقط یک شمارنده: تا امروز پنجره با «چند بار تا حالا پرسیده‌ایم»
+ * اندازه گرفته می‌شد و همین، تازه‌کردنِ صفحه را خطرناک می‌کرد — شمارنده صفر
+ * می‌شد ولی زمان جلو رفته بود، پس مشتری با هر رفرش یک پنجره‌ی ۳۴ دقیقه‌ایِ
+ * تازه می‌گرفت و صفحه بی‌سروصدا برای همیشه (یا دست‌کم تا وقتی تب را ببندد)
+ * به سرور درخواست می‌زد. حالا مرجع، زمان است: هر بررسی موعدِ خودش را دارد و
+ * موعدها به آغازِ پنجره گره خورده‌اند، نه به این نشستِ مرورگر.
+ */
+function checkTimeMs(n: number): number {
+  return n <= POLL_CHECKS_FAST
+    ? n * POLL_MS_FAST
+    : POLL_CHECKS_FAST * POLL_MS_FAST + (n - POLL_CHECKS_FAST) * POLL_MS_SLOW;
+}
+
+/**
+ * از زمانِ سپری‌شده‌ی پنجره، موعدِ چند بررسی رسیده است.
+ *
+ * همان چیزی که «بارگذاریِ دوباره» را بی‌خطر می‌کند: موقعِ سوار شدن، شمارنده
+ * از روی سپری‌شده‌ی واقعی ساخته می‌شود، پس پنجره نه از صفر شروع می‌شود و نه
+ * (اگر تمام شده باشد) تازه می‌ماند.
+ */
+function checksDue(elapsedMs: number): number {
+  if (elapsedMs < POLL_MS_FAST) return 0;
+  if (elapsedMs <= POLL_CHECKS_FAST * POLL_MS_FAST) {
+    return Math.floor(elapsedMs / POLL_MS_FAST);
+  }
+  return Math.min(
+    POLL_CHECKS_TOTAL,
+    POLL_CHECKS_FAST +
+      Math.floor((elapsedMs - POLL_CHECKS_FAST * POLL_MS_FAST) / POLL_MS_SLOW),
+  );
+}
+
+// ============================================================
+// آغازِ پنجره — کجا ذخیره می‌شود و چرا
+// ============================================================
+// پنجره به **سفارش** تعلق دارد، نه به این تبِ مرورگر: مشتری که وسطِ انتظار
+// صفحه را تازه می‌کند (یا در تبِ دوم بازش می‌کند) نباید یک پنجره‌ی تازه بگیرد،
+// وگرنه چهار بار رفرش یعنی چهار بار ۴۰ بررسی — دقیقاً همان چیزی که سقف برای
+// جلوگیری از آن گذاشته شده بود.
+//
+// پس آغازش در localStorage می‌ماند (همان کاری که شمارشِ معکوسِ کدِ ورود در
+// LoginForm می‌کند). حالتِ ناشناس یا مسدود هم چیزی را نمی‌شکند: خواندن ناموفق
+// یعنی «پنجره‌ی تازه» و نوشتنِ ناموفق یعنی پنجره فقط در همین تب زنده است.
+const WINDOW_KEY = "pg_order_window_";
+
+/**
+ * آغازِ پنجره‌ی این سفارش؛ اگر نبود (یا مقدارِ نامعتبر/آینده بود) همین حالا.
+ *
+ * آغازِ در آینده رد می‌شود چون با ساعتِ عقب‌برده‌شده‌ی کاربر می‌تواند پنجره‌ای
+ * بسازد که هیچ‌وقت تمام نمی‌شود — همان چیزی که این سقف باید مانعش شود.
+ */
+function readWindowStart(orderId: string, now: number): number {
+  try {
+    const stored = Number(localStorage.getItem(WINDOW_KEY + orderId));
+    if (!Number.isFinite(stored) || stored <= 0 || stored > now) return now;
+    return stored;
+  } catch {
+    return now;
+  }
+}
+
+function writeWindowStart(orderId: string, at: number): void {
+  try {
+    localStorage.setItem(WINDOW_KEY + orderId, String(at));
+  } catch {
+    // حالتِ ناشناس — پنجره فقط در حافظه‌ی همین تب می‌ماند
+  }
+}
+
+/** سفارش تعیین‌تکلیف شد → پنجره دیگر معنایی ندارد */
+function clearWindowStart(orderId: string): void {
+  try {
+    localStorage.removeItem(WINDOW_KEY + orderId);
+  } catch {
+    // بی‌اهمیت
+  }
+}
 
 function toFa(n: number): string {
   return new Intl.NumberFormat("fa-IR").format(n);
@@ -253,24 +351,58 @@ export function OrderSuccessContent() {
   //   • تبِ پنهان: هیچ درخواستی نمی‌فرستد و تا برگشتنِ مشتری پارک می‌کند
   //     (visibilitychange دوباره راهش می‌اندازد). پس یک تبِ رهاشده در پس‌زمینه
   //     تا ابد روی سرور درخواست نمی‌زند.
-  //   • سقفِ تعدادِ بررسی: بعد از پنجره، ایست و به مشتری بگو — نه حلقه‌ی بی‌پایان.
+  //   • سقفِ پنجره: بعد از پنجره، ایست و به مشتری بگو — نه حلقه‌ی بی‌پایان.
   //   • پاک‌سازیِ تایمر در unmount تا ناوبری، درخواستِ یتیم جا نگذارد.
+  //
+  // و یک چیزِ چهارم که تا امروز نبود: هر سه‌ی این‌ها به **یک نشستِ مرورگر**
+  // گره خورده بودند. سقف با شمردنِ بررسی‌های همین صفحه اندازه گرفته می‌شد، پس
+  // یک رفرش کافی بود تا مشتری بی‌آنکه بفهمد پنجره‌ی ۳۴ دقیقه‌ایِ تازه‌ای
+  // بگیرد — و هر رفرشِ بعدی هم همین‌طور. حالا موعدها به «آغازِ پنجره‌ی همین
+  // سفارش» گره خورده‌اند: بارگذاریِ دوباره یعنی ادامه از همان‌جایی که بودیم.
   useEffect(() => {
     if (!orderId || order?.status !== "pending_payment" || gaveUp) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let checks = 0;
+
+    const startedAt = readWindowStart(orderId, Date.now());
+    writeWindowStart(orderId, startedAt);
+    const elapsed = () => Date.now() - startedAt;
+
+    // شمارنده = موعدهایی که گذشته‌اند، نه فقط درخواست‌هایی که همین حالا
+    // رفته‌اند. با این معنی، یک رفرش وسطِ پنجره شمارنده را به همان‌جایی
+    // برمی‌گرداند که زمان حکم می‌کند.
+    let checks = checksDue(elapsed());
+    if (checks >= POLL_CHECKS_TOTAL) {
+      // پنجره در بازدیدِ قبلی (یا با همین تازه‌کردنِ صفحه) تمام شده بود.
+      // بی‌سروصدا از نو شروع نمی‌کنیم؛ همان پیامِ «ایستادم» را نشان می‌دهیم و
+      // راهِ بیرون‌رفتن هم دستِ خودِ مشتری است: «بررسی دوباره».
+      setGaveUp(true);
+      return;
+    }
 
     function schedule(ms: number) {
       if (cancelled) return;
       timer = setTimeout(() => void run(), ms);
     }
 
+    /** فاصله تا موعدِ بررسیِ بعدی — نسبت به ساعتِ دیوار، پس تأخیر جبران می‌شود */
+    function delayToNextCheck(): number {
+      return Math.max(0, checkTimeMs(checks + 1) - elapsed());
+    }
+
     async function run() {
       if (cancelled) return;
       // تبِ پنهان: بی‌صدا پارک کن؛ visibilitychange از سر می‌گیردش.
       if (document.hidden) return;
+      // اگر مشتری مدتی نبوده، بررسی‌های ازدست‌رفته *فرستاده نمی‌شوند*: با
+      // زمان هم‌گام می‌شویم و از همین‌جا ادامه می‌دهیم. وگرنه برگشتنش یک سیلِ
+      // درخواست می‌شد — همان چیزی که این سقف باید جلویش را بگیرد.
+      checks = Math.max(checks, checksDue(elapsed()) - 1);
+      if (checks >= POLL_CHECKS_TOTAL) {
+        setGaveUp(true);
+        return;
+      }
       checks += 1;
       await refreshOnce();
       if (cancelled) return;
@@ -280,7 +412,7 @@ export function OrderSuccessContent() {
         setGaveUp(true);
         return;
       }
-      schedule(checks < POLL_CHECKS_FAST ? POLL_MS_FAST : POLL_MS_SLOW);
+      schedule(delayToNextCheck());
     }
 
     function onVisible() {
@@ -293,7 +425,7 @@ export function OrderSuccessContent() {
     }
 
     document.addEventListener("visibilitychange", onVisible);
-    schedule(POLL_MS_FAST);
+    schedule(delayToNextCheck());
 
     return () => {
       cancelled = true;
@@ -301,6 +433,16 @@ export function OrderSuccessContent() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [orderId, order?.status, gaveUp, refreshOnce]);
+
+  // سفارش تعیین‌تکلیف شد → پنجره‌اش را پاک کن. وگرنه کلیدهای بی‌مصرف در
+  // مرورگر مشتری جمع می‌شوند و اگر روزی همین سفارش دوباره معلّق شد، پنجره از
+  // صفر و با خواستِ خودِ او شروع می‌شود، نه از میانه‌ی یک پنجره‌ی کهنه.
+  useEffect(() => {
+    const status = order?.status;
+    if (orderId && status && status !== "pending_payment") {
+      clearWindowStart(orderId);
+    }
+  }, [orderId, order?.status]);
 
   useEffect(() => {
     load();
@@ -451,6 +593,10 @@ export function OrderSuccessContent() {
                 <button
                   type="button"
                   onClick={() => {
+                    // پنجره‌ی تازه — این بار به خواستِ خودِ مشتری، پس آغازش هم
+                    // بازنویسی می‌شود؛ وگرنه حلقه بلافاصله می‌فهمد که پنجره
+                    // تمام شده و دوباره می‌ایستد.
+                    if (orderId) writeWindowStart(orderId, Date.now());
                     setGaveUp(false);
                     void refreshOnce();
                   }}
