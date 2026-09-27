@@ -564,7 +564,8 @@ export interface AdminErrorGroup {
 
 export interface AdminErrorsDigest {
   days?: number;
-  since?: string;
+  /** مثل `AdminErrorsResponse.since` می‌تواند `null` باشد (شاخه‌ی خطا) */
+  since?: string | null;
   totals: { errors: number; groups?: number; http5xx?: number; today?: number };
   daily?: AdminErrorDay[];
   groups?: AdminErrorGroup[];
@@ -603,4 +604,148 @@ export interface AdminBackupResponse {
   ok: boolean;
   /** فقط نامِ فایل (بدونِ مسیر) */
   file: string;
+}
+
+// ============================================================
+// عمده‌فروشی — GET /api/admin/wholesale/requests
+// ============================================================
+// مسیر `{ requests: listWholesaleRequests(300) }` برمی‌گرداند و آن تابع،
+// `SELECT *` روی جدولِ `wholesale_requests` است (lib/db.js:482). پس نام‌های
+// فیلدها **snake_case** و عیناً ستون‌های دیتابیس‌اند — نه camelCase مثل
+// کوپن‌ها. این تفاوت همان چیزی است که یک تایپِ خیالی را خطرناک می‌کند.
+
+/** سه وضعیتِ ممکن — سرور فقط همین‌ها را در PATCH قبول می‌کند (۴۰۰ در غیر این‌صورت) */
+export type WholesaleStatus = "new" | "contacted" | "done";
+
+/**
+ * یک درخواستِ خرید عمده.
+ *
+ * ⚠️ `product_id` و `product_title` و `quantity` و `note` می‌توانند «خالی»
+ * باشند: فرمِ عمومی همه‌ی این‌ها را اختیاری می‌فرستد و ستون‌های متنی هم
+ * DEFAULT '' دارند. یعنی `quantity: 0` یعنی «تعداد نگفته»، نه «صفر تا».
+ * همین‌طور `product_id: null` یعنی «کالای مشخصی انتخاب نشده».
+ */
+export interface WholesaleRequest {
+  id: number;
+  /** نامِ تماس — اجباری است */
+  name: string;
+  phone: string;
+  product_id: number | null;
+  product_title: string;
+  quantity: number;
+  note: string;
+  status: WholesaleStatus;
+  created_at: string;
+}
+
+export interface WholesaleRequestsResponse {
+  requests: WholesaleRequest[];
+}
+
+// ============================================================
+// گزارش‌ها — GET /api/admin/reports و /reports/monthly
+// ============================================================
+
+/**
+ * پاسخِ `/reports?days=`. بازه‌ی روزها در سرور به **۷ تا ۳۶۵** محدود می‌شود
+ * (`Math.min(Math.max(...))`)، پس هر عددی بفرستی چیزی بین این دو می‌گیری.
+ *
+ * `series` همیشه دقیقاً `days` درایه دارد — روزهای بی‌فروش با صفر پر می‌شوند
+ * (getSalesSeries)، پس جمع‌زدنِ روی آن معادلِ فروشِ کلِ بازه است.
+ *
+ * سه برترینِ فهرست‌ها پنجره‌ی خودشان را دارند و به `days` کاری ندارند:
+ * `topProducts` روی ۹۰ روزِ اخیر است (TOP_PRODUCTS_WINDOW_DAYS در db.js:1799)
+ * و `topCustomers` و `categories` کلِ تاریخِ فروشگاه. یعنی این جدول‌ها با
+ * عوض‌کردنِ بازه‌ی نمودار تکان نمی‌خورند — عمدی است، ولی باید در رابط گفته شود
+ * وگرنه مدیر فکر می‌کند فیلتر کار نمی‌کند.
+ */
+export interface AdminReportsResponse {
+  days: number;
+  series: SalesPoint[];
+  topProducts: TopProduct[];
+  categories: CategoryShare[];
+  topCustomers: TopCustomer[];
+  stats: AdminStats;
+}
+
+/**
+ * یک ماه در گزارشِ ماه‌به‌ماه.
+ *
+ * `growth` سه حالت دارد و هر سه باید فرق کنند: مثبت، منفی، و **`null`**
+ * یعنی «ماهِ قبل صفر بوده» — که درصدِ معنادار ندارد. صفر یعنی «بی‌تغییر».
+ */
+export interface MonthlySalesRow {
+  /** سالِ شمسی (یا میلادی، اگر ICUِ سرور تقویمِ شمسی نداشته باشد) */
+  jy: number;
+  jm: number;
+  /** نامِ ماه، مثلاً «مرداد» */
+  name: string;
+  /** «مرداد ۱۴۰۵» */
+  label: string;
+  /** اولین روزِ ماه به شکل YYYY-MM-DD */
+  start: string;
+  orders: number;
+  sales: number;
+  customers: number;
+  avg: number;
+  /** درصدِ رشد نسبت به ماهِ قبل؛ `null` یعنی ماهِ قبل فروشی نبوده */
+  growth: number | null;
+}
+
+/**
+ * پاسخِ `/reports/monthly?months=` — `months` در سرور به ۲ تا ۳۶ محدود می‌شود.
+ *
+ * ⚠️ `calendar` را باید نشان داد: اگر سروری `full-icu` نداشته باشد، ماه‌ها
+ * **میلادی** می‌شوند و برچسبِ «مرداد» دروغ می‌شود. نسخه‌ی Express همین را
+ * هشدار می‌داد و بدونِ آن، عددهای غلط بی‌سروصدا باور می‌شوند.
+ */
+export interface MonthlySalesResponse {
+  months: number;
+  calendar: "jalali" | "gregorian";
+  /** از قدیم به جدید — یعنی `rows[rows.length - 1]` ماهِ جاری است */
+  rows: MonthlySalesRow[];
+  totals: { orders: number; sales: number; avg: number };
+  best: { label: string; sales: number } | null;
+}
+
+// ============================================================
+// دفتر رویدادها — GET /api/admin/activity
+// ============================================================
+
+export interface ActivityResponse {
+  activity: ActivityEntry[];
+}
+
+// ============================================================
+// خطاهای سرور — GET /api/admin/errors
+// ============================================================
+// همان شکلِ `errorDigest()` (lib/error-digest.js:197). در حالتِ عادی این پنج
+// فیلد همیشه هستند؛ فقط شاخه‌ی خطا (پوشه‌ی لاگ خوانده نمی‌شود) `unavailable`
+// می‌فرستد و بقیه را ندارد — پس همه اختیاری‌اند.
+
+/**
+ * پاسخِ `/errors?days=`. بازه در error-digest به **MAX_DAYS = ۱۴** محدود است
+ * (فقط ۱۴ روز لاگ نگه داشته می‌شود)، پس فرستادنِ `days=30` بی‌اثر است.
+ *
+ * ⚠️ این مسیر — و تنها این مسیر — حتی برای **کارمند** هم ۴۰۳ می‌دهد: stack
+ * trace ساختارِ داخلیِ سرور را لو می‌دهد. پس ۴۰۳ اینجا معنایش «کارمندی» است،
+ * نه «این مسیر نیست».
+ */
+export interface AdminErrorsResponse {
+  days?: number;
+  /**
+   * اولین روزِ بازه به شکل YYYY-MM-DD.
+   *
+   * ⚠️ در شاخه‌ی خطا **`null`** است، نه `undefined` (routes/admin.js:219 در
+   * همان `res.json` صریحاً `since: null` می‌فرستد). یک تایپِ `since?: string`
+   * این را نمی‌گفت و همین یک تناقضِ خاموش است — همان چیزی که در همین پروژه
+   * دو بار دردسر ساخته. حالا هر دو حالت را می‌گوید.
+   */
+  since?: string | null;
+  /** هر چهار عدد در هر دو شاخه (عادی و خطا) می‌آیند، پس همه اجباری‌اند */
+  totals: { errors: number; groups: number; http5xx: number; today: number };
+  daily?: AdminErrorDay[];
+  groups?: AdminErrorGroup[];
+  /** پوشه‌ی لاگ خوانده نشد — «۰ خطا» یعنی «نمی‌دانم»، نه «خبری نیست» */
+  unavailable?: string;
 }

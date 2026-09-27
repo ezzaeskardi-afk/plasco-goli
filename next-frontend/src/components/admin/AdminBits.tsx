@@ -304,10 +304,21 @@ export function Panel({
 }) {
   return (
     <section
-      className="rounded-[18px] p-4"
+      // `min-w-0` اینجا کوچک است ولی بدونش یک باگِ واقعی بود: هر پنلی که
+      // داخلِ گرید یا فلکس بنشیند، به‌طور پیش‌فرض `min-width: auto` دارد یعنی
+      // **کمتر از عرضِ محتوایش کوچک نمی‌شود**. یک جدولِ `min-w-[380px]` داخل
+      // یک گریدِ تک‌ستونه در صفحه‌ی ۳۹۰ پیکسلی، کلِ صفحه را ۵۰ پیکسل سرریز
+      // می‌کرد (اندازه‌گیری‌شده در نمای گزارش‌ها) و هیچ‌کدام از اسکرول‌های
+      // افقیِ داخلی هم نمی‌توانستند جلویش را بگیرند، چون خودِ گرید بزرگ شده
+      // بود. با `min-w-0` آیتمِ گرید به عرضِ ترک برمی‌گردد و اسکرولِ افقیِ
+      // داخلش کارِ خودش را می‌کند.
+      className="rounded-[18px] p-4 min-w-0"
       style={{ background: "var(--color-surface)", border: "1px solid var(--color-line)" }}
     >
-      <div className="flex items-center justify-between gap-3 mb-3">
+      {/* `flex-wrap` هم همین دلیل را دارد: سرستون روی موبایل ممکن است عملِ
+          پهن داشته باشد (۴ دکمه‌ی بازه + دکمه‌ی خروجی) و بدونِ شکستن، از
+          کادر بیرون می‌زد. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <h2 className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>
           {title}
         </h2>
