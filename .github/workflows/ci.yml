@@ -115,6 +115,12 @@ jobs:
       - name: Resend window guard
         run: node tests/otp-resend-window.js
 
+      # نه سرور می‌خواهد نه دیتابیس: عددهای README را با خودِ مخزن می‌سنجد. اگر
+      # کسی عددی را عوض کند و شمارشِ مستندات جا بماند (که یک‌بار شد: سئو سه جا ۸۵
+      # و یک جا ۸۶)، همین step گیر می‌اندازد — پیش از اینکه عددِ غلط عادت شود.
+      - name: README count guard
+        run: node tests/readme-counts.js
+
   frontend:
     name: Next.js typecheck, lint, test and build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
