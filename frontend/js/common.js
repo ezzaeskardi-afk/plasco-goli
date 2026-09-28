@@ -71,10 +71,10 @@ const PG = (function () {
       err.status = res.status;
       err.ref = data.ref || null;
       err.data = data;
-      // خروجِ خودکارِ پنل بعد از بی‌کاری. یک رویداد پخش می‌شود تا صفحه‌ی پنل
+      // خروجِ خودکارِ پنل بعد از بی‌کاری. یک رویداد پخش می‌شود تا مصرف‌کننده
       // بتواند به‌جای یک toastِ گم‌شونده، پرده‌ی «دوباره وارد شوید» را نشان دهد.
-      // چرا اینجا و نه در admin.js: پنل ده‌ها فراخوانی دارد و هر کدام می‌تواند
-      // اولین درخواستی باشد که به نشستِ منقضی می‌خورد.
+      // چرا اینجا: پنل ده‌ها فراخوانی دارد و هر کدام می‌تواند اولین درخواستی
+      // باشد که به نشستِ منقضی می‌خورد.
       if (res.status === 401 && data.reason === 'idle') {
         err.idle = true;
         document.dispatchEvent(new CustomEvent('pg:idle-logout', { detail: { message } }));
@@ -666,8 +666,6 @@ const PG = (function () {
 
   // آیکون قلب در هدر (کنار سبد خرید) — روی همه‌ی صفحاتِ فروشگاه تزریق می‌شود
   function initHeaderWishIcon() {
-    // پنل ادمین هدرِ خودش را دارد؛ قلبِ فروشگاه این‌جا بی‌ربط است
-    if (document.body.classList.contains('admin-body')) return;
     const actions = document.querySelector('.header-actions');
     if (!actions || actions.querySelector('.wish-link')) return;
     const cartLink = actions.querySelector('a[href*="cart"]');
@@ -681,8 +679,6 @@ const PG = (function () {
 
   // ---------- نوار ناوبری پایین موبایل (مثل اپ‌های فروشگاهی) ----------
   function initBottomNav() {
-    // پنل ادمین ناوبریِ خودش را دارد؛ نوارِ مشتری این‌جا اضافه است
-    if (document.body.classList.contains('admin-body')) return;
     // صفحه‌های تمام‌صفحه (مثل ورود) نوار پایین نمی‌خواهند — تمرکز فقط روی فرم
     if (document.body.hasAttribute('data-no-bottom-nav')) return;
     if (document.querySelector('.bottom-nav')) return;
@@ -818,8 +814,6 @@ const PG = (function () {
 
   // نوار اطلاعیه/تعطیلی بالای سایت — متنش از پنل ← تنظیمات می‌آید
   async function initShopBar() {
-    // نوار اطلاعیه برای بازدیدکننده‌ی فروشگاه است؛ ادمین همان متن را در تنظیمات می‌بیند
-    if (document.body.classList.contains('admin-body')) return;
     if (document.body.classList.contains('auth-page')) return; // صفحه‌ی ورود، تمام‌صفحه است
     let info;
     try { info = await api('/shop/info'); } catch (e) { return; }

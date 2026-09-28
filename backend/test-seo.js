@@ -27,7 +27,7 @@ function getHtml(fileName) {
 const INDEXABLE = ['index.html', 'products.html', 'terms.html', 'wholesale.html'];
 
 // صفحاتی که نباید ایندکس شوند (noindex)
-const NOINDEX = ['login.html', 'cart.html', 'checkout.html', 'account.html', 'admin.html', 'order-success.html', 'product.html', '404.html', '500.html', 'product-gone.html', 'offline.html'];
+const NOINDEX = ['login.html', 'cart.html', 'checkout.html', 'account.html', 'order-success.html', 'product.html', '404.html', '500.html', 'product-gone.html', 'offline.html'];
 
 console.log('\n=== تست سئوی خودکار ===\n');
 

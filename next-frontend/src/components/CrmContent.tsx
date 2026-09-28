@@ -205,7 +205,7 @@ export function CrmContent() {
     }
   };
 
-  // حذف یادداشت — همتای .crm-del-note در نسخه‌ی Express (admin.js:1813)
+  // حذف یادداشت — همتای .crm-del-note در پنلِ قدیمیِ Express (حذف‌شده)
   const handleDeleteNote = async (noteId: number) => {
     if (!detail || !window.confirm("این یادداشت حذف شود؟")) return;
     try {
@@ -241,7 +241,7 @@ export function CrmContent() {
     }
   };
 
-  // حذف پیگیری — همتای .crm-task-del در نسخه‌ی Express (admin.js:1835)
+  // حذف پیگیری — همتای .crm-task-del در پنلِ قدیمیِ Express (حذف‌شده)
   const handleDeleteTask = async (taskId: number) => {
     if (!detail || !window.confirm("این پیگیری حذف شود؟")) return;
     try {
@@ -511,7 +511,7 @@ export function CrmContent() {
             </select>
           </div>
 
-          {/* فیلتر برچسب — همتای چیپ‌های data-tag در نسخه‌ی Express (admin.js:1585).
+          {/* فیلتر برچسب — همتای چیپ‌های data-tag در پنلِ قدیمیِ Express (حذف‌شده).
               قبلاً custTag در کوئری ارسال می‌شد ولی هیچ UI‌ای آن را ست نمی‌کرد. */}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

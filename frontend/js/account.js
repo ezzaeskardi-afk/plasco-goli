@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
     const nav = document.querySelector('.account-nav');
     const btnLogout = document.getElementById('btnLogout');
     const a = document.createElement('a');
-    a.href = '/admin.html';
+    a.href = '/admin';
     a.innerHTML = '<svg><use href="#i-shield"/></svg> پنل مدیریت';
     nav.insertBefore(a, btnLogout);
   }

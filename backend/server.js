@@ -484,7 +484,7 @@ app.use((req, res, next) => {
   if (req.method === 'GET') {
     const p = req.path;
     const isPage = p === '/' || p.endsWith('.html') || /^\/product\/\d+$/.test(p);
-    if (isPage && p !== '/admin.html') bumpVisit(p === '/' ? '/index.html' : p);
+    if (isPage) bumpVisit(p === '/' ? '/index.html' : p);
   }
   next();
 });
@@ -756,7 +756,7 @@ Disallow: /checkout.html
 Disallow: /login.html
 Disallow: /account.html
 Disallow: /order-success.html
-Disallow: /admin.html
+Disallow: /admin
 Disallow: /500.html
 Disallow: /api/
 

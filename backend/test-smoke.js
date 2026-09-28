@@ -51,6 +51,14 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const TEST_PHONE = '09120000001';
 const ADMIN_PHONE = '09120000009'; // promoted to admin via env below
 
+// ---------- مبدأِ Next ----------
+// پنلِ Express (`frontend/admin.html` + `js/admin.js`) حذف شد، ولی قواعدِ
+// ایستایی که آن را می‌سنجیدند هنوز معتبرند — فقط باید روی همان کدی سنجیده
+// شوند که واقعاً به مدیر نشان داده می‌شود. پس چند بررسیِ زیر به‌جای خواندنِ
+// سورسِ پنلِ قدیم، سورسِ Next را می‌خوانند.
+const NEXT_SRC = path.join(__dirname, '..', 'next-frontend', 'src');
+const nextSrc = (rel) => fs.readFileSync(path.join(NEXT_SRC, rel), 'utf8');
+
 // ---------- tiny helpers ----------
 const results = [];
 function check(name, ok, detail = '') {
@@ -1213,13 +1221,18 @@ function shutdown(code) {
     check('V12 گزارش: CSV ضد تزریق فرمول است',
       !formulaCell, formulaCell ? 'یک سلول با = یا + شروع شده' : '');
 
-    // چاپ گزارش: پنل تیره است، روی کاغذ باید خوانا شود
-    const cssTxt = fsx.readFileSync(path.join(FRONT, 'css', 'style.css'), 'utf8');
-    const printBlock = cssTxt.slice(cssTxt.indexOf('@media print{'), cssTxt.indexOf('@media print{') + 1400);
+    // چاپِ فاکتور: پنل تیره است، روی کاغذ سفید باید متنِ تیره چاپ شود.
+    // استایلِ چاپِ پنلِ قدیم حذف شد؛ همان قرارداد حالا در Next است و همان
+    // دو چیز باید برقرار بماند: متنِ تیره روی سفید، و اینکه موقعِ چاپ فقط خودِ
+    // فاکتور دیده شود نه کلِ پنل.
+    const printCss = nextSrc('app/globals.css');
+    const printFrom = printCss.indexOf('html.printing-invoice');
+    const printBlock = printCss.slice(printFrom, printFrom + 2200);
     check('V12 گزارش: استایل چاپ رنگ متن را تیره می‌کند',
-      /--ink:#111/.test(printBlock) && /--surface:#fff/.test(printBlock));
-    check('V12 گزارش: استایل چاپ رنگ نمودار را نگه می‌دارد',
-      /print-color-adjust:exact/.test(printBlock));
+      /color:\s*#111/.test(printBlock) && /background:\s*#fff/.test(printBlock));
+    check('V12 گزارش: استایل چاپ همه‌چیز جز فاکتور را پنهان می‌کند',
+      /html\.printing-invoice > body > \*:not\(#pg-invoice\)/.test(printCss) &&
+      /display:\s*none !important/.test(printBlock));
 
     // ---------- کوپن: سفارش پرداخت‌نشده نباید سقف مصرف را بسوزاند ----------
     const cpn2 = await api('POST', '/admin/coupons', { code: 'SMOKEPEND', type: 'percent', value: 15, perUserLimit: 1 });
@@ -1281,10 +1294,10 @@ function shutdown(code) {
         .flatMap(s => (s.match(/'[a-z][a-z_]+'/g) || []).map(x => x.slice(1, -1)))
         .filter(k => /^(order|product|coupon|category|review|settings|backup|export|image|staff)_?/.test(k))
     )];
-    const panelSrc = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'js', 'admin.js'), 'utf8');
+    const panelSrc = nextSrc('components/admin/ActivityContent.tsx');
     const faBlock = panelSrc.slice(panelSrc.indexOf('const ACTION_FA'), panelSrc.indexOf('const ACTION_TONE'));
     const missingFa = actionKeys.filter(k => !new RegExp(`\\b${k}\\s*:`).test(faBlock));
-    check('V13 لاگ: هر کلید رویداد برچسب فارسی در پنل دارد',
+    check('V13 لاگ: هر کلید رویداد برچسب فارسی در دفترِ پنل دارد',
       actionKeys.length >= 20 && missingFa.length === 0,
       missingFa.length ? `بی‌برچسب: ${missingFa.join(', ')}` : `${actionKeys.length} کلید`);
 
@@ -1724,10 +1737,14 @@ function shutdown(code) {
     check('V16 ویترین: پیام خطا دلیل واقعی را نشان می‌دهد نه «رفرش کنید»',
       /PG\.esc\(e\.message/.test(mainJs) && !/لطفاً صفحه را رفرش کنید/.test(mainJs));
 
-    for (const [file, label] of [['js/account.js', 'حساب کاربری'], ['js/admin.js', 'پنل']]) {
+    for (const [file, label] of [['js/account.js', 'حساب کاربری']]) {
       check(`V16 خروج: خروجِ ناموفق در ${label} بی‌صدا نیست`,
         /خروج انجام نشد/.test(rd(file)), file);
     }
+    // پنلِ Express دکمه‌ی خروجِ خودش را داشت و حذف شد؛ همتای Next (که خروج در
+    // خودِ حساب کاربری است) هم خروجِ ناموفق را با toast می‌گوید، نه با سکوت.
+    check('V16 خروج: خروجِ ناموفق در حسابِ کاربریِ Next بی‌صدا نیست',
+      /خروج انجام نشد/.test(nextSrc('components/AccountContent.tsx')));
     check('V16 استایل: کلاس page-error در CSS تعریف شده', /\.page-error\{/.test(rd('css/style.css')));
 
     // نسخه‌ی فایل‌های ثابت: بعد از تغییر CSS/JS باید بالا رفته باشد، وگرنه مرورگرِ
@@ -1844,12 +1861,13 @@ function shutdown(code) {
     check('V17 علاقه‌مندی: خطا دکمه‌ی تلاش دوباره دارد', /data-retry-wish/.test(accJs));
     check('V17 آدرس: خطای بارگذاری آدرس‌ها دکمه‌ی تلاش دوباره دارد', /data-retry-addr/.test(accJs));
 
-    const admJs = rd('js/admin.js');
-    check('V17 آپلود: بدنه‌ی غیرJSON دیگر باعث خطای انگلیسی نمی‌شود',
-      /try \{ data = await res\.json\(\); \} catch \(e\) \{[^}]*\}/.test(admJs) &&
-      /res\.status === 413/.test(admJs));
-    check('V17 آپلود: خطای شبکه‌ی آپلود فارسی است',
-      /عکس آپلود نشد/.test(admJs) && !/data\.error \|\| 'آپلود ناموفق بود'/.test(admJs));
+    // همان دو قاعده، ولی روی آپلودِ پنلِ Next (پنلِ Express حذف شد).
+    const admJs = nextSrc('lib/adminApi.ts');
+    check('V17 آپلود: بدنه‌ی غیرJSON (مثلاً ۴۱۳ِ پروکسی) خطای انگلیسی نمی‌دهد',
+      /await res\.json\(\)\.catch\(\(\) => \(\{\}\)\)/.test(admJs) &&
+      /if \(!res\.ok\)/.test(admJs));
+    check('V17 آپلود: خطای آپلود فارسی است',
+      /"آپلود عکس انجام نشد"/.test(admJs) && !/آپلود ناموفق بود/.test(admJs));
 
     // ============ V18: سئو — نقشه‌ی سایت و داده‌ی ساختاریافته ============
     const smRes = await fetch(`${BASE}/sitemap.xml`);
@@ -1877,7 +1895,9 @@ function shutdown(code) {
     const rb = await rbRes.text();
     check('V18 robots: خط Sitemap فقط یک بار آمده', (rb.match(/^Sitemap:/gm) || []).length === 1);
     check('V18 robots: مسیر API بسته است', /Disallow: \/api\//.test(rb));
-    check('V18 robots: صفحه‌ی پنل بسته است', /Disallow: \/admin\.html/.test(rb));
+    // پنل دیگر روی Express نیست (پنلِ قدیمی حذف شد و پنل در Next است)؛ ولی مسیرِ
+    // عمومیِ همان پنل باید همچنان از ایندکس بیرون بماند.
+    check('V18 robots: مسیر پنل بسته است', /^Disallow: \/admin$/m.test(rb));
     check('V18 robots: دامنه‌ی نمونه ندارد', !rb.includes('example.com'));
 
     // JSON-LD واقعی را از صفحه‌ی یک محصولِ واقعی می‌خوانیم و می‌سنجیم.
@@ -2130,15 +2150,17 @@ function shutdown(code) {
         anon.status === 401 || anon.status === 403, String(anon.status));
     }
 
-    // رابط پنل
-    const xpHtml = rd('admin.html');
-    const xpJs = rd('js/admin.js');
+    // رابط پنل (Next — پنلِ Express حذف شد)
+    const xpApi = nextSrc('lib/adminApi.ts');
+    const xpPeople = nextSrc('components/admin/PeopleContent.tsx');
+    const xpStock = nextSrc('components/admin/StockContent.tsx');
     check('V21 رابط: دکمه‌ی خروجی مشتری‌ها و انبار در پنل هست',
-      /id="btnExportPeople"/.test(xpHtml) && /id="btnExportStock"/.test(xpHtml));
+      /customersCsvHref/.test(xpPeople) && /inventoryCsvHref/.test(xpStock));
     check('V21 رابط: دکمه‌ها به مسیر درست وصل‌اند',
-      /export\/customers\.csv/.test(xpJs) && /export\/inventory\.csv/.test(xpJs));
+      /export\/customers\.csv/.test(xpApi) && /export\/inventory\.csv/.test(xpApi));
     check('V21 رابط: فیلترِ روی صفحه به خروجی مشتری‌ها منتقل می‌شود',
-      /userFilter'\)\.value === 'buyers'[\s\S]{0,80}buyers=1/.test(xpJs));
+      /customersCsvHref\(filter === "buyers"\)/.test(xpPeople) &&
+      /onlyBuyers \? "\?buyers=1"/.test(xpApi));
 
     // ============ V22: سخت‌سازی ورود پنل ============
     // چیزی که اینجا اثبات می‌شود: سقفِ IP به‌تنهایی کافی نیست، چون مهاجم IP
@@ -2239,7 +2261,7 @@ function shutdown(code) {
         String(a.target || '').endsWith(buyerPhone.slice(-4))));
 
     // انقضای نشستِ بی‌کار
-    const admJsSrc = rd('js/admin.js');
+    const admJsSrc = nextSrc('lib/adminApi.ts');
     const admSrv = fs.readFileSync(path.join(__dirname, 'routes', 'admin.js'), 'utf8');
     check('V22 نشست: گاردِ بی‌کاری در سرور هست', /function panelIdleGuard/.test(admSrv));
     check('V22 نشست: قبل از گاردِ دسترسی نصب شده (نه بعدش)',
@@ -2253,12 +2275,19 @@ function shutdown(code) {
     check('V22 نشست: فقط پنل را می‌بندد، نه حساب مشتری را',
       !/panelIdleGuard/.test(fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8')));
     check('V22 نشست: پاسخ دلیلِ خروج را می‌گوید', /reason: 'idle'/.test(admSrv));
-    check('V22 نشست: صفحه‌ی پنل پرده‌ی «دوباره وارد شوید» را نشان می‌دهد',
-      /pg:idle-logout/.test(admJsSrc) && /نشست پنل بسته شد/.test(admJsSrc));
+    // پنلِ Next باید همان ۴۰۱ را از ۴۰۳ تفکیک کند، وگرنه مدیرْ کادرِ قرمزِ
+    // «دسترسی نداری» می‌بیند در حالی که فقط نشستش بسته شده بود.
+    const admLogin = nextSrc('components/LoginForm.tsx');
+    check('V22 نشست: پنلِ Next دلیلِ خروج را می‌شناسد و به صفحه‌ی ورود می‌برد',
+      /IDLE_REASON = "idle"/.test(admJsSrc) && /idle=1/.test(admJsSrc));
+    check('V22 نشست: صفحه‌ی ورود پرده‌ی «دوباره وارد شوید» را نشان می‌دهد',
+      /searchParams\.get\("idle"\) === "1"/.test(admLogin) &&
+      /idleEnded &&/.test(admLogin) && /خارج شدید/.test(admLogin));
     check('V22 نشست: رویداد از common.js پخش می‌شود',
       /reason === 'idle'[\s\S]{0,200}pg:idle-logout/.test(rd('js/common.js')));
     check('V22 رابط: رویدادهای ورود در دفترِ پنل برچسب فارسی دارند',
-      /login_ok: 'ورود به پنل'/.test(admJsSrc) && /login_failed: 'ورود ناموفق به پنل'/.test(admJsSrc));
+      /login_ok: "ورود به پنل"/.test(nextSrc('components/admin/ActivityContent.tsx')) &&
+      /login_failed: "ورود ناموفق به پنل"/.test(nextSrc('components/admin/ActivityContent.tsx')));
 
     // ---- انقضای نشست، این بار واقعاً اجرا می‌شود ----
     // چرا سرورِ دوم: مهلتِ واقعی نیم‌ساعت است و تست نمی‌تواند نیم‌ساعت بخوابد.
@@ -2560,16 +2589,18 @@ function shutdown(code) {
          سرور بی‌عیب باشد ولی هیچ صفحه‌ای ?w نفرستد، این کار بی‌فایده است. */
       const commonSrc = fs.readFileSync(path.join(FRONT, 'js', 'common.js'), 'utf8');
       const cartSrc = fs.readFileSync(path.join(FRONT, 'js', 'cart.js'), 'utf8');
-      const adminSrc = fs.readFileSync(path.join(FRONT, 'js', 'admin.js'), 'utf8');
+      const adminSrc = nextSrc('components/admin/StockContent.tsx');
+      const adminApiSrc = nextSrc('lib/adminApi.ts');
       check('V26 فرانت: تابعِ thumb از common.js بیرون داده شده',
         /\breturn \{[^}]*\bthumb\b/.test(commonSrc), 'در فهرستِ export نیست');
       check('V26 فرانت: پیشنهادِ جست‌وجو از نسخه‌ی کوچک استفاده می‌کند',
         /suggest-thumb[\s\S]{0,160}thumb\(/.test(commonSrc));
       check('V26 فرانت: ردیفِ سبد از نسخه‌ی کوچک استفاده می‌کند',
         /PG\.thumb\(item\.image\)/.test(cartSrc));
-      check('V26 فرانت: هر دو فهرستِ کالای پنل از نسخه‌ی کوچک استفاده می‌کنند',
-        (adminSrc.match(/ad-thumb[^\n]*thumb\(p\.image\)/g) || []).length === 2,
-        `پیدا شد: ${(adminSrc.match(/ad-thumb[^\n]*thumb\(p\.image\)/g) || []).length} از ۲`);
+      check('V26 فرانت: پنل تابعِ thumbUrl دارد و ?w را می‌فرستد',
+        /export function thumbUrl/.test(adminApiSrc) && /\?w=\$\{w\}/.test(adminApiSrc));
+      check('V26 فرانت: فهرستِ کالای پنل از نسخه‌ی کوچک استفاده می‌کند',
+        /src=\{thumbUrl\(p\.image\)\}/.test(adminSrc), 'بدونِ ?w عکسِ کامل دانلود می‌شود');
 
       /* نگهبانِ فرض: عددِ ۳۲۰ از روی بزرگ‌ترین کادر (۷۶px) حساب شده. اگر کسی
          روزی .cart-row-media را بزرگ کند و یادش برود، عکس بی‌سروصدا تار می‌شود
@@ -2985,22 +3016,18 @@ function shutdown(code) {
       check('V29 مسیر: مشتریِ معمولی دسترسی ندارد', erBuyer.status === 403, `status ${erBuyer.status}`);
       await loginAdmin();
 
-      /* ---- ۴) سمتِ فرانت ---- */
-      const adminJs = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'js', 'admin.js'), 'utf8');
-      const adminHtml = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'admin.html'), 'utf8');
-      // بدونِ این، show('errors') بی‌صدا به داشبورد برمی‌گردد و بخش هیچ‌وقت باز نمی‌شود
-      check('V29 فرانت: «errors» در فهرستِ VIEWS هست',
-        /const VIEWS = \[[^\]]*'errors'/.test(adminJs));
-      check('V29 فرانت: بارگذارِ بخش به LOADERS وصل است', /errors: loadErrors/.test(adminJs));
-      check('V29 فرانت: خودِ بخش در HTML وجود دارد',
-        adminHtml.includes('id="viewErrors"') && adminHtml.includes('id="errHost"'));
-      check('V29 فرانت: دکمه‌ی منو با نشانِ شمارش هست', adminHtml.includes('id="navErrors"'));
-      // نشان اگر پر نشود، همیشه «—» می‌ماند و کلِ فایده‌اش از دست می‌رود
-      check('V29 فرانت: نشانِ منو موقعِ بوت پر می‌شود', /errBadge\(d\.totals\.http5xx\)/.test(adminJs));
-      const errCss = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'css', 'style.css'), 'utf8');
-      check('V29 ظاهر: کلاس‌های این بخش در CSS تعریف شده‌اند',
-        ['.ad-err{', '.ad-err-count{', '.ad-err-body{', '.ad-err-body pre{']
-          .every(s => errCss.includes(s)));
+      /* ---- ۴) سمتِ فرانت (پنلِ Next — پنلِ Express حذف شد) ---- */
+      const errorsSrc = nextSrc('components/admin/ErrorsContent.tsx');
+      const sectionsSrc = nextSrc('lib/adminSections.ts');
+      // بدونِ این، نما در نوارِ پنل نیست و مدیر راهی به خطاها ندارد
+      check('V29 فرانت: «errors» در فهرستِ بخش‌های پنل هست',
+        /key: "errors"/.test(sectionsSrc) && /href: "\/admin\/errors"/.test(sectionsSrc));
+      check('V29 فرانت: نما به همان endpoint وصل است',
+        /getAdminErrors/.test(errorsSrc) && /"admin-errors", days/.test(errorsSrc));
+      // «۰ خطا» و «نمی‌دانیم» دو چیزند؛ اگر `unavailable` نشان داده نشود مدیر فکر
+      // می‌کند همه‌چیز خوب است.
+      check('V29 فرانت: حالتِ `unavailable` از «۰ خطا» جدا نشان داده می‌شود',
+        /unavailable/.test(errorsSrc));
     }
 
     // ================= V30: گزارشِ ماه‌به‌ماهِ شمسی =================
@@ -3113,30 +3140,27 @@ function shutdown(code) {
         /filename="monthly-sales-\d{4}-\d{2}-\d{2}\.csv"/.test(mc.r.headers.get('content-disposition') || ''),
         String(mc.r.headers.get('content-disposition')));
 
-      /* ---- ۴) سمتِ فرانت ---- */
-      const aJs = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'js', 'admin.js'), 'utf8');
-      const aHtml = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'admin.html'), 'utf8');
-      const aCss = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'css', 'style.css'), 'utf8');
-      check('V30 فرانت: کارتِ ماهانه در HTML هست',
-        aHtml.includes('id="monthlyBody"') && aHtml.includes('id="monthlyRange"') &&
-        aHtml.includes('id="monthlyBars"') && aHtml.includes('id="btnExportMonthly"'));
-      // بدونِ این، بخشِ گزارش باز می‌شود ولی جدولِ ماهانه تا ابد خالی می‌ماند.
-      check('V30 فرانت: loadMonthly به بارگذارِ بخشِ گزارش وصل است',
-        /report: \(\) => \{ loadReport\(\); loadMonthly\(\); \}/.test(aJs));
+      /* ---- ۴) سمتِ فرانت (پنلِ Next — پنلِ Express حذف شد) ---- */
+      const aRep = nextSrc('components/admin/ReportsContent.tsx');
+      const aApi = nextSrc('lib/adminApi.ts');
+      check('V30 فرانت: بخشِ ماهانه در نمای گزارش هست',
+        /MONTH_RANGES/.test(aRep) && /monthlyCsvHref\(months\)/.test(aRep));
       check('V30 فرانت: تعویضِ بازه دوباره بار می‌زند',
-        /\$\('monthlyRange'\)\.addEventListener\('change', loadMonthly\)/.test(aJs));
+        /queryKey: \["admin-monthly", months\]/.test(aRep));
       check('V30 فرانت: دکمه‌ی اکسل همان بازه‌ی انتخاب‌شده را می‌فرستد',
-        /export\/monthly\.csv\?months=\$\{Number\(\$\('monthlyRange'\)\.value\)/.test(aJs));
+        /export\/monthly\.csv\?months=\$\{months\}/.test(aApi));
       // جدول باید ماهِ جاری را بالا نشان دهد؛ سرور از قدیم به جدید می‌دهد.
       check('V30 فرانت: جدول برعکس می‌شود تا ماهِ جاری بالا باشد',
-        /d\.rows\.slice\(\)\.reverse\(\)/.test(aJs));
+        /data\.rows\s*\.slice\(\)\s*\.reverse\(\)/.test(aRep));
       check('V30 فرانت: حالتِ تقویمِ میلادی به کاربر هشدار می‌دهد',
-        /calendar === 'jalali'/.test(aJs) && aJs.includes('تقویم شمسی روی این سرور در دسترس نیست'));
-      check('V30 ظاهر: کلاس‌های این بخش در CSS تعریف شده‌اند',
-        ['.mrep-tag{', '.mrep-growth{', '.mrep-growth.up{', '.mrep-growth.down{'].every(s => aCss.includes(s)));
+        /calendar !== "jalali"/.test(aRep) && /در دسترس نیست/.test(aRep));
       // رنگ تنها نشانه نباشد (WCAG 1.4.1): پیکانِ بالا/پایین هم کنارش هست.
       check('V30 دسترس‌پذیری: رشد علاوه بر رنگ، پیکان هم دارد',
-        /i-trend-\$\{g > 0 \? 'up' : 'down'\}/.test(aJs));
+        /const arrow = value > 0 \? "▲" : value < 0 \? "▼"/.test(aRep));
+      // و «ماهِ قبل فروشی نداشته» با ۰٪ یکی نشود، وگرنه رشدِ بی‌معنا نمایش
+      // داده می‌شود.
+      check('V30 فرانت: رشدِ بی‌معنا (ماهِ قبل بدونِ فروش) جدا نشان داده می‌شود',
+        /if \(value === null\)/.test(aRep) && /درصدِ رشد معنا ندارد/.test(aRep));
     }
 
     // ========= V31: رمزِ ناهمگام و باطل‌کردنِ نشست‌های دیگر =========
