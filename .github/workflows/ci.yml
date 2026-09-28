@@ -108,6 +108,13 @@ jobs:
       - name: Order window guard
         run: node tests/order-window-integrity.js
 
+      # هم‌خانوادهٔ همان آزمونِ سبک، اما قفلِ دو طرفِ یک مهلت در **دو فرانت‌اند**
+      # (Express و Next): ثانیه‌شمارِ ارسال مجدد باید «لحظه‌ی پایان» را ذخیره کند
+      # و هر تیک از همان بازمحاسبه شود — نه با شمارندهٔ کاهنده‌ای که با خوابِ تب
+      # از واقعیت عقب می‌ماند.
+      - name: Resend window guard
+        run: node tests/otp-resend-window.js
+
   frontend:
     name: Next.js typecheck, lint, test and build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
