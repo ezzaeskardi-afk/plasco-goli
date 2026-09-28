@@ -9,6 +9,11 @@ document.addEventListener('DOMContentLoaded', () => PG.boot(async () => {
   document.getElementById('userPhone').textContent = user.fullName || user.phone;
 
   // لینک پنل مدیریت — فقط برای ادمین نمایش داده می‌شود
+  //
+  // آدرسش `/admin` است، نه `/admin.html`: آن صفحه حذف شد و پنل حالا روی مبدأِ
+  // Next است (۳۰۰۱ در توسعه). مثل قبل، این لینک فرض می‌کند هر دو فرانت‌اند
+  // زیر یک دامنه سرو می‌شوند؛ تنها تفاوت این است که اگر آن فرض غلط باشد،
+  // حالا به ۴۰۴ می‌رسد نه به پنل.
   if (user.isAdmin) {
     const nav = document.querySelector('.account-nav');
     const btnLogout = document.getElementById('btnLogout');
