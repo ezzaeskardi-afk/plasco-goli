@@ -1742,7 +1742,16 @@ a.cart-row-title:hover{color:var(--teal);}
   box-shadow:0 0 0 4px rgba(37,214,176,.2),0 0 22px -4px var(--teal);
   transform:translateY(-2px);
 }
-.otp-digit:not(:placeholder-shown){
+/* «خانه‌ی پرشده» دو شاخه دارد و هر دو باید زنده بمانند:
+   ۱) قاعده‌ی بومیِ :not(:placeholder-shown) روی خودِ مقدار سوار است، پس هر راهی
+      که مقدار را پر کند (تایپ، autofill مرورگر، مقدارگذاریِ برنامه‌ای) را می‌بیند —
+      به شرطی که اینپوت واقعاً placeholder داشته باشد.
+   ۲) کلاسِ has-value که login.js می‌گذارد؛ لایه‌ی دوم برای مرورگرهایی که حالتِ
+      شبه‌کلاس را دیر به‌روز می‌کنند.
+   اگر placeholder از اینپوت‌ها برداشته شود، شاخه‌ی اول همیشه صادق می‌ماند و هر پنج
+   خانه از لحظه‌ی باز شدن پُر به‌نظر می‌رسد؛ نگهبانِ V38 دقیقاً همین وصل را قفل
+   کرده است. */
+.otp-digit:not(:placeholder-shown),.otp-digit.has-value{
   border-color:var(--teal);background:rgba(37,214,176,.08);
 }
 /* وضعیت‌های verdict */
