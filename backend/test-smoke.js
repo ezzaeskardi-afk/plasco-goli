@@ -2612,16 +2612,24 @@ function shutdown(code) {
 
       /* نگهبانِ فرض: عددِ ۳۲۰ از روی بزرگ‌ترین کادر (۷۶px) حساب شده. اگر کسی
          روزی .cart-row-media را بزرگ کند و یادش برود، عکس بی‌سروصدا تار می‌شود
-         و هیچ تستی نمی‌گیردش. این تست همان فرض را قفل می‌کند. */
+         و هیچ تستی نمی‌گیردش. این تست همان فرض را قفل می‌کند.
+
+         کادرِ بندانگشتیِ پنل دیگر در style.css نیست (پنل به Next منتقل شده و
+         بلوکِ `.ad-thumb` حذف شد)؛ اندازه‌اش همان `width/height` صریحِ خودِ
+         `<img>` است، پس از همان‌جا خوانده می‌شود. `adBox > 0` هم عمداً شرط است:
+         نشانه‌ای که پیدا نشود باید قرمز کند، نه اینکه بی‌صدا صفر شود. */
       const cssSrc = fs.readFileSync(path.join(FRONT, 'css', 'style.css'), 'utf8');
       const boxOf = (cls) => {
         const m = cssSrc.match(new RegExp(`\\.${cls}\\{[^}]*?width:(\\d+)px`, 's'));
         return m ? Number(m[1]) : null;
       };
-      const boxes = { 'suggest-thumb': boxOf('suggest-thumb'), 'cart-row-media': boxOf('cart-row-media'), 'ad-thumb': boxOf('ad-thumb') };
+      const adDims = adminSrc.match(/\bwidth=\{(\d+)\}\s+height=\{(\d+)\}/);
+      const adBox = adDims && adDims[1] === adDims[2] ? Number(adDims[1]) : 0;
+      const boxes = { 'suggest-thumb': boxOf('suggest-thumb'), 'cart-row-media': boxOf('cart-row-media'), 'پنلِ Next': adBox };
       const biggest = Math.max(...Object.values(boxes).map(v => v || 0));
       check('V26 نگهبان: بزرگ‌ترین کادرِ بندانگشتی هنوز در حدِ ۳۲۰px جا می‌شود',
-        biggest > 0 && biggest * 3 <= (tDim ? Math.min(tDim.width, tDim.height) : 0) + 4,
+        biggest > 0 && adBox > 0 &&
+        biggest * 3 <= (tDim ? Math.min(tDim.width, tDim.height) : 0) + 4,
         `${JSON.stringify(boxes)} → بزرگ‌ترین ${biggest}px، لازم ${biggest * 3}px`);
 
       // آدرس‌های بیرونی و svg نباید پارامتر بگیرند
