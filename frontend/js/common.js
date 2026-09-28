@@ -790,7 +790,7 @@ const PG = (function () {
     overlay.innerHTML = `
       <div class="welcome-card" role="dialog" aria-modal="true" aria-labelledby="wcTitle">
         <button class="welcome-close" aria-label="بستن"><svg><use href="#i-close"/></svg></button>
-        <span class="logo-badge"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jfif" alt=""></span>
+        <span class="logo-badge"><img src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jpg" alt=""></span>
         <h3 id="wcTitle">به پلاسکو گلی خوش اومدید 👋</h3>
         <p>با شماره موبایل‌تون ثبت‌نام کنید تا سفارش‌هاتون ذخیره بشه، علاقه‌مندی‌هاتون رو نشون کنید و خرید بعدی سریع‌تر باشه.</p>
         <div class="welcome-actions">

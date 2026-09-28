@@ -18,7 +18,7 @@
 // user with phone 09120000001 (harmless). No products change.
 // ============================================================
 
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -2479,6 +2479,64 @@ function shutdown(code) {
       check('V24 عکس: تست واقعاً چند نسبت را سنجیده (تستِ خودِ تست)',
         checkedRatios >= 4, `${checkedRatios} عکس`);
 
+      /* ---- V24 نگهبانِ گیت: ارجاعِ ایستا باید در مخزن باشد، نه فقط روی دیسک ----
+         چرا این بررسی اضافه شد: لوگوی فروشگاه (`picture/logo/…jfif`) در هر ۱۲
+         صفحه و در `js/common.js` و OG تصویرِ Next ارجاع شده بود و روی دیسکِ
+         توسعه‌دهنده هم بود — پس همه‌ی بررسی‌های «فایل هست؟» سبز بودند. ولی فایل
+         در گیت نبود (قاعده‌ی `*.jfif` در `.gitignore`) و روی کلونِ تازه ۴۰۴
+         می‌شد: سایت بدونِ لوگو بالا می‌آمد و CI سرِ همین قرمز می‌شد.
+         «روی دیسکِ من هست» با «در مخزن هست» یکی نیست، و تفاوتشان وقتی معلوم
+         می‌شود که دیر است. */
+      const REPO_ROOT = path.join(__dirname, '..');
+      const logoRefSources = [
+        ...htmlFiles.map((f) => [f, rd(f), /(?:src|href|content)="([^"]+)"/g]),
+        ...fs.readdirSync(path.join(FE, 'js')).filter((f) => f.endsWith('.js'))
+          .map((f) => [`js/${f}`, fs.readFileSync(path.join(FE, 'js', f), 'utf8'), /["'`]([^"'`]+)["'`]/g]),
+        // فایل‌های آزمونِ Next عمداً بیرون‌اند: مسیرهایشان ساختگی است
+        // (`/picture/products/a.jpg`) و چیزی درباره‌ی سایتِ واقعی نمی‌گویند.
+        ...(fs.existsSync(NEXT_SRC)
+          ? fs.readdirSync(NEXT_SRC, { recursive: true, encoding: 'utf8' })
+            .filter((rel) => /\.(ts|tsx)$/.test(rel) && !/\.test\./.test(rel))
+            .map((rel) => [`next/${rel}`, fs.readFileSync(path.join(NEXT_SRC, rel), 'utf8'), /["'`]([^"'`]+)["'`]/g])
+          : []),
+      ];
+      const staticRefs = new Map();   // مسیر به مسیرهای URL ← فایل‌هایی که ارجاعش داده‌اند
+      for (const [label, text, pattern] of logoRefSources) {
+        for (const m of text.matchAll(pattern)) {
+          const url = m[1];
+          if (!url.startsWith('/picture/')) continue;
+          if (url.includes('${')) continue;                 // عکسِ محصول از دیتابیس می‌آید
+          if (!/\.(jpe?g|png|webp|jfif)$/i.test(url.split('?')[0])) continue;
+          if (!staticRefs.has(url)) staticRefs.set(url, new Set());
+          staticRefs.get(url).add(label);
+        }
+      }
+      let trackedSet = null;
+      try {
+        const out = execSync('git ls-files -z -- picture', {
+          cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024,
+        });
+        trackedSet = new Set(out.split(String.fromCharCode(0)).filter(Boolean));
+      } catch (e) { trackedSet = null; }
+      const refsOffDisk = [];
+      const refsOffGit = [];
+      for (const [url, where] of staticRefs) {
+        const rel = url.split('?')[0].replace(/^\//, '');
+        const who = [...where].join('، ');
+        if (!fs.existsSync(path.join(REPO_ROOT, rel))) refsOffDisk.push(`${rel} ← ${who}`);
+        if (trackedSet && !trackedSet.has(rel)) refsOffGit.push(`${rel} ← ${who}`);
+      }
+      check('V24 نگهبان: ارجاع‌های ایستای JS/TS هم روی دیسک هستند (نه فقط <img>های HTML)',
+        staticRefs.size >= 1 && refsOffDisk.length === 0,
+        staticRefs.size === 0
+          ? 'هیچ ارجاعِ ایستایی پیدا نشد — نگهبانِ خالی سبز نشود'
+          : (refsOffDisk.length ? refsOffDisk.join(' | ') : `${staticRefs.size} ارجاع، همه روی دیسک`));
+      check('V24 نگهبان: همان ارجاع‌ها در گیت هم ترک شده‌اند (وگرنه روی کلونِ تازه ۴۰۴ می‌شود)',
+        trackedSet !== null && staticRefs.size >= 1 && refsOffGit.length === 0,
+        trackedSet === null
+          ? 'گیت در دسترس نیست — این بررسی سنجیده نشد'
+          : (refsOffGit.length ? `در گیت نیست: ${refsOffGit.join(' | ')}` : `${staticRefs.size} ارجاع، همه در گیت`));
+
       // ---- تحویلِ WebP روی HTTP واقعی ----
       const IMG_URL = '/picture/products/' + encodeURIComponent('کاسه سرو پایه چوبی 2 لیتر.jpg');
       const asWebp = await fetch(BASE + IMG_URL, { headers: { Accept: 'image/webp,image/*,*/*' } });
@@ -2588,7 +2646,7 @@ function shutdown(code) {
       // یک نامِ ساختگی که قطعاً وجود ندارد، ولی .webpِ کامل هم ندارد؛ پس مسیرِ
       // «هیچ‌کدام نبود → برو سراغ express.static» را می‌سنجد.
       const noVariant = await fetch(BASE + '/picture/logo/' +
-        encodeURIComponent('aa0b989f259f92d1240eb20d51846643.jfif') + '?w=320',
+        encodeURIComponent('aa0b989f259f92d1240eb20d51846643.jpg') + '?w=320',
         { headers: { Accept: 'image/webp,*/*' } });
       check('V26 بندانگشتی: عکسِ لوگو با ?w هم سالم تحویل می‌شود',
         noVariant.status === 200, String(noVariant.status));

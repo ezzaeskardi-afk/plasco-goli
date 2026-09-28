@@ -21,6 +21,9 @@
 *.webp  binary
 *.jpg   binary
 *.jpeg  binary
+# .jfif در .gitignore هست، ولی اگر روزی یک فایل با `git add -f` وارد شد، همان
+# قاعده‌ی `text=auto eol=lf` بالا بایت‌هایش را موقعِ چک‌اوت خراب می‌کرد.
+*.jfif  binary
 *.png   binary
 *.ico   binary
 *.woff2 binary
