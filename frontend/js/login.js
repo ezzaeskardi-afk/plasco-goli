@@ -85,7 +85,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setOtpDigits(str) {
     const digits = foldDigits(str).slice(0, 5);
-    otpDigits.forEach((d, i) => { d.value = digits[i] || ''; });
+    // کلاسِ «پرشده» را هم مثل paintOtp هم‌گام نگه می‌داریم، وگرنه این مسیرِ
+    // مقدارگذاری شاخه‌ی has-value را عقب می‌اندازد.
+    otpDigits.forEach((d, i) => {
+      d.value = digits[i] || '';
+      d.classList.toggle('has-value', Boolean(digits[i]));
+    });
   }
 
   function paintOtp(value, verdict = '') {
