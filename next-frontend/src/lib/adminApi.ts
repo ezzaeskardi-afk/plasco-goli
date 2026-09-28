@@ -11,7 +11,9 @@
 // سدِ واقعی سمتِ Express است (`requireAdmin` روی مسیر /api/admin). کاری که
 // اینجا می‌شود، ترجمه‌ی ۴۰۳ به یک پیامِ قابل‌فهم است — در خودِ کامپوننت‌ها.
 
-import { fetcher } from "./api";
+import { ApiError, fetcher } from "./api";
+import { apiBase } from "./site";
+import { hardNavigate } from "./navigation";
 import type {
   AdminOverview,
   AdminOrdersResponse,
@@ -19,6 +21,7 @@ import type {
   OrderMutationResponse,
   OrderStatus,
   InventoryResponse,
+  InventoryRow,
   ProductUpdateInput,
   ProductMutationResponse,
   PublishResponse,
@@ -40,7 +43,69 @@ import type {
   MonthlySalesResponse,
   ActivityResponse,
   AdminErrorsResponse,
+  AdminProduct,
+  AdminProductsResponse,
+  ProductCreateInput,
+  ProductDeleteResponse,
+  ProductBulkResponse,
+  UploadImageResponse,
 } from "./adminTypes";
+
+// ============================================================
+// نشستِ بسته‌شده‌ی پنل — تنها ۴۰۱ای که پیامِ خودش را دارد
+// ============================================================
+// `panelIdleGuard` (routes/admin.js:108) وقتی نیم‌ساعت از آخرین درخواستِ مدیر
+// گذشته باشد، نشست را نابود می‌کند و ۴۰۱ با `reason: 'idle'` می‌فرستد. این
+// ۴۰۱ با «۴۰۱ِ بی‌نشست» (کسی که هرگز وارد نشده) و با ۴۰۳ («این بخش برای تو
+// نیست») یکی نیست، ولی تا امروز هر سه یک‌شکل نمایش داده می‌شدند: مدیر کادرِ
+// «دسترسی به پنل مدیریت ندارید» می‌دید — یعنی پیامی که می‌گوید *حق نداری*،
+// در حالی که حق داشت و فقط نشستش بسته شده بود. بدتر: هیچ راهی هم نشان
+// نمی‌داد، پس باید خودش آدرسِ ورود را حدس می‌زد.
+//
+// حالا هر درخواستِ پنل از همین دروازه رد می‌شود و این حالت به ورود برمی‌گردد،
+// با آدرسِ برگشت و نشانه‌ی `idle=1` تا خودِ صفحه‌ی ورود توضیح بدهد چرا.
+export const IDLE_REASON = "idle";
+
+export function isIdleExpiry(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401 && err.reason === IDLE_REASON;
+}
+
+// یک بار در هر بارگذاریِ صفحه. پنل موقع باز شدن ده‌ها درخواستِ هم‌زمان
+// می‌فرستد و همه‌شان با هم ۴۰۱ می‌گیرند؛ بدونِ این پرچم، ده‌ها `assign` پشتِ
+// سرِ هم روی یک آدرس اجرا می‌شود و مرورگر وسطِ ناوبری دوباره بار می‌کند.
+let idleRedirectStarted = false;
+
+/**
+ * برگشت به صفحه‌ی ورود، با آدرسِ همین صفحه برای بازگشتِ بعدی.
+ *
+ * اگر عمداً `window.location` (به‌جای روترِ Next) است: نشست بسته شده و هر
+ * حالتِ درون‌حافظه‌ای (کشِ react-query، دیتای نمای باز) دقیقاً همان چیزی است
+ * که نباید بماند. یک بارگذاریِ کامل، پنل را از صفر می‌آورد.
+ */
+function redirectAfterIdleEnd(): void {
+  if (idleRedirectStarted) return;
+  idleRedirectStarted = true;
+  const here = window.location.pathname + window.location.search;
+  const dest = `/login?redirect=${encodeURIComponent(here)}&idle=1`;
+  hardNavigate(dest);
+}
+
+/**
+ * همان `fetcher` مشترک، فقط با یک کارِ اضافه: اگر پاسخ «نشستِ پنل بسته شد»
+ * باشد، کاربر به ورود برمی‌گردد و خودِ خطا هم پرتاب می‌شود تا کامپوننتی که
+ * درخواست را زده، رفتارِ خطای خودش را داشته باشد.
+ */
+async function adminFetcher<T>(
+  path: string,
+  options: Parameters<typeof fetcher>[1] = {},
+): Promise<T> {
+  try {
+    return await fetcher<T>(path, options);
+  } catch (err) {
+    if (isIdleExpiry(err) && typeof window !== "undefined") redirectAfterIdleEnd();
+    throw err;
+  }
+}
 
 // ============================================================
 // داشبورد
@@ -48,7 +113,7 @@ import type {
 
 /** همه‌ی داده‌ی داشبورد در یک درخواست: آمار + نمودار ۱۴ روز + برترین‌ها + هشدارها */
 export async function getAdminOverview(): Promise<AdminOverview> {
-  return fetcher<AdminOverview>("/api/admin/overview");
+  return adminFetcher<AdminOverview>("/api/admin/overview");
 }
 
 // ============================================================
@@ -84,12 +149,12 @@ export async function getAdminOrders(
   if (params.from) sp.set("from", params.from);
   if (params.to) sp.set("to", params.to);
   if (params.offset) sp.set("offset", String(params.offset));
-  return fetcher<AdminOrdersResponse>(`/api/admin/orders?${sp.toString()}`);
+  return adminFetcher<AdminOrdersResponse>(`/api/admin/orders?${sp.toString()}`);
 }
 
 /** جزئیات کامل یک سفارش (بازگشتِ سرور داخلِ پوشش است: routes/admin.js:420) */
 export async function getAdminOrder(id: number): Promise<AdminOrder> {
-  const data = await fetcher<{ order: AdminOrder }>(`/api/admin/orders/${id}`);
+  const data = await adminFetcher<{ order: AdminOrder }>(`/api/admin/orders/${id}`);
   return data.order;
 }
 
@@ -103,7 +168,7 @@ export async function setOrderStatus(
   from: OrderStatus,
   to: OrderStatus,
 ): Promise<OrderMutationResponse> {
-  return fetcher<OrderMutationResponse>(`/api/admin/orders/${id}/status`, {
+  return adminFetcher<OrderMutationResponse>(`/api/admin/orders/${id}/status`, {
     method: "POST",
     body: JSON.stringify({ from, to }),
   });
@@ -114,7 +179,7 @@ export async function cancelOrder(
   id: number,
   reason: string,
 ): Promise<OrderMutationResponse> {
-  return fetcher<OrderMutationResponse>(`/api/admin/orders/${id}/cancel`, {
+  return adminFetcher<OrderMutationResponse>(`/api/admin/orders/${id}/cancel`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   });
@@ -125,7 +190,7 @@ export async function setOrderTracking(
   id: number,
   trackingCode: string,
 ): Promise<OrderMutationResponse> {
-  return fetcher<OrderMutationResponse>(`/api/admin/orders/${id}/tracking`, {
+  return adminFetcher<OrderMutationResponse>(`/api/admin/orders/${id}/tracking`, {
     method: "POST",
     body: JSON.stringify({ trackingCode }),
   });
@@ -136,7 +201,7 @@ export async function setOrderNote(
   id: number,
   note: string,
 ): Promise<OrderMutationResponse> {
-  return fetcher<OrderMutationResponse>(`/api/admin/orders/${id}/note`, {
+  return adminFetcher<OrderMutationResponse>(`/api/admin/orders/${id}/note`, {
     method: "POST",
     body: JSON.stringify({ note }),
   });
@@ -149,7 +214,7 @@ export async function setOrderNote(
 /** نمای انبار: همه‌ی محصولات + آمار فروش + کم‌موجودها + تقاضای از‌دست‌رفته */
 export async function getInventory(threshold?: number): Promise<InventoryResponse> {
   const qs = threshold != null ? `?threshold=${threshold}` : "";
-  return fetcher<InventoryResponse>(`/api/admin/inventory${qs}`);
+  return adminFetcher<InventoryResponse>(`/api/admin/inventory${qs}`);
 }
 
 /**
@@ -162,7 +227,7 @@ export async function updateProduct(
   id: number,
   data: ProductUpdateInput,
 ): Promise<ProductMutationResponse> {
-  return fetcher<ProductMutationResponse>(`/api/admin/products/${id}`, {
+  return adminFetcher<ProductMutationResponse>(`/api/admin/products/${id}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });
@@ -181,7 +246,7 @@ export async function setProductPublished(
   published: boolean,
   force = false,
 ): Promise<PublishResponse> {
-  return fetcher<PublishResponse>(`/api/admin/products/${id}/published`, {
+  return adminFetcher<PublishResponse>(`/api/admin/products/${id}/published`, {
     method: "POST",
     body: JSON.stringify({ published, force }),
   });
@@ -193,7 +258,7 @@ export async function setProductPublished(
 
 /** فهرستِ کدها — مرتب‌شده: فعال‌ها اول، بعد تازه‌ترین */
 export async function getCoupons(): Promise<CouponsResponse> {
-  return fetcher<CouponsResponse>("/api/admin/coupons");
+  return adminFetcher<CouponsResponse>("/api/admin/coupons");
 }
 
 /**
@@ -207,7 +272,7 @@ export async function getCoupons(): Promise<CouponsResponse> {
 export async function createCoupon(
   data: CouponInput,
 ): Promise<CouponMutationResponse> {
-  return fetcher<CouponMutationResponse>("/api/admin/coupons", {
+  return adminFetcher<CouponMutationResponse>("/api/admin/coupons", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -224,7 +289,7 @@ export async function updateCoupon(
   id: number,
   data: Partial<CouponInput>,
 ): Promise<CouponMutationResponse> {
-  return fetcher<CouponMutationResponse>(`/api/admin/coupons/${id}`, {
+  return adminFetcher<CouponMutationResponse>(`/api/admin/coupons/${id}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });
@@ -238,7 +303,7 @@ export async function updateCoupon(
  * لحظه در دسترس نیست.
  */
 export async function deleteCoupon(id: number): Promise<{ ok: boolean }> {
-  return fetcher<{ ok: boolean }>(`/api/admin/coupons/${id}`, {
+  return adminFetcher<{ ok: boolean }>(`/api/admin/coupons/${id}`, {
     method: "DELETE",
   });
 }
@@ -257,7 +322,7 @@ export async function deleteCoupon(id: number): Promise<{ ok: boolean }> {
  * می‌شود و نمای مشتری‌ها دست نمی‌خورد.
  */
 export async function getAdminUsers(): Promise<AdminUsersResponse> {
-  return fetcher<AdminUsersResponse>("/api/admin/users");
+  return adminFetcher<AdminUsersResponse>("/api/admin/users");
 }
 
 /**
@@ -273,7 +338,7 @@ export async function setUserStaff(
   id: number,
   staff: boolean,
 ): Promise<StaffMutationResponse> {
-  return fetcher<StaffMutationResponse>(`/api/admin/users/${id}/staff`, {
+  return adminFetcher<StaffMutationResponse>(`/api/admin/users/${id}/staff`, {
     method: "POST",
     body: JSON.stringify({ staff }),
   });
@@ -292,7 +357,7 @@ export async function setUserStaff(
  * رایگان) — پس هیچ‌کدام را نباید «خالی/نال» فرض کرد.
  */
 export async function getAdminSettings(): Promise<SettingsResponse> {
-  return fetcher<SettingsResponse>("/api/admin/settings");
+  return adminFetcher<SettingsResponse>("/api/admin/settings");
 }
 
 /**
@@ -311,7 +376,7 @@ export async function getAdminSettings(): Promise<SettingsResponse> {
 export async function updateAdminSettings(
   data: AdminSettingsInput,
 ): Promise<SettingsResponse & { ok: boolean }> {
-  return fetcher<SettingsResponse & { ok: boolean }>("/api/admin/settings", {
+  return adminFetcher<SettingsResponse & { ok: boolean }>("/api/admin/settings", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -325,7 +390,7 @@ export async function updateAdminSettings(
 export async function getAdminReviews(
   status: "all" | "pending" | "approved" | "rejected" = "all",
 ): Promise<AdminReviewsResponse> {
-  return fetcher<AdminReviewsResponse>(`/api/admin/reviews?status=${status}`);
+  return adminFetcher<AdminReviewsResponse>(`/api/admin/reviews?status=${status}`);
 }
 
 /** تأیید/رد/برگشت به صف. تأیید، دیدگاه را روی صفحه‌ی محصول هم می‌آورد. */
@@ -333,7 +398,7 @@ export async function setReviewStatus(
   id: number,
   status: "approved" | "rejected" | "pending",
 ): Promise<ReviewMutationResponse> {
-  return fetcher<ReviewMutationResponse>(`/api/admin/reviews/${id}/status`, {
+  return adminFetcher<ReviewMutationResponse>(`/api/admin/reviews/${id}/status`, {
     method: "POST",
     body: JSON.stringify({ status }),
   });
@@ -351,7 +416,7 @@ export async function setReviewStatus(
  * کشی نمی‌خواهیم — عددِ کهنه در نمای سلامت، گمراه‌کننده است.
  */
 export async function getSystemStatus(): Promise<AdminSystemStatus> {
-  return fetcher<AdminSystemStatus>("/api/admin/system-status");
+  return adminFetcher<AdminSystemStatus>("/api/admin/system-status");
 }
 
 /**
@@ -362,7 +427,7 @@ export async function getSystemStatus(): Promise<AdminSystemStatus> {
  * می‌شود (routes/admin.js → /db-health با `?deep=1`).
  */
 export async function getDbHealth(deep = false): Promise<AdminDbHealthResponse> {
-  return fetcher<AdminDbHealthResponse>(`/api/admin/db-health${deep ? "?deep=1" : ""}`);
+  return adminFetcher<AdminDbHealthResponse>(`/api/admin/db-health${deep ? "?deep=1" : ""}`);
 }
 
 /**
@@ -370,7 +435,7 @@ export async function getDbHealth(deep = false): Promise<AdminDbHealthResponse> 
  * کاری نمی‌کند (lib/db.js → backupNow یک فایل در روز).
  */
 export async function runBackup(): Promise<AdminBackupResponse> {
-  return fetcher<AdminBackupResponse>("/api/admin/backup", { method: "POST" });
+  return adminFetcher<AdminBackupResponse>("/api/admin/backup", { method: "POST" });
 }
 
 // ============================================================
@@ -388,7 +453,7 @@ export async function runBackup(): Promise<AdminBackupResponse> {
  * نمای عمده‌فروشی همین را هشدار می‌دهد.
  */
 export async function getWholesaleRequests(): Promise<WholesaleRequestsResponse> {
-  return fetcher<WholesaleRequestsResponse>("/api/admin/wholesale/requests");
+  return adminFetcher<WholesaleRequestsResponse>("/api/admin/wholesale/requests");
 }
 
 /**
@@ -402,7 +467,7 @@ export async function setWholesaleRequestStatus(
   id: number,
   status: WholesaleStatus,
 ): Promise<{ ok: boolean }> {
-  return fetcher<{ ok: boolean }>(`/api/admin/wholesale/requests/${id}`, {
+  return adminFetcher<{ ok: boolean }>(`/api/admin/wholesale/requests/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
@@ -410,7 +475,7 @@ export async function setWholesaleRequestStatus(
 
 /** حذفِ کاملِ درخواست (اسپم/تکراری) — برگشت‌ناپذیر */
 export async function deleteWholesaleRequest(id: number): Promise<{ ok: boolean }> {
-  return fetcher<{ ok: boolean }>(`/api/admin/wholesale/requests/${id}`, {
+  return adminFetcher<{ ok: boolean }>(`/api/admin/wholesale/requests/${id}`, {
     method: "DELETE",
   });
 }
@@ -426,12 +491,12 @@ export async function deleteWholesaleRequest(id: number): Promise<{ ok: boolean 
  * تعداد روز است (روزهای بی‌فروش صفر می‌خورند).
  */
 export async function getAdminReports(days: number): Promise<AdminReportsResponse> {
-  return fetcher<AdminReportsResponse>(`/api/admin/reports?days=${days}`);
+  return adminFetcher<AdminReportsResponse>(`/api/admin/reports?days=${days}`);
 }
 
 /** گزارشِ ماه‌به‌ماه — ماهِ شمسی، نه میلادی. سقفِ ۲ تا ۳۶ ماه. */
 export async function getMonthlySales(months: number): Promise<MonthlySalesResponse> {
-  return fetcher<MonthlySalesResponse>(`/api/admin/reports/monthly?months=${months}`);
+  return adminFetcher<MonthlySalesResponse>(`/api/admin/reports/monthly?months=${months}`);
 }
 
 /**
@@ -453,7 +518,7 @@ export function monthlyCsvHref(months: number): string {
 
 /** تازه‌ترین رویدادهای پنل. سرور `limit` را به ۱ تا ۳۰۰ محدود می‌کند. */
 export async function getActivity(limit: number): Promise<ActivityResponse> {
-  return fetcher<ActivityResponse>(`/api/admin/activity?limit=${limit}`);
+  return adminFetcher<ActivityResponse>(`/api/admin/activity?limit=${limit}`);
 }
 
 // ============================================================
@@ -468,7 +533,197 @@ export async function getActivity(limit: number): Promise<ActivityResponse> {
  * «دسترسی نداری» ترجمه کند، نه «خطای سرور».
  */
 export async function getAdminErrors(days: number): Promise<AdminErrorsResponse> {
-  return fetcher<AdminErrorsResponse>(`/api/admin/errors?days=${days}`);
+  return adminFetcher<AdminErrorsResponse>(`/api/admin/errors?days=${days}`);
+}
+
+// ============================================================
+// محصولات — فهرستِ کامل و تبدیلِ شکلِ خامِ سرور
+// ============================================================
+// نمای انبار برای ویرایشِ روزمره (قیمت/موجودی) به `/inventory` تکیه می‌کند، ولی
+// فرمِ کاملِ محصول به این‌ها نیاز دارد. تفاوتِ مهم: `/inventory` ردیف‌ها را با
+// `soldQty`/`revenue` تزئین می‌کند و `/products` خام است — ولی هر دو `images` و
+// `specs` را **رشته‌ی JSON** برمی‌گردانند، نه آرایه (routes/admin.js:1010 هم
+// همان‌جا مجبور است `JSON.parse` بزند). این تبدیل فقط همین یک جا انجام می‌شود.
+
+type RawProductRow = Pick<
+  InventoryRow,
+  | "id" | "title" | "category" | "description" | "price" | "stock" | "badge"
+  | "icon" | "image" | "images" | "specs" | "old_price" | "published"
+  | "wholesale_min_qty" | "wholesale_discount" | "created_at" | "updated_at"
+>;
+
+function parseJsonArr<T>(s: unknown): T[] {
+  if (Array.isArray(s)) return s as T[];
+  try {
+    const a = JSON.parse(String(s ?? "[]"));
+    return Array.isArray(a) ? (a as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** ردیفِ خامِ سرور → شکلِ نرمال‌شده‌ی فرم (`old_price` → `oldPrice`، رشته → آرایه) */
+export function toAdminProduct(row: RawProductRow): AdminProduct {
+  const images = parseJsonArr<string>(row.images).filter((s) => typeof s === "string" && s);
+  const specs = parseJsonArr<{ k?: string; v?: string }>(row.specs)
+    .map((r) => ({ k: String(r?.k ?? ""), v: String(r?.v ?? "") }))
+    .filter((r) => r.k && r.v);
+  return {
+    id: Number(row.id),
+    title: String(row.title ?? ""),
+    category: String(row.category ?? ""),
+    description: String(row.description ?? ""),
+    price: Number(row.price) || 0,
+    oldPrice: Number(row.old_price) || 0,
+    stock: Number(row.stock) || 0,
+    badge: String(row.badge ?? ""),
+    icon: String(row.icon ?? ""),
+    image: row.image ? String(row.image) : null,
+    images,
+    specs,
+    wholesaleMinQty: Number(row.wholesale_min_qty) || 0,
+    wholesaleDiscount: Number(row.wholesale_discount) || 0,
+    published: Number(row.published) === 1,
+    createdAt: String(row.created_at ?? ""),
+    updatedAt: String(row.updated_at ?? ""),
+  };
+}
+
+/** فهرستِ کاملِ کالاها (شاملِ پیش‌نویس‌ها) — `/products` و نه `/inventory` */
+export async function getAdminProducts(): Promise<AdminProductsResponse> {
+  const data = await adminFetcher<AdminProductsResponse & { products: RawProductRow[] }>(
+    "/api/admin/products",
+  );
+  return { ...data, products: (data.products || []).map(toAdminProduct) };
+}
+
+/**
+ * ساختِ کالای تازه.
+ *
+ * ⚠️ کالای ساخته‌شده همیشه **منتشرنشده** است و قیمتش هر چه بفرستی همان می‌ماند.
+ * مسیرِ انتشار جداست (`setProductPublished`) و دو نگهبان دارد: کالای بی‌عکس
+ * (۴۰۹ با `needsConfirm`) و کالای صفر تومان (۴۰۰).
+ */
+export async function createProduct(
+  input: ProductCreateInput,
+): Promise<ProductMutationResponse> {
+  return adminFetcher<ProductMutationResponse>("/api/admin/products", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * حذفِ کالا.
+ *
+ * ⚠️ پاسخ دو حالت دارد: `deleted: true` (سطر رفت) و `deleted: false` (کالا
+ * سابقه‌ی سفارش دارد و فقط ناموجود شد — `adminDeleteProductTx` در lib/db.js
+ * هیچ‌وقت کالایی که در سفارشِ ثبت‌شده هست را پاک نمی‌کند، وگرنه فاکتورهای
+ * قدیمی به کالای ناموجود اشاره می‌کردند). پیامِ UI باید همین تفاوت را بگوید.
+ */
+export async function deleteProduct(id: number): Promise<ProductDeleteResponse> {
+  return adminFetcher<ProductDeleteResponse>(`/api/admin/products/${id}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * عملیات گروهی روی چند کالا — یک تراکنش.
+ *
+ * `value` برای بعضی عملیات لازم است و برای بعضی بی‌معنی (سرور خودش چک می‌کند
+ * و ۴۰۰ می‌دهد). قاعده‌ی نگاشتِ عملیات → «مقدار لازم دارد یا نه» در
+ * `lib/productBulk.ts` است، نه اینجا، تا فرم و آزمون هر دو یک منبع داشته باشند.
+ */
+export async function bulkProducts(
+  ids: number[],
+  op: string,
+  value?: string | number,
+): Promise<ProductBulkResponse> {
+  return adminFetcher<ProductBulkResponse>("/api/admin/products/bulk", {
+    method: "POST",
+    body: JSON.stringify({ ids, op, value }),
+  });
+}
+
+// ============================================================
+// آپلود عکس
+// ============================================================
+// این یکی عمداً از `fetcher` رد نمی‌شود و دو تفاوت دارد:
+//
+//   ۱. بدنه‌ی خام (خودِ فایل) و `Content-Type` واقعی‌اش — نه JSON. `fetcher`
+//      هدرِ `application/json` را روی همه‌چیز می‌گذارد و اینجا ۴۱۵ می‌شد.
+//   ۲. بدونِ مهلتِ ۱۵ ثانیه‌ای `fetcher`: فایل تا ۲ مگابایت است و روی اینترنتِ
+//      موبایلِ مغازه به‌سختی در ۱۵ ثانیه جا می‌شود. آپلودِ نیمه‌کاره‌ی لغوشده
+//      برای کاربر «هیچ اتفاقی نیفتاد» به‌نظر می‌رسد.
+//
+// سدِ CSRF سمتِ Express به هدر `Origin` نگاه می‌کند و مرورگر روی POST همان را
+// خودش می‌فرستد (روی مبدأِ Next)، پس چیزی لازم نیست.
+export async function uploadImage(file: File): Promise<UploadImageResponse> {
+  const res = await fetch(`${apiBase()}/api/admin/upload-image`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": file.type },
+    body: file,
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    reason?: string;
+  } & Partial<UploadImageResponse>;
+  if (!res.ok) {
+    // پیام‌های سرور اینجا واقعاً دقیق‌اند («بزرگ‌ترین ضلع باید حداکثر ۴۰۰۰
+    // پیکسل باشد»، «حداقل ۸۰ پیکسل لازم است»)، پس همان متن نشان داده می‌شود.
+    throw new ApiError(res.status, data.error || "آپلود عکس انجام نشد", data.reason);
+  }
+  if (!data.path) throw new ApiError(500, "مسیر عکس از سرور نیامد");
+  return data as UploadImageResponse;
+}
+
+/**
+ * نسخه‌ی کوچکِ عکس برای فهرست‌ها — همان کاری که `PG.thumb` در نسخه‌ی Express
+ * می‌کرد. `?w=` را خودِ Express (lib/webp-negotiate.js) می‌فهمد و با هدرِ
+ * `Accept` مرورگر نسخه‌ی WebP سبک را می‌دهد.
+ *
+ * چرا لازم است: فهرستِ انبار تا امروز `<img src={p.image}>` می‌گذاشت، یعنی یک
+ * عکسِ ۳۰۰ کیلوبایتی برای کادرِ ۴۴ پیکسلی دانلود می‌شد. با بیست‌وچند ردیف روی
+ * اینترنتِ موبایل، همان چیزی است که پنل را کند می‌کند.
+ */
+export function thumbUrl(image: string | null | undefined, w = 320): string {
+  const p = String(image || "");
+  if (!p) return "";
+  return p.includes("?") ? `${p}&w=${w}` : `${p}?w=${w}`;
+}
+
+// ============================================================
+// خروجی‌های CSV
+// ============================================================
+// همه‌شان یک الگو دارند: این‌ها **ناوبریِ معمولیِ مرورگر**اند و نه درخواستِ
+// fetch، چون مرورگر باید هدرِ `Content-Disposition` را ببیند تا پنجره‌ی
+// «ذخیره‌ی فایل» باز شود. (buildِ blob روی سافاریِ موبایل قابل‌اعتماد نیست.)
+
+/**
+ * خروجیِ سفارش‌ها با **همان فیلترهای روی صفحه** — عیناً همان پارامترهایی که
+ * `getAdminOrders` می‌فرستد، تا فایلی که مدیر می‌گیرد با چیزی که می‌بیند یکی
+ * باشد (وگرنه «چرا این سفارش در اکسل نیست؟» بی‌جواب می‌ماند).
+ */
+export function ordersCsvHref(
+  params: { status?: string; q?: string; from?: string; to?: string } = {},
+): string {
+  const sp = new URLSearchParams();
+  sp.set("status", params.status || "all");
+  if (params.q) sp.set("q", params.q);
+  if (params.from) sp.set("from", params.from);
+  if (params.to) sp.set("to", params.to);
+  return `/api/admin/export/orders.csv?${sp.toString()}`;
+}
+
+/** مشتری‌ها — `buyers=1` یعنی فقط کسانی که خرید موفق دارند (همان فیلترِ صفحه) */
+export function customersCsvHref(onlyBuyers = false): string {
+  return `/api/admin/export/customers.csv${onlyBuyers ? "?buyers=1" : ""}`;
+}
+
+/** انبار — ستونِ «کافی برای چند روز» همان چیزی است که این فایل را می‌ارزد */
+export function inventoryCsvHref(): string {
+  return "/api/admin/export/inventory.csv";
 }
 
 // دوباره صادر می‌شود تا کامپوننت‌ها یک مسیرِ import داشته باشند
