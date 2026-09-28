@@ -3628,6 +3628,81 @@ function shutdown(code) {
     check('V35 OTP: verdict states distinguish success and error', loginJsOtp.includes("paintOtp(code, 'success')") && loginJsOtp.includes("paintOtp(code, 'error')"));
     check('V35 OTP: reduced-motion fallback exists', styleOtp.includes('@media (prefers-reduced-motion:reduce)') && styleOtp.includes('.otp-boxes'));
 
+    /* ================= V38: نشانگرِ «خانه‌ی پرشده» — وصلِ CSS به HTML و JS =========
+       نشانگرِ «پرشده» یک‌بار با `:not(:placeholder-shown)` نوشته شده بود، ولی هیچ‌کدام
+       از پنج اینپوتِ رقم `placeholder` نداشتند. یعنی شبه‌كلاس هرگز «خالی» را نشان
+       نمی‌داد و هر پنج خانه از لحظهٔ باز شدن پُر به‌نظر می‌رسیدند. این گروه همان وصلِ
+       سیم‌کشی را قفل می‌کند، و خودِ استخراج‌کننده را هم می‌آزماید تا «سبزِ خالی»
+       نشویم. */
+    const readOtpInputs = (html) => [...html.matchAll(/class="(otp-digit[^"]*)"[\s\S]*?>/g)]
+      .map((m) => {
+        const ph = m[0].match(/\splaceholder="([^"]*)"/);
+        return { tag: m[0], cls: m[1], placeholder: ph ? ph[1] : null };
+      });
+    const otpInputs = readOtpInputs(loginHtmlOtp);
+    const fakeOtp = readOtpInputs([
+      '<input class="otp-digit" type="tel" maxlength="1">',
+      '<input class="otp-digit"\n  type="tel" placeholder=" ">',
+      '<input class="otp-digit" placeholder="5">',
+      '<input class="otp-digit has-value" maxlength="1">'
+    ].join('\n'));
+    check('V38 خودآزمون: استخراج‌کننده روی ۴ نمونهٔ ساختگی درست رفتار کرد',
+      fakeOtp.length === 4 &&
+      fakeOtp[0].placeholder === null &&
+      fakeOtp[1].placeholder === ' ' &&
+      fakeOtp[2].placeholder === '5' &&
+      fakeOtp[3].cls === 'otp-digit has-value',
+      `count=${fakeOtp.length} ph=[${fakeOtp.map((i) => i.placeholder === null ? 'null' : JSON.stringify(i.placeholder)).join(',')}] cls=[${fakeOtp.map((i) => i.cls).join('|')}]`);
+    const otpNoPlaceholder = otpInputs.map((i, n) => (i.placeholder === null ? n + 1 : null)).filter(Boolean);
+    check('V38 OTP: هر پنج اینپوتِ رقم placeholder دارند (وگرنه شاخهٔ :not(:placeholder-shown) همیشه صادق می‌ماند)',
+      otpInputs.length === 5 && otpNoPlaceholder.length === 0,
+      otpNoPlaceholder.length ? `بدونِ placeholder: خانهٔ ${otpNoPlaceholder.join('، ')}` : `${otpInputs.length} اینپوت، همه دارای placeholder`);
+    const otpVisiblePlaceholder = otpInputs
+      .map((i, n) => (i.placeholder !== null && i.placeholder.trim() !== '' ? n + 1 : null)).filter(Boolean);
+    check('V38 OTP: placeholderِ خانه‌ها نامرئی است (وگرنه پنج نویسهٔ روحی زیرِ رقم‌ها می‌ماند)',
+      otpInputs.length === 5 && otpVisiblePlaceholder.length === 0,
+      otpVisiblePlaceholder.length ? `دیدنی: خانهٔ ${otpVisiblePlaceholder.join('، ')}` : 'خالی یا فاصله');
+    const otpBakedClass = otpInputs.map((i, n) => (i.cls === 'otp-digit' ? null : n + 1)).filter(Boolean);
+    check('V38 OTP: هیچ خانه‌ای با کلاسِ has-value از پیش پُر نشان داده نمی‌شود',
+      otpInputs.length === 5 && otpBakedClass.length === 0,
+      otpBakedClass.length ? `خانهٔ ${otpBakedClass.join('، ')} کلاسِ اضافه دارد` : 'هر پنج خانه فقط کلاسِ otp-digit');
+    // سمتِ CSS: قاعدهٔ «پرشده» باید هر دو شاخه را داشته باشد و هیچ شاخهٔ لختی نداشته باشد
+    const phAnchor = styleOtp.indexOf(':not(:placeholder-shown)');
+    let filledSelector = '';
+    if (phAnchor >= 0) {
+      const open = styleOtp.lastIndexOf('}', phAnchor);
+      const close = styleOtp.indexOf('{', phAnchor);
+      if (close > phAnchor) {
+        filledSelector = styleOtp.slice(open + 1, close).replace(/\/\*[\s\S]*?\*\//g, '').trim();
+      }
+    }
+    const filledArms = filledSelector.split(',').map((a) => a.trim()).filter(Boolean);
+    check('V38 CSS: قاعدهٔ «پرشده» هم شاخهٔ placeholder دارد هم شاخهٔ has-value',
+      phAnchor >= 0 &&
+      filledArms.some((a) => a.includes('.otp-digit:not(:placeholder-shown)')) &&
+      filledArms.some((a) => a.endsWith('.otp-digit.has-value')),
+      phAnchor >= 0
+        ? `انتخابگر: ${filledSelector.replace(/\s+/g, ' ').slice(0, 140)}`
+        : 'لنگرِ :not(:placeholder-shown) در style.css پیدا نشد');
+    const bareArms = filledArms.filter((a) => !/:/.test(a) && !/\.has-value/.test(a));
+    check('V38 CSS: کنارِ حالت‌ها هیچ شاخهٔ لختی (.otp-digit تنها) نیست',
+      filledArms.length >= 2 && bareArms.length === 0,
+      bareArms.length ? `شاخهٔ لخت: ${bareArms.join(' | ')}` : `${filledArms.length} شاخه، همه حالت‌دار`);
+    // سمتِ JS: paintOtp نقطهٔ صفر است (paintOtp('') همهٔ خانه‌ها را خالی می‌کند)، پس
+    // کلاس باید آنجا از روی مقدار ست شود — نه با `true` قفل‌شده. Larkِ بیرون‌زدنِ رقم هم
+    // باید کلاس را پاک کند، وگرنه خانهٔ خالی تا آخر پُر می‌ماند.
+    const paintStart = loginJsOtp.indexOf('function paintOtp');
+    const paintEnd = paintStart >= 0 ? loginJsOtp.indexOf('\n  }', paintStart) : -1;
+    const paintBody = paintEnd > paintStart ? loginJsOtp.slice(paintStart, paintEnd) : '';
+    const otpCondCall = paintBody.match(/classList\.toggle\(\s*['"]has-value['"]\s*,\s*([^)]*)/);
+    const otpJsCond = Boolean(otpCondCall) && otpCondCall[1].trim() !== 'true';
+    const otpJsClear = /classList\.remove\(\s*['"]has-value['"]/.test(loginJsOtp);
+    check('V38 JS: کلاسِ has-value در paintOtp از روی مقدار ست می‌شود و بیرون‌زدنِ رقم پاکش می‌کند',
+      otpJsCond && otpJsClear,
+      paintStart < 0
+        ? 'لنگرِ function paintOtp در login.js پیدا نشد'
+        : `شرطی=${otpJsCond}${otpCondCall ? ` (${otpCondCall[1].trim().slice(0, 40)})` : ''} پاک=${otpJsClear}`);
+
       const acHtml34 = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'account.html'), 'utf8');
       check('V34 فرانت: کادرِ رمزِ فعلی در صفحه‌ی حساب هست', acHtml34.includes('id="curPass"'));
       check('V34 فرانت: هر دو مسیر currentPassword می‌فرستند',
