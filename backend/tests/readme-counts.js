@@ -213,10 +213,16 @@ const sumAll = (sources) => Object.values(sources).reduce((a, b) => a + b, 0);
 
 // متنِ امکانات: هر «N تست/بررسی» به نزدیک‌ترین کلیدواژه‌ی همان خط می‌چسبد —
 // که همان جایی است که ۸۶ به‌جای ۸۵ جا مانده بود.
+// خطی که نامِ یک فایلِ آزمونِ فرانت‌اند را دارد، عددش تعدادِ آزمونِ *همان فایل*
+// است، نه شمارشِ یک سوئیتِ بک‌اند؛ آن‌ها را نگهبانِ فرانت‌اند می‌سنجد
+// (`next-frontend/scripts/check-readme-counts.mjs`) تا هر عدد یک صاحب داشته باشد.
+const FRONTEND_TEST_FILE = /\.test\.(ts|tsx)/;
+
 function proseMismatches(structural, sources, totals) {
   const bad = [];
   lines.forEach((line, idx) => {
     if (structural.has(idx)) return;
+    if (FRONTEND_TEST_FILE.test(line)) return;
     for (const tok of countTokens(line)) {
       const near = SUITES
         .map((s) => ({ s, at: line.indexOf(s.word) }))
