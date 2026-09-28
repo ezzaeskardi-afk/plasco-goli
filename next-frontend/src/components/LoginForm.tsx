@@ -49,6 +49,9 @@ export function LoginForm() {
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [cooldown, setCooldown] = useState(0);
+  // مهلت به‌صورت «لحظه‌ی پایان» هم نگه داشته می‌شود چون منبعِ حقیقتِ شمارش همین
+  // است، نه عددی که هر ثانیه یکی کم می‌شود (پایین توضیح داده شده).
+  const [cooldownUntil, setCooldownUntil] = useState(0);
   const [otpDigits, setOtpDigits] = useState(["", "", "", "", ""]);
   const [otpError, setOtpError] = useState("");
   const [password, setPassword] = useState("");
@@ -88,36 +91,77 @@ export function LoginForm() {
     navFallback.current = setTimeout(() => hardNavigate(redirect), NAV_FALLBACK_MS);
   }, [router, redirect]);
 
-  // شمارش معکوس cooldown — پایدار در برابر رفرش: زمانِ پایان در
-  // localStorage ذخیره می‌شود (کلید به ازای هر شماره) و موقعِ برگشت به صفحه
-  // از نو محاسبه می‌شود. همتای resendAt در frontend/js/login.js:143.
+  // شمارش معکوس cooldown — پایدار در برابر رفرش: **لحظه‌ی پایان به‌همراهِ
+  // شماره** ذخیره می‌شود و موقعِ برگشت به همان مرحله‌ی کد بازمحاسبه می‌شود.
+  // همتای `resendAt`/`pg_otp_state` در `frontend/js/login.js`.
+  //
+  // چرا شماره هم ذخیره می‌شود: بدونِ آن، بعد از رفرش معلوم نیست این مهلت مالِ
+  // کدام شماره است. آن‌وقت تنها راهِ رسیدنِ کاربر به مرحله‌ی کد «فرستادنِ دوباره‌ی
+  // کد» است — که خودش `startCooldown(30)` را صدا می‌زند و مهلتِ ذخیره‌شده را
+  // بازنویسی می‌کند؛ یعنی عددِ ذخیره‌شده هیچ‌وقت به چشم نمی‌آمد و مکانیزمِ
+  // «رفرش‌ناپذیر» عملاً مرده بود.
+  const RESEND_KEY = "pg_otp_resend";
+
   function startCooldown(seconds: number) {
     const until = Date.now() + seconds * 1000;
     try {
-      localStorage.setItem(`pg_otp_resend_${phone}`, String(until));
+      localStorage.setItem(RESEND_KEY, JSON.stringify({ phone, until }));
     } catch {
       // حالت ناشناس — شمارش فقط در حافظه می‌ماند
     }
+    setCooldownUntil(until);
     setCooldown(seconds);
   }
 
-  useEffect(() => {
-    if (!phone) return;
+  function clearCooldown() {
     try {
-      const until = Number(localStorage.getItem(`pg_otp_resend_${phone}`));
-      const remain = Math.ceil((until - Date.now()) / 1000);
-      if (Number.isFinite(remain) && remain > 0) setCooldown(remain);
+      localStorage.removeItem(RESEND_KEY);
     } catch {
       // بی‌اهمیت
     }
-  }, [phone]);
+  }
+
+  // بازگشت به مرحله‌ی کد بعد از رفرش — همان کاری که فروشگاهِ Express می‌کند:
+  // کاربر به همان‌جایی برمی‌گردد که بود و شمارش از وسطِ راه ادامه پیدا می‌کند.
+  // فقط یک‌بار در mount، چون این وضعیت کارِ بازدیدِ قبلی است و از داخلِ همین
+  // صفحه عوض نمی‌شود.
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(RESEND_KEY) || "null");
+      const until = Number(stored?.until);
+      const remain = Math.ceil((until - Date.now()) / 1000);
+      if (!stored?.phone || !Number.isFinite(remain) || remain <= 0) return;
+      setPhone(stored.phone);
+      setCooldownUntil(until);
+      setCooldown(remain);
+      setStep("otp");
+    } catch {
+      // بی‌اهمیت
+    }
+  }, []);
 
   // شمارش معکوس cooldown
+  //
+  // هر تیک از **مهلتِ مطلق** از نو حساب می‌شود، نه با کم‌کردنِ یک شمارنده.
+  // فرقش جایی معلوم می‌شود که تایمر عقب بیفتد: تبِ مخفی، لپ‌تاپِ خواب‌رفته، یا
+  // موبایلی که مرورگرش پس‌زمینه را منجمد می‌کند. با شمارنده‌ی کاهنده، یک دقیقه
+  // خواب یعنی یک دقیقه عددِ عقب‌مانده — مشتری عددی می‌بیند که واقعیت ندارد و
+  // دکمه دیرتر از سرور باز می‌شود (سرور همان کد را معتبر می‌داند، پس دکمه‌ی
+  // قفل‌شده هیچ کاری هم نمی‌کند). با مهلتِ مطلق، تیکِ بعدی خودش را با ساعتِ
+  // واقعی هم‌گام می‌کند.
   useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setTimeout(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
-    return () => clearTimeout(t);
-  }, [cooldown]);
+    if (cooldownUntil <= 0) return;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+      setCooldown(left);
+      // با تمامِ‌شدنِ مهلت، خودِ همین مقدار وابستگیِ effect را عوض می‌کند
+      // و تایمر پاک می‌شود — وگرنه تا ابد هر ثانیه یک تیکِ بی‌فایده می‌خورد.
+      if (left <= 0) setCooldownUntil(0);
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [cooldownUntil]);
 
   // ========== مرحله ۱: شماره موبایل ==========
   const handlePhoneSubmit = async (e: React.FormEvent) => {
@@ -169,6 +213,7 @@ export function LoginForm() {
         } catch {
           // بی‌اهمیت
         }
+        setCooldownUntil(0);
         setCooldown(0);
       }
     } finally {
@@ -222,6 +267,8 @@ export function LoginForm() {
     setOtpError("");
     try {
       const res = await verifyOtp(ph, code);
+      // ورود موفق → مهلتِ ذخیره‌شده دیگر معنی ندارد
+      clearCooldown();
       if (res.isNew || !res.fullName) {
         setStep("name");
         setLoading(false);
@@ -493,7 +540,10 @@ export function LoginForm() {
 
           <button
             type="button"
-            onClick={() => setStep("phone")}
+            onClick={() => {
+              clearCooldown();
+              setStep("phone");
+            }}
             className="w-full text-center text-xs mt-1"
             style={{ color: "var(--color-ink-dim)" }}
           >
