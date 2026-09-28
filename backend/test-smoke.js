@@ -2537,6 +2537,107 @@ function shutdown(code) {
           ? 'گیت در دسترس نیست — این بررسی سنجیده نشد'
           : (refsOffGit.length ? `در گیت نیست: ${refsOffGit.join(' | ')}` : `${staticRefs.size} ارجاع، همه در گیت`));
 
+      /* ---- V24 نگهبانِ دارایی: همان درس، روی درهایی که هنوز باز بودند ----
+         بررسیِ بالا فقط ارجاع‌های `/picture/` را در HTML و JS/TS می‌دید، ولی
+         مسیرِ دارایی جاهای دیگری هم نوشته می‌شود: `url()` در CSS، آیکون‌های
+         `manifest.webmanifest`، و فهرستِ precacheِ سرویس‌ورکر. بدترینشان
+         سرویس‌ورکر است: اگر یک قلمِ precache روی کلونِ تازه ۴۰۴ بدهد، نصبِ PWA
+         شکست می‌خورد و نه لاگِ سرور می‌گوید نه تستِ «فایل هست؟» که فقط دیسکِ
+         توسعه‌دهنده را می‌بیند. اینجا همه‌ی این سطح‌ها یک‌جا سنجیده می‌شوند:
+         هر ارجاعِ دارایی باید هم روی دیسک باشد هم در گیت.
+
+         دامنه‌ی پسوندها عمداً غیرکد است (`png/svg/woff2/…` و `html/webmanifest`)
+         تا ارجاع‌های کد مثل `/api/x.json` الکی قرمز نشوند. */
+      const ASSET_EXT = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf|eot|html|webmanifest)$/i;
+      const FIRST_ROOT = path.join(REPO_ROOT, 'frontend');
+      const NEXT_PUB = path.join(REPO_ROOT, 'next-frontend', 'public');
+
+      // کامنت می‌تواند مسیرِ مرده‌ای را نام ببرد؛ مثلاً در `site.ts` نوشته شده
+      // «قبلاً `/assets/og-image.png` بود که ۴۰۴ می‌داد». بدونِ حذفِ کامنت،
+      // نگهبان روی همان یادداشتِ تاریخی قرمز می‌شود. پس اول کامنت‌ها می‌روند.
+      // `://` دست‌نخورده می‌ماند تا آدرسِ مطلقِ کامل خراب نشود.
+      const stripComments = (label, text) => {
+        if (/\.html$/.test(label)) return text.replace(/<!--[\s\S]*?-->/g, ' ');
+        if (/\.css$/.test(label)) return text.replace(/\/\*[\s\S]*?\*\//g, ' ');
+        return text
+          .replace(/\/\*[\s\S]*?\*\//g, ' ')
+          .replace(/(^|[^:])\/\/[^\n]*/gm, '$1 ');
+      };
+
+      const assetSources = [];
+      const addAssetSource = (label, root, dir, raw) =>
+        assetSources.push({ label, root, dir, text: stripComments(label, raw) });
+      for (const sub of ['', 'css', 'js']) {
+        const abs = path.join(FIRST_ROOT, sub);
+        if (!fs.existsSync(abs)) continue;
+        for (const f of fs.readdirSync(abs).filter((x) => /\.(html|css|js|webmanifest)$/.test(x))) {
+          const label = `frontend/${sub ? sub + '/' : ''}${f}`;
+          addAssetSource(label, FIRST_ROOT, abs, fs.readFileSync(path.join(abs, f), 'utf8'));
+        }
+      }
+      if (fs.existsSync(NEXT_SRC)) {
+        for (const rel of fs.readdirSync(NEXT_SRC, { recursive: true, encoding: 'utf8' })) {
+          if (!/\.(ts|tsx|css)$/.test(rel) || /\.test\./.test(rel)) continue;
+          addAssetSource(`next/${rel}`, NEXT_PUB, path.join(NEXT_SRC, path.dirname(rel)),
+            fs.readFileSync(path.join(NEXT_SRC, rel), 'utf8'));
+        }
+      }
+      for (const f of ['manifest.webmanifest', 'sw.js', 'offline.html']) {
+        const abs = path.join(NEXT_PUB, f);
+        if (fs.existsSync(abs)) addAssetSource(`next-public/${f}`, NEXT_PUB, NEXT_PUB, fs.readFileSync(abs, 'utf8'));
+      }
+
+      // پیشوندِ `/picture/` استثناست: هم Express (server.js) و هم Next (rewrite
+      // در next.config.ts) این پیشوند را از پوشه‌ی `picture/` در ریشه‌ی مخزن
+      // می‌دهند، نه از ریشه‌ی سایت. بقیه‌ی مسیرهای `/…` از ریشه‌ی سایتِ همان
+      // برنامه می‌آیند و `./`/`../` نسبت به پوشه‌ی خودِ فایل.
+      const resolveAsset = (s, clean) => {
+        if (/^\/picture\//.test(clean)) return path.join(REPO_ROOT, clean.replace(/^\//, ''));
+        if (clean.startsWith('/')) return path.join(s.root, clean.replace(/^\//, ''));
+        return path.join(s.dir, clean);
+      };
+
+      const firstPartyRefs = new Map();   // مسیرِ مخزن ← فایل‌هایی که ارجاعش داده‌اند
+      for (const s of assetSources) {
+        for (const m of s.text.matchAll(/["'`(]([^"'`()\s]+)["'`)]/g)) {
+          const url = m[1];
+          if (!url.startsWith('/') && !/^\.\.?\//.test(url)) continue;
+          if (url.includes('${')) continue;
+          const clean = url.split('?')[0].split('#')[0];
+          if (!ASSET_EXT.test(clean)) continue;
+          const relPath = path.relative(REPO_ROOT, resolveAsset(s, clean)).split(path.sep).join('/');
+          if (!/^(frontend|next-frontend\/public|picture)\//.test(relPath)) continue;
+          if (!firstPartyRefs.has(relPath)) firstPartyRefs.set(relPath, new Set());
+          firstPartyRefs.get(relPath).add(s.label);
+        }
+      }
+      let assetTracked = null;
+      try {
+        const out = execSync('git ls-files -z -- frontend next-frontend/public picture', {
+          cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024,
+        });
+        assetTracked = new Set(out.split(String.fromCharCode(0)).filter(Boolean));
+      } catch (e) { assetTracked = null; }
+      // کفِ ۲۰ ارجاع: امروز ۳۴ ارجاع است؛ اگر روزی اسکن خالی برگردد، نباید سبز شود
+      const ASSET_FLOOR = 20;
+      const assetOffDisk = [];
+      const assetOffGit = [];
+      for (const [relPath, where] of firstPartyRefs) {
+        const who = [...where].join('، ');
+        if (!fs.existsSync(path.join(REPO_ROOT, relPath))) assetOffDisk.push(`${relPath} ← ${who}`);
+        if (assetTracked && !assetTracked.has(relPath)) assetOffGit.push(`${relPath} ← ${who}`);
+      }
+      check('V24 نگهبان: دارایی‌های CSS/manifest/سرویس‌ورکر روی دیسک هستند',
+        firstPartyRefs.size >= ASSET_FLOOR && assetOffDisk.length === 0,
+        firstPartyRefs.size < ASSET_FLOOR
+          ? `فقط ${firstPartyRefs.size} ارجاع پیدا شد (کف ${ASSET_FLOOR}) — نگهبانِ خالی سبز نشود`
+          : (assetOffDisk.length ? assetOffDisk.join(' | ') : `${firstPartyRefs.size} ارجاع، همه روی دیسک`));
+      check('V24 نگهبان: همان دارایی‌ها در گیت هم ترک شده‌اند',
+        assetTracked !== null && firstPartyRefs.size >= ASSET_FLOOR && assetOffGit.length === 0,
+        assetTracked === null
+          ? 'گیت در دسترس نیست — این بررسی سنجیده نشد'
+          : (assetOffGit.length ? `در گیت نیست: ${assetOffGit.join(' | ')}` : `${firstPartyRefs.size} ارجاع، همه در گیت`));
+
       // ---- تحویلِ WebP روی HTTP واقعی ----
       const IMG_URL = '/picture/products/' + encodeURIComponent('کاسه سرو پایه چوبی 2 لیتر.jpg');
       const asWebp = await fetch(BASE + IMG_URL, { headers: { Accept: 'image/webp,image/*,*/*' } });
