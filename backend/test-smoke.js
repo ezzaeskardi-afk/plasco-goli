@@ -1225,14 +1225,20 @@ function shutdown(code) {
     // استایلِ چاپِ پنلِ قدیم حذف شد؛ همان قرارداد حالا در Next است و همان
     // دو چیز باید برقرار بماند: متنِ تیره روی سفید، و اینکه موقعِ چاپ فقط خودِ
     // فاکتور دیده شود نه کلِ پنل.
+    //
+    // لنگر عمداً جدا سنجیده می‌شود: `indexOf` منفی اگر با `slice` جمع شود،
+    // برشِ ناشی از آن تقریباً کلِ فایل می‌شود و بررسی **سبزِ قلابی** می‌دهد.
+    // بدونِ آن، عوض‌شدنِ یک نامِ ساده در CSS می‌توانست این بررسی را بی‌صدا
+    // سبز نگه دارد — یعنی دقیقاً همان چیزی که آزمون باید بگیرد.
     const printCss = nextSrc('app/globals.css');
     const printFrom = printCss.indexOf('html.printing-invoice');
-    const printBlock = printCss.slice(printFrom, printFrom + 2200);
+    const anchored = printFrom >= 0;
+    const printBlock = anchored ? printCss.slice(printFrom, printFrom + 2200) : '';
     check('V12 گزارش: استایل چاپ رنگ متن را تیره می‌کند',
-      /color:\s*#111/.test(printBlock) && /background:\s*#fff/.test(printBlock));
+      anchored && /color:\s*#111/.test(printBlock) && /background:\s*#fff/.test(printBlock),
+      anchored ? '' : 'لنگرِ html.printing-invoice در globals.css پیدا نشد');
     check('V12 گزارش: استایل چاپ همه‌چیز جز فاکتور را پنهان می‌کند',
-      /html\.printing-invoice > body > \*:not\(#pg-invoice\)/.test(printCss) &&
-      /display:\s*none !important/.test(printBlock));
+      /html\.printing-invoice > body > \*:not\(#pg-invoice\)\s*\{\s*display:\s*none !important/.test(printCss));
 
     // ---------- کوپن: سفارش پرداخت‌نشده نباید سقف مصرف را بسوزاند ----------
     const cpn2 = await api('POST', '/admin/coupons', { code: 'SMOKEPEND', type: 'percent', value: 15, perUserLimit: 1 });
@@ -1295,7 +1301,9 @@ function shutdown(code) {
         .filter(k => /^(order|product|coupon|category|review|settings|backup|export|image|staff)_?/.test(k))
     )];
     const panelSrc = nextSrc('components/admin/ActivityContent.tsx');
-    const faBlock = panelSrc.slice(panelSrc.indexOf('const ACTION_FA'), panelSrc.indexOf('const ACTION_TONE'));
+    const faFrom = panelSrc.indexOf('const ACTION_FA');
+    const faTo = panelSrc.indexOf('const ACTION_TONE');
+    const faBlock = faFrom >= 0 && faTo > faFrom ? panelSrc.slice(faFrom, faTo) : '';
     const missingFa = actionKeys.filter(k => !new RegExp(`\\b${k}\\s*:`).test(faBlock));
     check('V13 لاگ: هر کلید رویداد برچسب فارسی در دفترِ پنل دارد',
       actionKeys.length >= 20 && missingFa.length === 0,
