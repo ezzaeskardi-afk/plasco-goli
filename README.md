@@ -135,6 +135,7 @@ npm run test:secrets                  # نگهبانِ مرزِ راز (بی‌�
 cd next-frontend
 npm test           # ۹۸ آزمونِ فرانت‌اند — ۲۰ تایش رفتارِ صفحه‌ی نتیجه‌ی سفارش
 npm run test:watch # حالتِ watch
+npm run test:readme-counts # عددهای README را با نتیجه‌ی واقعیِ اجرا می‌سنجد (خودش vitest را اجرا می‌کند)
 ```
 
 > میانِ این ۹۸ آزمون، هشت‌تای نخستِ صفحه‌ی نتیجه‌ی سفارش تنها چیزی در پروژه‌اند که
@@ -199,8 +200,10 @@ npm run check        # test:all + سئو + بنچمارکِ ۲۰۰ کاربر  (
   صفحه‌ی نتیجه‌ی سفارش را به دو عددِ بک‌اند گره می‌زند: مهلتِ پرداخت (`ORDER_TTL_MS`)
   و فاصله‌ی تیکِ تطبیق (`RECONCILE_INTERVAL_MS`). اگر یکی عوض شود و آن یکی جا بماند،
   صفحه بی‌صدا قبل از روشن‌شدنِ سفارش تسلیم می‌شود.
-- **عددهای README باید راست باشند** — نگهبانِ سبکی (`tests/readme-counts.js`) که نه سرور
-  می‌خواهد نه دیتابیس: عددهای شمردنی را از خودِ مخزن می‌شمارد (خط و تابعِ `db.js`،
+- **عددهای README باید راست باشند** — دو نگهبانِ هم‌خانواده، چون دو طرفِ عدد دارند:
+  `tests/readme-counts.js` برای بک‌اند (نه سرور می‌خواهد نه دیتابیس) و
+  `next-frontend/scripts/check-readme-counts.mjs` برای فرانت‌اند که عدد را از
+  **نتیجه‌ی اجرای vitest** می‌خواند. بک‌اند عددهای زیر را می‌سنجد: عددهای شمردنی را از خودِ مخزن می‌شمارد (خط و تابعِ `db.js`،
   فایل‌های lib/routes/tools/js، نمای پنل، اجزای Next) و عددهای آزمون‌ها را در پنج جا
   (خطِ وضعیت، جدول، کامنتِ دستور، درخت، و متنِ امکانات) با هم مقایسه می‌کند. مستندی که
   عددِ غلط می‌دهد از نبودش بدتر است: یک‌بار شمارشِ فرانت‌اند یک‌جا ۱۶ بود و جای دیگر ۹۸،
@@ -411,6 +414,7 @@ polasco-goli/
 │       │   └── admin/         ← ۱۳ نمای پنل: داشبورد، سفارش‌ها، انبار، مشتری‌ها،
 │       │                        CRM، نظرات، تخفیف‌ها، عمده‌فروشی، گزارش‌ها،
 │       │                        تنظیمات، رویدادها، خطاها، وضعیت سیستم
+│       │   ├── internalLinks.test.ts ← ۵ آزمونِ پیوندهای داخلی و مسیرهای ثابتِ Next
 │       ├── components/        ← ۲۳ کامپوننت + ۳ آزمون + ۳ کامپوننتِ صفحه اصلی + ۱۳ فایلِ محتوای پنل
 │       │   ├── Header.tsx / Footer.tsx / AdminNav.tsx / Toast.tsx
 │       │   ├── ProductCard.tsx / ProductDetail.tsx / ProductReviews.tsx / StarRow.tsx
@@ -421,12 +425,19 @@ polasco-goli/
 │       │   ├── OrderSuccessContent.test.tsx ← ۲۰ آزمونِ رفتارِ همین صفحه
 │       │   ├── InvoiceSheet.tsx             ← چاپِ فاکتورِ مشترکِ حساب کاربری و پنل
 │       │   ├── StallNotice.tsx              ← هشدارِ گیرِ بارگذاری (پیامِ HTML، بی‌نیاز به JS)
+│       │   ├── LoginForm.test.tsx           ← ۸ آزمونِ ورود (cooldown، ۴۲۹، ارسال مجدد)
+│       │   ├── StallNotice.test.tsx         ← ۵ آزمونِ هشدارِ بارگذاری
 │       │   ├── admin/         ← محتوای ۱۳ نمای پنل + AdminBits (اجزای مشترک + toUtc) + NoAccess
+│       │   ├── admin/ProductEditor.tsx ← ویرایشگرِ کالا (دسته، ویژگی‌ها، آپلودِ عکس)
+│       │   ├── admin/ProductEditor.test.tsx ← ۱۰ آزمونِ همان ویرایشگر
 │       │   └── home/          ← OrderTracking / RecentlyViewed / PromoBanner
 │       └── lib/               ← کتابخانه‌ها
 │           ├── api.ts         ← توابع API (products, cart, auth, wishlist, orders, shop)
 │           ├── adminApi.ts / adminSections.ts / adminTypes.ts ← پنل مدیریت
 │           ├── productForm.ts / productBulk.ts ← ویرایشگرِ کالا: اعتبارسنجی و عملیاتِ گروهی
+│           ├── productForm.test.ts  ← ۲۷ آزمونِ اعتبارسنجیِ فرمِ کالا
+│           ├── productBulk.test.ts  ← ۱۱ آزمونِ عملیاتِ گروهی
+│           ├── adminApi.test.ts     ← ۱۲ آزمونِ لایهٔ API پنل و مدیریتِ خطا
 │           ├── navigation.ts  ← ناوبریِ کاملِ جبرانی (جایگزینِ گیرِ بی‌پایان)
 │           ├── types.ts       ← تایپ‌ها (Product, Order, Wishlist, WholesaleInfo, …)
 │           ├── actions.ts     ← Server Actions

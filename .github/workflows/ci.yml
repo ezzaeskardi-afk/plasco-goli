@@ -179,6 +179,13 @@ jobs:
       - name: Tests
         run: npm test
 
+      # عددهای فرانت‌اند در README با *نتیجه‌ی اجرا* سنجیده می‌شوند، نه با شمارشِ
+      # `it(` در فایل (که با `it.each` و `describe` اشتباه می‌شود). عددِ کل، عددِ هر
+      # فایل، و نام‌بردنِ هر فایلِ آزمون — تا افزودنِ یک تست بی‌سروصدا مستندات را
+      # از واقعیت جدا نکند.
+      - name: README counts (frontend)
+        run: npm run test:readme-counts
+
       - name: Install backend dependencies
         run: npm ci
         working-directory: backend
