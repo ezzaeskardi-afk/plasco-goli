@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getAdminUsers, setUserStaff } from "@/lib/adminApi";
+import { customersCsvHref, getAdminUsers, setUserStaff } from "@/lib/adminApi";
 import { ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import {
@@ -235,6 +235,17 @@ export function PeopleContent() {
             );
           })}
         </div>
+
+        {/* خروجیِ CSV — عمداً همان فیلترِ «خریدار» روی صفحه را می‌فرستد:
+            فایلی که مدیر می‌گیرد باید با چیزی که می‌بیند یکی باشد، وگرنه
+            «چرا این مشتری در اکسل نیست؟» بی‌جواب می‌ماند. */}
+        <a
+          href={customersCsvHref(filter === "buyers")}
+          className="rounded-full px-3.5 py-2 text-xs font-bold min-h-10 sm:min-h-0 inline-flex items-center"
+          style={{ background: "var(--color-surface-2)", color: "var(--color-ink-soft)" }}
+        >
+          خروجی اکسل{filter === "buyers" ? " (فقط خریدارها)" : ""}
+        </a>
 
         <label className="flex items-center gap-2 text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
           ترتیب

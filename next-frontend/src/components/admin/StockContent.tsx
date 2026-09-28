@@ -3,7 +3,15 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getInventory, updateProduct, setProductPublished } from "@/lib/adminApi";
+import {
+  getInventory,
+  updateProduct,
+  setProductPublished,
+  bulkProducts,
+  deleteProduct,
+  inventoryCsvHref,
+  thumbUrl,
+} from "@/lib/adminApi";
 import { ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import {
@@ -18,15 +26,21 @@ import {
   toman,
   tomanShort,
 } from "@/components/admin/AdminBits";
+import { BULK_OPS, bulkOp, bulkPayloadValue, bulkValueError } from "@/lib/productBulk";
+import { toNum } from "@/lib/productForm";
 import type { InventoryRow } from "@/lib/adminTypes";
 
 // ============================================================
 // انبار و کالا
 // ============================================================
 // کاری که واقعاً هر روز انجام می‌شود: «قیمتِ این را عوض کن» و «موجودی‌اش را
-// درست کن». پس ویرایشِ درجا (price/stock) قلبِ این نماست و نه یک فرمِ کاملِ
-// محصول. فرمِ کامل (توضیحات، گالری، مشخصات، عمده) کارِ کم‌تکرارتری است و فعلاً
-// در نسخه‌ی Express می‌ماند.
+// درست کن». پس ویرایشِ درجا (price/stock) قلبِ این نماست — ولی فرمِ کاملِ محصول
+// هم دیگر جای دیگری ندارد: تا امروز در پنلِ Express بود (`openProductModal`) و
+// حالا `/admin/stock/[id]` است. هر ردیف یک لینکِ «ویرایشِ کامل» دارد.
+//
+// سه کارِ دیگری که این نما به ارث برد و هر سه از پنلِ Express آمده‌اند:
+// انتخابِ چندتایی + عملیات گروهی، حذفِ کالا، و خروجیِ CSV انبار. همه با همان
+// endpointهای موجود، بدونِ هیچ تغییری در بک‌اند.
 //
 // نکته‌ی مهمِ سمتِ سرور که پنل به آن تکیه می‌کند: PUT /api/admin/products/:id
 // با مقدارِ قبلی **ادغام** می‌کند، نه اینکه جایگزین کند. پس فرستادنِ فقط
@@ -54,6 +68,14 @@ export function StockContent() {
   });
   // کالایی که انتشارش ۴۰۹ «عکس ندارد» گرفته و منتظر تأییدِ دوم است
   const [forcePublishId, setForcePublishId] = useState<number | null>(null);
+
+  // ---------- انتخابِ چندتایی و عملیاتِ گروهی ----------
+  // چرا فهرست و نه `Set` در state: `Set` هم قابلِ‌استفاده است، ولی هر تغییرش
+  // یک شیءِ تازه لازم دارد و همین‌جا تفاوتش با آرایه صفر است — آرایه ساده‌تر
+  // خوانده و آزمون می‌شود.
+  const [selected, setSelected] = useState<number[]>([]);
+  const [bulkOpKey, setBulkOpKey] = useState(BULK_OPS[0].op);
+  const [bulkValue, setBulkValue] = useState("");
 
   const inventoryQuery = useQuery({
     queryKey: ["adminInventory"],
@@ -92,6 +114,71 @@ export function StockContent() {
       toast(err instanceof ApiError ? err.message : "انتشار ممکن نشد", { tone: "error" });
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteProduct(id),
+    onSuccess: (res, id) => {
+      // دو حالتِ پاسخ دو پیامِ متفاوت دارند و مدیر باید بداند کدام اتفاق افتاد:
+      // کالای دارای سابقه‌ی سفارش پاک نمی‌شود، فقط ناموجود می‌شود.
+      toast(
+        res.deleted
+          ? "کالا پاک شد."
+          : "این کالا سابقه‌ی سفارش دارد؛ پاک نشد و فقط ناموجود شد.",
+        { tone: "success" },
+      );
+      // اگر همین کالا انتخاب شده بود، از انتخاب خارج شود — وگرنه یک idِ
+      // پاک‌شده در مجموعه‌ی انتخاب می‌ماند و عملیاتِ گروهیِ بعدی روی آن ۴۰۴ یا
+      // «۰ کالا تغییر کرد» می‌دهد.
+      setSelected((ids) => ids.filter((x) => x !== id));
+      queryClient.invalidateQueries({ queryKey: ["adminInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["adminOverview"] });
+    },
+    onError: (err) =>
+      toast(err instanceof ApiError ? err.message : "حذف ممکن نشد", { tone: "error" }),
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: ({ ids, op, value }: { ids: number[]; op: string; value?: string | number }) =>
+      bulkProducts(ids, op, value),
+    onSuccess: (res) => {
+      toast(`${faNum(res.changed)} کالا تغییر کرد`, { tone: "success" });
+      setSelected([]);
+      setBulkValue("");
+      queryClient.invalidateQueries({ queryKey: ["adminInventory"] });
+      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
+      queryClient.invalidateQueries({ queryKey: ["adminOverview"] });
+    },
+    onError: (err, vars) => {
+      // همان نگهبانِ انتشارِ تکی، اینجا برای «انتخابِ همه ← انتشار»: کالاهای
+      // بی‌عکس ۴۰۹ با `needsConfirm` می‌گیرند. بدونِ این، یک کلیک می‌تواند
+      // ده‌ها صفحه‌ی بی‌عکس روی سایت بگذارد.
+      if (err instanceof ApiError && err.status === 409 && vars.op === "publish") {
+        if (window.confirm(`${err.message}\n\nبدونِ عکس منتشر شوند؟`)) {
+          bulkMutation.mutate({ ...vars, op: "publish", value: "force" });
+        }
+        return;
+      }
+      toast(err instanceof ApiError ? err.message : "عملیات گروهی انجام نشد", { tone: "error" });
+    },
+  });
+
+  function runBulk() {
+    if (!selected.length) {
+      toast("اول چند کالا انتخاب کن", { tone: "error" });
+      return;
+    }
+    const spec = bulkOp(bulkOpKey);
+    const num = toNum(bulkValue);
+    const bad = bulkValueError(bulkOpKey, bulkValue, num);
+    if (bad) {
+      toast(bad, { tone: "error" });
+      return;
+    }
+    const value = bulkPayloadValue(bulkOpKey, bulkValue, num);
+    const label = spec?.label ?? bulkOpKey;
+    if (!window.confirm(`${label} روی ${faNum(selected.length)} کالا اجرا شود؟`)) return;
+    bulkMutation.mutate({ ids: selected, op: bulkOpKey, value });
+  }
 
   // `useMemo` اینجا فقط «بهینه‌سازی» نیست: `?? []` در هر رندر یک آرایه‌ی تازه
   // می‌سازد، پس بدونِ این، `rows` هم در هر رندر از نو ساخته می‌شد و فیلتر و
@@ -161,6 +248,29 @@ export function StockContent() {
 
   return (
     <div className="space-y-5">
+      {/* ---------- کارهای بالای صفحه ----------
+          خروجیِ CSV عمداً یک لینک است و نه دکمه: مرورگر باید هدرِ
+          Content-Disposition را ببیند تا پنجره‌ی ذخیره‌ی فایل باز شود. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          href="/admin/stock/new"
+          className="rounded-full px-4 py-2 text-xs font-bold min-h-10 sm:min-h-0 inline-flex items-center"
+          style={{ background: "var(--color-teal)", color: "#04211B" }}
+        >
+          کالای تازه
+        </Link>
+        <a
+          href={inventoryCsvHref()}
+          className="rounded-full px-4 py-2 text-xs font-bold min-h-10 sm:min-h-0 inline-flex items-center"
+          style={{ background: "var(--color-surface-2)", color: "var(--color-ink-soft)" }}
+        >
+          خروجی اکسل انبار
+        </a>
+        <span className="text-[10px] mr-auto" style={{ color: "var(--color-ink-dim)" }}>
+          فایل با همین فیلترها ذخیره نمی‌شود — کلِ انبار را می‌دهد (مثلِ پنل پیشین).
+        </span>
+      </div>
+
       {/* ---------- چیزی که منتظر است ---------- */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div
@@ -290,6 +400,61 @@ export function StockContent() {
         </div>
       </div>
 
+      {/* ---------- عملیات گروهی ----------
+          تنها وقتی دیده می‌شود که چیزی انتخاب شده باشد: نواری که در حالتِ عادی
+          خالی است، فقط فضای صفحه را می‌خورد. */}
+      {selected.length > 0 && (
+        <Panel
+          title={`عملیات گروهی روی ${faNum(selected.length)} کالا`}
+          action={
+            <Btn tone="dim" onClick={() => setSelected([])}>
+              لغوِ انتخاب
+            </Btn>
+          }
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={bulkOpKey}
+              onChange={(e) => {
+                setBulkOpKey(e.target.value);
+                setBulkValue("");
+              }}
+              aria-label="عملیات گروهی"
+              className="rounded-full px-3 py-2 text-xs font-bold min-h-10 sm:min-h-0"
+              style={{
+                background: "var(--color-surface-2)",
+                color: "var(--color-ink)",
+                border: "1px solid var(--color-line-control)",
+              }}
+            >
+              {BULK_OPS.map((o) => (
+                <option key={o.op} value={o.op}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+
+            {bulkOp(bulkOpKey)?.value !== "none" && (
+              <Input
+                value={bulkValue}
+                onChange={setBulkValue}
+                placeholder={bulkOp(bulkOpKey)?.hint || "مقدار"}
+                ariaLabel="مقدار عملیات گروهی"
+                className="w-32"
+              />
+            )}
+
+            <Btn onClick={runBulk} disabled={bulkMutation.isPending}>
+              {bulkMutation.isPending ? "در حال اجرا…" : "اجرا کن"}
+            </Btn>
+
+            <span className="text-[10px]" style={{ color: "var(--color-ink-dim)" }}>
+              یک تراکنش است: اگر وسطِ کار خطایی بدهد، هیچ کالایی نیمه‌کاره عوض نمی‌شود.
+            </span>
+          </div>
+        </Panel>
+      )}
+
       {/* ---------- جدول ---------- */}
       {rows.length === 0 ? (
         <Panel title="چیزی پیدا نشد">
@@ -299,9 +464,22 @@ export function StockContent() {
         </Panel>
       ) : (
         <div className="space-y-2">
-          <p className="text-[11px] px-1" style={{ color: "var(--color-ink-dim)" }}>
-            {faNum(rows.length)} کالا
-          </p>
+          <div className="flex flex-wrap items-center gap-2 px-1">
+            <p className="text-[11px]" style={{ color: "var(--color-ink-dim)" }}>
+              {faNum(rows.length)} کالا
+            </p>
+            {/* انتخابِ همه فقط روی ردیف‌های همین فهرست — نه کلِ انبار. وگرنه
+                «همه» روی نمای فیلترشده معنای دیگری داشت و مدیر ناخواسته روی
+                ۱۰۸ کالا تخفیف می‌گذاشت. */}
+            <button
+              type="button"
+              onClick={() => setSelected(rows.map((p) => p.id))}
+              className="text-[10px] font-bold rounded-full px-2.5 py-1"
+              style={{ background: "var(--color-surface-2)", color: "var(--color-ink-dim)" }}
+            >
+              انتخابِ همه‌ی این {faNum(rows.length)} مورد
+            </button>
+          </div>
           <ul className="space-y-2">
             {rows.map((p) => (
               <ProductRow
@@ -312,7 +490,25 @@ export function StockContent() {
                 setDraft={setDraft}
                 saving={saveMutation.isPending}
                 publishing={publishMutation.isPending}
+                deleting={deleteMutation.isPending}
                 forceNeeded={forcePublishId === p.id}
+                selected={selected.includes(p.id)}
+                onToggleSelect={() =>
+                  setSelected((ids) =>
+                    ids.includes(p.id) ? ids.filter((x) => x !== p.id) : [...ids, p.id],
+                  )
+                }
+                onDelete={() => {
+                  // حذف برگشت‌پذیر نیست (و برای کالای دارای سابقه‌ی سفارش،
+                  // سرور فقط ناموجودش می‌کند). پس تأیید لازم است.
+                  if (
+                    window.confirm(
+                      `«${p.title}» حذف شود؟\n\nاگر این کالا سابقه‌ی سفارش داشته باشد، پاک نمی‌شود و فقط ناموجود می‌شود.`,
+                    )
+                  ) {
+                    deleteMutation.mutate(p.id);
+                  }
+                }}
                 onStartEdit={() => {
                   setEditing(p.id);
                   setDraft({ price: String(p.price), stock: String(p.stock) });
@@ -354,7 +550,11 @@ function ProductRow({
   setDraft,
   saving,
   publishing,
+  deleting,
   forceNeeded,
+  selected,
+  onToggleSelect,
+  onDelete,
   onStartEdit,
   onCancelEdit,
   onSave,
@@ -366,7 +566,11 @@ function ProductRow({
   setDraft: (d: { price: string; stock: string }) => void;
   saving: boolean;
   publishing: boolean;
+  deleting: boolean;
   forceNeeded: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onDelete: () => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onSave: () => void;
@@ -389,13 +593,33 @@ function ProductRow({
           «فروش: ۲۵ عدد» کلمه‌به‌کلمه می‌شکست. حالا ویرایشگر یک ردیفِ تمام‌عرض
           زیرِ عنوان است (متن زیرِ عکس، همان‌طور که باید). */}
       <div className="flex flex-wrap items-start gap-3">
+        {/* چک‌باکسِ انتخاب — برچسبِ پنهانِ صفحه‌خوان دارد، وگرنه یک ورودیِ
+            بی‌نام در فهرستِ کنترل‌های صفحه‌خوان ظاهر می‌شود. */}
+        <label className="mt-1 inline-flex shrink-0 items-center gap-1.5">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            className="h-4 w-4"
+            aria-label={`انتخابِ ${p.title}`}
+          />
+        </label>
+
         <span
           className="w-11 h-11 rounded-lg shrink-0 overflow-hidden grid place-items-center"
           style={{ background: "var(--color-surface-2)" }}
         >
           {p.image ? (
-            // eslint-disable-next-line @next/next/no-img-element -- پیش‌نمایشِ ۴۴px؛ next/image اینجا فقط سربار است
-            <img src={p.image} alt="" width={44} height={44} className="object-cover w-11 h-11" />
+            // eslint-disable-next-line @next/next/no-img-element -- بندانگشتیِ ۴۴px؛ next/image اینجا فقط سربار است
+            <img
+              src={thumbUrl(p.image)}
+              alt=""
+              width={44}
+              height={44}
+              loading="lazy"
+              decoding="async"
+              className="object-cover w-11 h-11"
+            />
           ) : (
             <span className="text-lg">🧺</span>
           )}
@@ -477,9 +701,18 @@ function ProductRow({
             </Btn>
           </>
         ) : (
-          <Btn tone="dim" onClick={onStartEdit}>
-            ویرایش قیمت و موجودی
-          </Btn>
+          <>
+            <Btn tone="dim" onClick={onStartEdit}>
+              ویرایش قیمت و موجودی
+            </Btn>
+            <Link
+              href={`/admin/stock/${p.id}`}
+              className="rounded-full px-3.5 py-2 text-xs font-bold min-h-10 sm:min-h-0 inline-flex items-center"
+              style={{ background: "var(--color-surface-2)", color: "var(--color-ink-soft)" }}
+            >
+              ویرایش کامل (عکس، توضیحات، مشخصات)
+            </Link>
+          </>
         )}
 
         <Btn
@@ -505,8 +738,14 @@ function ProductRow({
           </span>
         )}
 
+        {/* حذف در انتهای ردیف و با رنگِ خطرناک — کاری است که اشتباهی انجامش
+            گران تمام می‌شود. */}
+        <Btn tone="coral" disabled={deleting} onClick={onDelete} title="حذفِ کالا">
+          حذف
+        </Btn>
+
         {p.stock <= 5 && p.stock > 0 && (
-          <span className="mr-auto text-[10px]" style={{ color: "var(--color-gold)" }}>
+          <span className="text-[10px]" style={{ color: "var(--color-gold)" }}>
             رو به اتمام
           </span>
         )}

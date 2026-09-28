@@ -1,10 +1,9 @@
 ﻿"use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getMe,
@@ -29,6 +28,7 @@ import {
   ApiError,
 } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { useInvoicePrint } from "@/components/InvoiceSheet";
 import type { User, Order, Address, WishlistProduct } from "@/lib/types";
 
 function toFa(n: number): string {
@@ -91,83 +91,6 @@ const VALID_HASHES: Tab[] = ["orders", "wishlist", "profile"];
 function readHashTab(): Tab {
   const h = window.location.hash.replace("#", "") as Tab;
   return VALID_HASHES.includes(h) ? h : "orders";
-}
-
-// ============================================================
-// فاکتور چاپی — همتای printInvoice در frontend/js/account.js:592
-// ============================================================
-// با createPortal مستقیم زیرِ <body> رندر می‌شود؛ CSS چاپ در globals.css
-// همه‌چیز جز #pg-invoice را پنهان می‌کند وقتی <html> کلاسِ
-// printing-invoice دارد. window.print() همگام است — بعدش کلاس برمی‌دارد.
-
-function InvoiceSheet({ order, shopName, shopPhone }: { order: Order; shopName: string; shopPhone: string }) {
-  const itemsSubtotal = (order.items || []).reduce(
-    (sum, it) => sum + Number(it.price) * Number(it.qty),
-    0,
-  );
-  return (
-    <div id="pg-invoice" dir="rtl">
-      <div className="inv-head">
-        <div>
-          <h1>{shopName || "پلاسکو گلی"}</h1>
-          <p>فاکتور فروش — سفارش #{toFa(order.id)}</p>
-        </div>
-        <div className="inv-meta">
-          <span>تاریخ: {faDate(order.createdAt)}</span>
-          {order.trackingCode && <span>کد رهگیری پستی: {toFaDigits(order.trackingCode)}</span>}
-        </div>
-      </div>
-
-      <div className="inv-parties">
-        <div>
-          <h2>خریدار</h2>
-          <p>{order.userName || "—"} — {toFaDigits(order.userPhone || "")}</p>
-        </div>
-        <div>
-          <h2>نشانی</h2>
-          <p>
-            {order.address
-              ? `${order.address.province ? order.address.province + "، " : ""}${order.address.city}، ${order.address.addressLine}${order.address.postalCode ? " — کدپستی " + toFaDigits(order.address.postalCode) : ""}`
-              : "—"}
-          </p>
-        </div>
-      </div>
-
-      <table className="inv-items">
-        <thead>
-          <tr>
-            <th>کالا</th>
-            <th>تعداد</th>
-            <th>قیمت واحد</th>
-            <th>جمع</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(order.items || []).map((it, i) => (
-            <tr key={i}>
-              <td>{it.title}</td>
-              <td>{toFa(it.qty)}</td>
-              <td>{toToman(it.price)}</td>
-              <td>{toToman(Number(it.price) * Number(it.qty))}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div className="inv-totals">
-        <div><span>جمع کالاها</span><b>{toToman(itemsSubtotal)}</b></div>
-        {order.discount > 0 && (
-          <div><span>تخفیف{order.couponCode ? ` (${order.couponCode})` : ""}</span><b>−{toToman(order.discount)}</b></div>
-        )}
-        <div><span>هزینه ارسال</span><b>{order.shippingFee > 0 ? toToman(order.shippingFee) : "رایگان"}</b></div>
-        <div className="inv-grand"><span>مبلغ نهایی</span><b>{toToman(order.total)}</b></div>
-      </div>
-
-      <p className="inv-foot">
-        {shopName || "پلاسکو گلی"} — {toFaDigits(shopPhone || "")} · این فاکتور توسط سامانه فروشگاه تولید شده است.
-      </p>
-    </div>
-  );
 }
 
 // ============================================================
@@ -913,14 +836,11 @@ export function AccountContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("orders");
-  const [printing, setPrinting] = useState<Order | null>(null);
   const [shopName, setShopName] = useState("");
   const [shopPhone, setShopPhone] = useState("");
-  const [mounted, setMounted] = useState(false);
-  const printTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { print: printInvoice, portal: invoicePortal } = useInvoicePrint();
 
   useEffect(() => {
-    setMounted(true);
     setTab(readHashTab());
     const onHash = () => setTab(readHashTab());
     window.addEventListener("hashchange", onHash);
@@ -977,22 +897,8 @@ export function AccountContent() {
 
   // ---------- چاپ فاکتور ----------
   function handlePrint(order: Order) {
-    setPrinting(order);
+    printInvoice(order, { shopName, shopPhone });
   }
-  useEffect(() => {
-    if (!printing) return;
-    document.documentElement.classList.add("printing-invoice");
-    // صبر برای رندرِ portal قبل از دیالوگِ چاپ
-    printTimer.current = setTimeout(() => {
-      window.print();
-      document.documentElement.classList.remove("printing-invoice");
-      setPrinting(null);
-    }, 60);
-    return () => {
-      if (printTimer.current) clearTimeout(printTimer.current);
-      document.documentElement.classList.remove("printing-invoice");
-    };
-  }, [printing]);
 
   if (loading) {
     return (
@@ -1142,12 +1048,7 @@ export function AccountContent() {
       </div>
 
       {/* فاکتورِ چاپی — فقط هنگامِ چاپ در DOM می‌آید */}
-      {printing &&
-        mounted &&
-        createPortal(
-          <InvoiceSheet order={printing} shopName={shopName} shopPhone={shopPhone} />,
-          document.body,
-        )}
+      {invoicePortal}
     </div>
   );
 }

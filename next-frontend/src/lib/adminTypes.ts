@@ -749,3 +749,102 @@ export interface AdminErrorsResponse {
   /** پوشه‌ی لاگ خوانده نشد — «۰ خطا» یعنی «نمی‌دانم»، نه «خبری نیست» */
   unavailable?: string;
 }
+
+// ============================================================
+// ویرایشگرِ محصول — GET/POST/PUT/DELETE /api/admin/products
+// ============================================================
+// چرا یک تایپِ جدا و نه همان `InventoryRow`: شکلِ خامِ سرور و شکلِ فرم دو چیز
+// متفاوت‌اند و قاطی‌کردنشان دقیقاً همان جایی است که باگ می‌سازد —
+//
+//   • سرور `old_price` می‌فرستد، فرم `oldPrice` می‌خواهد.
+//   • `images` و `specs` در دیتابیس **رشته‌ی JSON**‌اند و باید پارس شوند؛
+//     `images` در گالری هم می‌تواند `null` یا `""` باشد.
+//   • `published` عددِ ۰/۱ است، ولی فرم بولی می‌خواهد.
+//
+// `toAdminProduct` در `lib/adminApi.ts` همین تبدیل را انجام می‌دهد؛ هر جای
+// دیگری که به این تایپِ نرمال‌شده نیاز داشت، از همان تابع رد شود.
+export interface AdminProduct {
+  id: number;
+  title: string;
+  category: string;
+  description: string;
+  price: number;
+  /** قیمت خط‌خورده؛ ۰ یعنی تخفیف نیست */
+  oldPrice: number;
+  stock: number;
+  badge: string;
+  icon: string;
+  /** مسیرِ داخلیِ `/picture/...` یا null */
+  image: string | null;
+  /** گالری — حداکثر ۸ عکس، جدا از عکسِ کاور */
+  images: string[];
+  specs: { k: string; v: string }[];
+  wholesaleMinQty: number;
+  wholesaleDiscount: number;
+  published: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * شاخه‌ی خلاصه‌ی پیش‌نویس‌ها که همراهِ فهرست می‌آید.
+ *
+ * عددها arbitrary نیستند: `getDraftSummary()` در lib/db.js برای هر دستهٔ
+ * «چند کالای منتشرنشده» می‌شمارد تا پنل بتواند بگوید «۸۸ پیش‌نویس داری».
+ */
+export interface ProductDraftSummary {
+  drafts?: { total: number; byCategory: { category: string; n: number }[] };
+}
+
+export interface AdminProductsResponse extends ProductDraftSummary {
+  products: AdminProduct[];
+}
+
+/** POST /api/admin/products — برخلاف PUT، همه‌ی فیلدهای لازم اجباری‌اند */
+export interface ProductCreateInput {
+  title: string;
+  category: string;
+  description: string;
+  price: number;
+  oldPrice: number;
+  stock: number;
+  badge: string;
+  icon: string;
+  image: string | null;
+  images: string[];
+  specs: { k: string; v: string }[];
+  wholesaleMinQty: number;
+  wholesaleDiscount: number;
+}
+
+/** پاسخِ DELETE — سرورِ حذف یک شاخه‌ی دوم هم دارد (کالای دارای سابقه‌ی سفارش) */
+export interface ProductDeleteResponse {
+  ok: boolean;
+  /** true یعنی سطر پاک شد؛ false یعنی فقط ناموجود شد (سابقه‌ی سفارش دارد) */
+  deleted: boolean;
+}
+
+// ============================================================
+// عملیات گروهی — POST /api/admin/products/bulk
+// ============================================================
+export interface ProductBulkResponse {
+  ok: boolean;
+  /** چند سطر واقعاً عوض شد */
+  changed: number;
+  /** فهرستِ تازه‌ی انبار — همان لحظه برمی‌گردد تا پنل دوباره درخواست نزند */
+  products: InventoryRow[];
+}
+
+// ============================================================
+// آپلود عکس — POST /api/admin/upload-image
+// ============================================================
+// بدنه **خام** است (نه multipart و نه JSON): همان بایت‌های فایل با
+// `Content-Type` واقعی‌اش. سرور پسوند را از امضای خودِ فایل می‌خواند، نه از این
+// هدر — پس هدرِ دروغ چیزی را خراب نمی‌کند، فقط ۴۱۵ می‌گیرد.
+export interface UploadImageResponse {
+  ok: boolean;
+  /** مسیرِ آماده برای گذاشتن در `image`/`images` */
+  path: string;
+  width: number;
+  height: number;
+}

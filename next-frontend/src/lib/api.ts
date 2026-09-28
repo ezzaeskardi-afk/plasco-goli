@@ -12,6 +12,15 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /**
+     * دلیلِ ماشین‌خوانِ سرور، وقتی بفرستد.
+     *
+     * تنها مصرف‌کننده‌اش امروز `panelIdleGuard` است: نشستِ پنلِ بی‌کار با
+     * ۴۰۱ و `reason: 'idle'` بسته می‌شود، و ۴۰۱ِ «بی‌نشست» هم همان کد است.
+     * بدونِ این فیلد، این دو از هم قابلِ تفکیک نبودند و پنل به مدیر می‌گفت
+     * «دسترسی نداری» — که غلط است؛ او دسترسی دارد، نشستش بسته شده.
+     */
+    public reason?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -42,7 +51,7 @@ async function fetcher<T>(
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new ApiError(res.status, err.error || "خطای سرور");
+      throw new ApiError(res.status, err.error || "خطای سرور", err.reason);
     }
 
     return res.json();

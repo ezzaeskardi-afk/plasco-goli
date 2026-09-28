@@ -33,6 +33,19 @@ export function LoginForm() {
   // هر سه نقطه‌ی `router.push` پایین از همین یک مقدار می‌خوانند.
   const redirect = safeRedirectPath(searchParams.get("redirect")) ?? "/";
 
+  // ============================================================
+  // «نشستِ پنل بسته شد» — چرا اینجا
+  // ============================================================
+  // `panelIdleGuard` سمتِ Express نشستِ مدیر را پس از نیم‌ساعت بی‌کاری می‌بندد و
+  // ۴۰۱ با `reason: 'idle'` می‌دهد. تا امروز پنلِ Next همان را مثلِ ۴۰۳ («دسترسی
+  // نداری») نشان می‌داد: مدیر یک کادرِ قرمز می‌دید که می‌گفت حق ندارد، در حالی
+  // که حق داشت و فقط نشستش بسته شده بود.
+  //
+  // حالا `adminFetcher` (lib/adminApi.ts) این حالت را می‌شناسد و با
+  // `?idle=1&redirect=…` به همین صفحه می‌فرستد. پیام در همان لحظه دیده می‌شود،
+  // بدونِ اینکه چیزی بترکد یا صفحه‌ی خطا نشان داده شود.
+  const idleEnded = searchParams.get("idle") === "1";
+
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
   const [cooldown, setCooldown] = useState(0);
@@ -277,6 +290,19 @@ export function LoginForm() {
           پلاسکو گلی
         </span>
       </div>
+
+      {/* نشستِ پنل به‌خاطر بی‌کاری بسته شده — دقیقاً همان لحظه‌ای که مدیر باید
+          بداند چرا از پنل بیرون افتاده. */}
+      {idleEnded && (
+        <p
+          className="mx-6 mb-4 rounded-[16px] p-3 text-[11px] leading-relaxed"
+          style={{ background: "var(--color-gold-tint)", color: "var(--color-gold)" }}
+          role="status"
+        >
+          به‌خاطر نیم‌ساعت بی‌کاری از پنل خارج شدید. دوباره وارد شوید تا به همان
+          صفحه برگردید.
+        </p>
+      )}
 
       {/* مراحل */}
       <div className="flex items-center justify-center gap-2 px-6 pb-6">

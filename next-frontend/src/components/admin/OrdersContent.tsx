@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ordersCsvHref,
   getAdminOrders,
   getAdminOrder,
   setOrderStatus,
@@ -11,7 +12,7 @@ import {
   setOrderTracking,
   setOrderNote,
 } from "@/lib/adminApi";
-import { ApiError } from "@/lib/api";
+import { ApiError, getShopInfo } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import {
   Panel,
@@ -29,6 +30,7 @@ import {
   toman,
   useIsNarrow,
 } from "@/components/admin/AdminBits";
+import { useInvoicePrint } from "@/components/InvoiceSheet";
 import type { AdminOrder, OrderStatus } from "@/lib/adminTypes";
 
 // ============================================================
@@ -233,6 +235,16 @@ export function OrdersContent() {
             setOffset(0);
           }}
         >
+          {/* خروجیِ CSV با **همان** فیلترهای روی صفحه — عیناً همان پارامترهایی
+              که فهرست می‌فرستد. ناوبریِ معمولیِ مرورگر است (نه fetch) تا پنجره‌ی
+              ذخیره‌ی فایل باز شود. سقفِ سرور ۵۰۰۰ سفارش است. */}
+          <a
+            href={ordersCsvHref({ status: filter, q: search })}
+            className="rounded-full px-3.5 py-2 text-xs font-bold min-h-10 sm:min-h-0 inline-flex items-center justify-center shrink-0"
+            style={{ background: "var(--color-surface-2)", color: "var(--color-ink-soft)" }}
+          >
+            خروجی اکسل
+          </a>
           <Input
             value={q}
             onChange={setQ}
@@ -478,6 +490,33 @@ function OrderDetail({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reason, setReason] = useState("");
 
+  // ---------- چاپِ فاکتور ----------
+  // چرا تازه موقعِ کلیک: نام و تلفنِ فروشگاه از `/api/shop/info` می‌آید و کسی
+  // که فقط سفارش‌ها را مرور می‌کند به آن نیازی ندارد. یک بار که گرفته شد،
+  // در state می‌ماند تا چاپِ بعدی درخواستِ تازه نزند.
+  //
+  // همان برگه‌ای چاپ می‌شود که مشتری در صفحه‌ی حسابش می‌بیند
+  // (`components/InvoiceSheet.tsx`) — نه یک فاکتورِ دومِ دست‌ساز که ممکن بود
+  // جمعِ دیگری نشان دهد.
+  const { print: printInvoice, portal: invoicePortal } = useInvoicePrint();
+  const shopCache = useRef<{ shopName: string; shopPhone: string } | null>(null);
+  const printBusy = useRef(false);
+
+  async function handlePrint() {
+    if (printBusy.current) return;
+    printBusy.current = true;
+    try {
+      const info = shopCache.current ?? (await getShopInfo());
+      const shop = { shopName: info.shopName || "", shopPhone: info.shopPhone || "" };
+      shopCache.current = shop;
+      printInvoice(order, shop);
+    } catch (err) {
+      onError(err, "اطلاعات فروشگاه خوانده نشد") ;
+    } finally {
+      printBusy.current = false;
+    }
+  }
+
   const trackingMutation = useMutation({
     mutationFn: (code: string) => setOrderTracking(order.id, code),
     onSuccess: () => {
@@ -512,9 +551,21 @@ function OrderDetail({
 
   return (
     <div className="space-y-4">
+      {/* فاکتورِ چاپی — فقط هنگامِ چاپ در DOM می‌آید */}
+      {invoicePortal}
+
       <Panel
         title={`سفارش #${faNum(order.id)}`}
-        action={<StatusPill status={order.status} />}
+        action={
+          <div className="flex items-center gap-2">
+            {/* چاپ فاکتور برای هر سفارشی که مبلغ دارد معنا دارد — حتی پیش‌نویس،
+                چون مالک ممکن است بخواهد سفارش را کاغذی بایگانی کند. */}
+            <Btn tone="dim" onClick={() => void handlePrint()} title="فاکتور چاپی سفارش">
+              چاپ فاکتور
+            </Btn>
+            <StatusPill status={order.status} />
+          </div>
+        }
       >
         <dl className="space-y-1.5 text-[11px]">
           <Row label="مشتری" value={order.userName || "بدون نام"} />
