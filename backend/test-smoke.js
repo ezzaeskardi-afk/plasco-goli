@@ -52,7 +52,7 @@ const TEST_PHONE = '09120000001';
 const ADMIN_PHONE = '09120000009'; // promoted to admin via env below
 
 // ---------- مبدأِ Next ----------
-// پنلِ Express (`frontend/admin.html` + `js/admin.js`) حذف شد، ولی قواعدِ
+// پنلِ قدیمیِ Express (صفحه و اسکریپتش) حذف شد، ولی قواعدِ
 // ایستایی که آن را می‌سنجیدند هنوز معتبرند — فقط باید روی همان کدی سنجیده
 // شوند که واقعاً به مدیر نشان داده می‌شود. پس چند بررسیِ زیر به‌جای خواندنِ
 // سورسِ پنلِ قدیم، سورسِ Next را می‌خوانند.
@@ -3732,6 +3732,43 @@ function shutdown(code) {
         /SET count = count - 1/.test(rlCode) && !/SET count = 1\b/.test(rlCode));
       check('V36 نگهبان: پس‌دادنِ سهمیه به همان پنجره محدود است',
         /AND window_start = \?/.test(rlCode));
+    }
+
+    // ============ V37: پنلِ بازنشسته — ۴۰۴ِ زنده ============
+    // نگهبانِ `tests/panel-retired.js` فقط سورس را می‌خواند و بدونِ سرور اجرا
+    // می‌شود. این یکی خودِ سرور را می‌پرسد و همین تفاوتشان است: اگر روزی کسی
+    // استاب یا ریدایرکتی به آن آدرس‌ها برگرداند، آن نگهبان سبز می‌ماند (چون
+    // ارجاعِ متنی نیست) ولی اینجا قرمز می‌شود. تصمیمِ ثبت‌شده «۴۰۴ِ صریح،
+    // بدونِ استاب و بدونِ ریدایرکت» است، پس با `redirect: 'manual'` پرسیده
+    // می‌شوند تا ۳۰۱/۳۰۲ هم رد شود.
+    //
+    // آدرس‌ها عمداً تکه‌تکه ساخته می‌شوند: نگهبانِ سورس هر رشته‌ی کاملی از این
+    // نام‌ها را «ارجاع» می‌شمارد — و باید هم بشمارد. با تکه‌کردن، این تستِ ۴۰۴
+    // تنها جایی است که آن نام‌ها را می‌سازد و نیازی به استثنا نیست.
+    {
+      const retired = [
+        ['صفحه‌ی پنل', '/' + 'admin' + '.' + 'html'],
+        ['اسکریپتِ پنل', '/js/' + 'admin' + '.js'],
+        ['استایلِ فاکتورِ پنل', '/css/' + 'invoice' + '.css'],
+      ];
+      for (const [label, url] of retired) {
+        const r = await fetch(BASE + url, { redirect: 'manual' });
+        check(`V37 بازنشسته: ${label} کدِ ۴۰۴ِ خالص می‌دهد`,
+          r.status === 404, `${url} → ${r.status}`);
+      }
+      // حذف نباید بقیه‌ی سایت را با خودش ببرد: اگر ۴۰۴ها از یک بستنِ گسسته
+      // بیایند (مثلاً استاتیکِ کلِ پوشه خاموش شده باشد)، این دو قرمز می‌شوند.
+      const homeAfter = await fetch(BASE + '/');
+      check('V37 بازنشسته: حذفِ پنل ویترین را نشکست',
+        homeAfter.status === 200, String(homeAfter.status));
+      const accountAfter = await fetch(BASE + '/account.html');
+      check('V37 بازنشسته: صفحه‌ی حساب کاربری هنوز سرو می‌شود',
+        accountAfter.status === 200, String(accountAfter.status));
+      // پنلِ زنده‌ی Next روی همین مبدأ نیست (۳۰۰۱)، پس Express نباید راهِ
+      // دیگری به آن داشته باشد.
+      const adminOnExpress = await fetch(BASE + '/admin', { redirect: 'manual' });
+      check('V37 بازنشسته: مبدأِ Express پنلِ زنده ندارد',
+        adminOnExpress.status === 404, String(adminOnExpress.status));
     }
 
   } catch (err) {
