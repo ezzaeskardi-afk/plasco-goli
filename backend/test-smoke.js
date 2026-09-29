@@ -2597,6 +2597,28 @@ function shutdown(code) {
         return path.join(s.dir, clean);
       };
 
+      /* `*.html` روی مبدأِ Next دو معنیِ متفاوت دارد و قاطی‌کردنشان نگهبانِ سالم
+         را روی معماریِ *درست* قرمز می‌کند: یکی داراییِ واقعی (مثل
+         `public/offline.html` که پیش‌تر هم سنجیده می‌شد و همچنان می‌شود)، دیگری
+         **نشانیِ عصرِ Express** (`/product.html?id=12`، `/cart.html`) که عمداً
+         هیچ فایلی در `public/` ندارد و `middleware.ts` آن را ۳۰۷ می‌کند؛ مچرِ
+         خودِ `middleware.ts` هم `/:page.html` است که پارامترِ مسیر دارد.
+         پس دو شرط با هم لازم است تا چیزی «نشانیِ مسیر» شمرده شود: (الف) فایلش
+         روی دیسک نباشد — اگر باشد، مثل precacheِ سرویس‌ورکر همچنان سنجیده
+         می‌شود — و (ب) یا همنامِ یکی از صفحه‌های واقعیِ `frontend/` باشد یا
+         پارامترِ مسیر داشته باشد. داراییِ گمشده‌ی واقعی (مثل `/logo.png`) هیچ
+         کدام را ندارد و مثل قبل قرمز می‌شود.
+
+         شرطِ `routeRefs.size >= 1` در بررسیِ پایین عمدی است: اگر روزی جدولِ
+         نشانی‌های عصرِ Express از سورسِ Next برداشته شود، این مسیرِ استثنا
+         تبدیل به کدِ مرده می‌شود و همان شرط لو می‌دهدش — وگرنه یک استثنای
+         خالی، اولین قدم به‌سوی نگهبانی است که دیگر چیزی نمی‌گیرد. */
+      const legacyPageFiles = new Set(
+        (fs.existsSync(FIRST_ROOT) ? fs.readdirSync(FIRST_ROOT) : []).filter((f) => /\.html$/i.test(f))
+      );
+      const isLegacyRouteName = (clean) =>
+        legacyPageFiles.has(path.basename(clean)) || /(^|\/):[A-Za-z_][A-Za-z0-9_]*/.test(clean);
+      const routeRefs = new Map();        // نشانیِ مسیر ← فایل‌هایی که نامش را برده‌اند
       const firstPartyRefs = new Map();   // مسیرِ مخزن ← فایل‌هایی که ارجاعش داده‌اند
       for (const s of assetSources) {
         for (const m of s.text.matchAll(/["'`(]([^"'`()\s]+)["'`)]/g)) {
@@ -2605,8 +2627,14 @@ function shutdown(code) {
           if (url.includes('${')) continue;
           const clean = url.split('?')[0].split('#')[0];
           if (!ASSET_EXT.test(clean)) continue;
-          const relPath = path.relative(REPO_ROOT, resolveAsset(s, clean)).split(path.sep).join('/');
+          const abs = resolveAsset(s, clean);
+          const relPath = path.relative(REPO_ROOT, abs).split(path.sep).join('/');
           if (!/^(frontend|next-frontend\/public|picture)\//.test(relPath)) continue;
+          if (!fs.existsSync(abs) && isLegacyRouteName(clean)) {
+            if (!routeRefs.has(clean)) routeRefs.set(clean, new Set());
+            routeRefs.get(clean).add(s.label);
+            continue;
+          }
           if (!firstPartyRefs.has(relPath)) firstPartyRefs.set(relPath, new Set());
           firstPartyRefs.get(relPath).add(s.label);
         }
@@ -2618,7 +2646,8 @@ function shutdown(code) {
         });
         assetTracked = new Set(out.split(String.fromCharCode(0)).filter(Boolean));
       } catch (e) { assetTracked = null; }
-      // کفِ ۲۰ ارجاع: امروز ۳۴ ارجاع است؛ اگر روزی اسکن خالی برگردد، نباید سبز شود
+      // کفِ ۲۰ ارجاع: امروز ۳۴ ارجاعِ دارایی است (+ ۲ نشانیِ مسیر)؛ اگر روزی
+      // اسکن خالی برگردد، نباید سبز شود
       const ASSET_FLOOR = 20;
       const assetOffDisk = [];
       const assetOffGit = [];
@@ -2627,11 +2656,16 @@ function shutdown(code) {
         if (!fs.existsSync(path.join(REPO_ROOT, relPath))) assetOffDisk.push(`${relPath} ← ${who}`);
         if (assetTracked && !assetTracked.has(relPath)) assetOffGit.push(`${relPath} ← ${who}`);
       }
+      const routeSeen = [...routeRefs.keys()].join('، ');
       check('V24 نگهبان: دارایی‌های CSS/manifest/سرویس‌ورکر روی دیسک هستند',
-        firstPartyRefs.size >= ASSET_FLOOR && assetOffDisk.length === 0,
+        firstPartyRefs.size >= ASSET_FLOOR && assetOffDisk.length === 0 && routeRefs.size >= 1,
         firstPartyRefs.size < ASSET_FLOOR
           ? `فقط ${firstPartyRefs.size} ارجاع پیدا شد (کف ${ASSET_FLOOR}) — نگهبانِ خالی سبز نشود`
-          : (assetOffDisk.length ? assetOffDisk.join(' | ') : `${firstPartyRefs.size} ارجاع، همه روی دیسک`));
+          : (assetOffDisk.length
+            ? assetOffDisk.join(' | ')
+            : (routeRefs.size === 0
+              ? 'هیچ نشانیِ مسیرِ عصرِ Express دیده نشد — آیا جدولِ ریدایرکتِ Next حذف شده است؟'
+              : `${firstPartyRefs.size} ارجاع، همه روی دیسک (+ ${routeRefs.size} نشانیِ مسیر: ${routeSeen})`)));
       check('V24 نگهبان: همان دارایی‌ها در گیت هم ترک شده‌اند',
         assetTracked !== null && firstPartyRefs.size >= ASSET_FLOOR && assetOffGit.length === 0,
         assetTracked === null
