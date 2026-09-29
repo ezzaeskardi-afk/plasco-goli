@@ -133,6 +133,21 @@
     color: #fff;
   }
 
+  /* نام‌های کوتاهِ پالت — فقط برای اسپرایتِ آیکون‌ها
+     ============================================================
+     `public/assets/icons.svg` در تصویرسازی‌های رنگیش دسته‌بندی‌ها از
+     `var(--teal)`/`var(--coral)`/`var(--gold)`/`var(--pink)` استفاده می‌کند —
+     همان نام‌های کوتاهِ تمِ Express. این پروژه نام‌های `--color-*` دارد، پس
+     بدونِ این چهار خط، `fill: var(--coral)` بی‌مقدار می‌ماند و مرورگر رنگِ
+     اولیه (مشکی) را می‌گذارد — یعنی آیکون‌های دسته‌بندی سیاه می‌شدند.
+     عمداً همان مقدارهای `@theme` هستند تا یک پالت بیشتر نداشته باشیم. */
+  :root {
+    --teal: #25d6b0;
+    --coral: #ff6a4d;
+    --gold: #f5b95a;
+    --pink: #f0538f;
+  }
+
   /* اسکرول‌بار ظریف */
   ::-webkit-scrollbar {
     width: 10px;
@@ -266,3 +281,714 @@
     padding-top: 8px;
   }
 }
+
+/* ============================================================
+   جلوه‌های اسکرول و پوسته‌ی موبایل — همتای style.css نسخه‌ی Express
+   ============================================================
+   این کلاس‌ها از `frontend/css/style.css` آمده‌اند و تا امروز در نسخه‌ی Next
+   **اصلاً وجود نداشتند** — نه خودشان و نه چیزی که جایشان را بگیرد. یعنی:
+
+     • `[data-reveal]` بدونِ این قواعد بی‌اثر بود؛ بدتر، اگر کسی نشانه را در
+       JSX می‌گذاشت، محتوا نامرئی می‌ماند. به‌همین‌دلیل قاعده‌ی `opacity:0` و
+       ناظرش (`components/ScrollFx.tsx`) در یک کامیت آمده‌اند.
+     • `.to-top` و `.bottom-nav` نبودند، پس روی موبایل هیچ راهِ همیشه‌در‌دسترسی
+       به ناوبری یا به بالای صفحه نبود.
+     • `.welcome-*` نبود، پس کادرِ دعوت به ثبت‌نام (تنها جایی که یک ناشناس
+       هدایت می‌شد حساب بسازد) حذف شده بود.
+
+   مقادیر رنگ/سایه با متغیرهای `@theme` این پروژه نوشته شده‌اند، نه هگزِ خام:
+   تمِ Next همان تمِ Express است ولی متغیرها نام‌های دیگری دارند.
+   ============================================================ */
+
+/* ---------- رفتن به محتوای اصلی ---------- */
+/* ظاهر: خارج از صفحه (بالا)، فقط با فوکوس می‌آید پایین. عددِ ‎-60px عمدی است و
+   نه `display:none`: با display اصلاً فوکوس‌پذیر نمی‌شد و کلِ کارکردش از بین
+   می‌رفت. */
+.skip-link {
+  position: absolute;
+  right: 16px;
+  top: -60px;
+  z-index: 999;
+  background: var(--color-teal);
+  color: #04211b;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  transition: top 0.2s ease;
+}
+.skip-link:focus {
+  top: 16px;
+}
+
+/* حلقه‌ی فوکوسِ برند — همتای همان قاعده در style.css. برای کاربرِ کیبورد لازم
+   است: بدونِ آن، دکمه‌ها فقط با تغییرِ رنگِ ملایم مشخص می‌شوند. */
+:focus-visible {
+  outline: 3px solid var(--color-gold);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ---------- بازگشت به بالا ---------- */
+.to-top {
+  position: fixed;
+  bottom: 26px;
+  right: 26px;
+  z-index: 70;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(18, 31, 26, 0.85);
+  border: 1px solid var(--color-line-strong);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* نامرئی ولی در DOM: با opacity سوئیچ می‌شود تا transition داشته باشد */
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity 0.25s ease, transform 0.25s ease, border-color 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+.to-top.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.to-top:hover {
+  border-color: var(--color-gold);
+}
+.to-top svg {
+  width: 20px;
+  height: 20px;
+  color: var(--color-gold);
+}
+
+/* ---------- انیمیشن ورود ---------- */
+/* `--rd` را `ScrollFx` می‌گذارد (تأخیرِ پله‌ای بین همسایه‌ها). پیش‌فرض ۰ms است،
+   پس المانی که JS دستش به آن نرسیده هم دیده می‌شود — این مهم است، وگرنه یک
+   خطای کوچک در ناظر یعنی یک بخشِ کاملاً نامرئی. */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  transition-delay: var(--rd, 0ms);
+}
+[data-reveal].is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------- نوار ناوبری پایین (موبایل) ---------- */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  left: 0;
+  /* زیر منوی موبایل و بالای دکمه‌ی بازگشت به بالا — همان لایه‌بندیِ نسخه‌ی
+     Express. مهم‌تر: پایین‌تر از توست‌ها (۲۰۰) است تا پیامِ «به سبد اضافه شد»
+     زیر نوار قایم نشود. */
+  z-index: 75;
+  display: none;
+  align-items: stretch;
+  justify-content: space-around;
+  background: rgba(11, 20, 17, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--color-line-strong);
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+.bn-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  padding: 6px 2px;
+  border-radius: 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #8fa69b;
+  transition: color 0.15s ease;
+}
+.bn-item svg {
+  width: 21px;
+  height: 21px;
+}
+.bn-item.active,
+.bn-item:hover {
+  color: #2bd9bc;
+}
+.bn-badge-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.bn-count {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  left: auto;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f0538f, #e8503a);
+  color: var(--color-ink-on-warm);
+  font-size: 10.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- مودال خوش‌آمد ---------- */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  /* بالاترین لایه‌ی سایت (۱۳۰) — از پنل و نوار پایین و توست بالاتر، چون یک
+     دعوتِ یک‌بارِ عمر است و اگر زیر چیزی بماند معنایش را از دست می‌دهد. */
+  z-index: 130;
+  background: rgba(4, 9, 7, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.welcome-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.welcome-card {
+  width: min(400px, 100%);
+  text-align: center;
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 38px 30px 30px;
+  transform: translateY(16px) scale(0.97);
+  transition: transform 0.3s ease;
+}
+.welcome-overlay.open .welcome-card {
+  transform: translateY(0) scale(1);
+}
+.welcome-card h3 {
+  font-size: 19px;
+  font-weight: 800;
+}
+.welcome-card p {
+  font-size: 13.5px;
+  color: var(--color-ink-soft);
+  margin: 12px 0 22px;
+  line-height: 1.9;
+}
+.welcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.welcome-close {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* ۴۰px نه ۳۴: بستنِ یک پاپ‌آپ باید بی‌دردسر باشد؛ دکمه‌ی کوچک روی گوشی
+     چند بار خطا می‌خورد و مشتری به‌جای بستن، صفحه را ترک می‌کند. */
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--color-ink-soft);
+  border: 1px solid var(--color-line);
+  transition: background 0.15s ease;
+}
+.welcome-close:hover {
+  background: rgba(237, 246, 241, 0.06);
+}
+.welcome-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 900px) {
+  .bottom-nav {
+    display: flex;
+  }
+  /* صفحه از زیر نوار بیرون بیاید، وگرنه آخرین ردیفِ پاورقی زیرِ نوار می‌ماند
+     و کلیک‌ناپذیر می‌شود. */
+  body {
+    padding-bottom: 66px;
+  }
+  /* نوار پایین و دکمه‌ی بازگشت به بالا با هم جا شوند */
+  .to-top {
+    bottom: 84px;
+  }
+}
+
+@media (max-width: 640px) {
+  .to-top {
+    bottom: 88px;
+  }
+}
+
+/* ---------- منوی کشوییِ موبایل (دراور) ---------- */
+/* عیناً همان ابعاد و انیمیشنِ `style.css` (‏۲٫۳۹–۲٫۵۲)، فقط با نامِ
+   متغیرهای این پروژه. دلیلِ ترجمه‌ی مکانیکی و نه بازطراحی: این منو تنها راهِ
+   دسترسی به *جستجو* و *دسته‌بندی‌ها* روی گوشی است؛ حجم و جای هر پیکسلش روی
+   صفحه‌ی کوچک مهم است و از نو ساختنش فقط ریسکِ جاافتادنِ چیزی است. */
+.mobile-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(4, 9, 7, 0.7);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.mobile-drawer.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 82%;
+  max-width: 340px;
+  background: var(--color-surface);
+  border-inline-start: 1px solid var(--color-line-strong);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transform: translateX(100%);
+  transition: transform 0.28s ease;
+  overflow-y: auto;
+}
+.mobile-drawer.open .drawer-panel {
+  transform: translateX(0);
+}
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.drawer-search {
+  position: relative;
+  margin-bottom: 14px;
+}
+.drawer-search svg {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 17px;
+  height: 17px;
+  color: var(--color-ink-soft);
+  pointer-events: none;
+}
+.drawer-search input {
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--color-line-control);
+  background: var(--color-surface-2);
+  color: var(--color-ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  padding: 0 42px 0 14px;
+}
+.drawer-search input:focus {
+  outline: none;
+  border-color: var(--color-teal);
+}
+.drawer-label {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--color-gold);
+  letter-spacing: 0.06em;
+  margin: 12px 0 4px;
+}
+.drawer-panel a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14.5px;
+  font-weight: 700;
+  padding: 11px 10px;
+  border-radius: 11px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.drawer-panel a:hover {
+  background: rgba(37, 214, 176, 0.09);
+  color: var(--color-gold);
+}
+.drawer-panel a svg {
+  width: 19px;
+  height: 19px;
+  flex: none;
+  color: var(--color-teal);
+}
+
+/* ---------- باز شدنِ سوالات متداول ---------- */
+/* عیناً همان قاعده‌های `style.css` (‏۸۹۲–۹۱۳): خودِ `details` پرش می‌کند، ولی
+   متن که نرم بیاید حسِ «باز شدن» می‌دهد. ارتفاع انیمیشن نمی‌گیرد تا layout
+   نپرد. نشانه‌ی `+` وقتی باز است ۴۵ درجه می‌چرخد و طلایی می‌شود تا معلوم باشد
+   کدام یکی باز است. */
+.faq-item {
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+.faq-item[open] {
+  border-color: rgba(245, 185, 90, 0.35);
+}
+.faq-item summary {
+  list-style: none;
+}
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+.faq-item[open] .faq-body {
+  animation: faqIn 0.3s ease both;
+}
+.faq-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--color-teal-tint);
+  color: #2bd9bc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  transition: transform 0.25s ease, background 0.25s ease, color 0.25s ease;
+}
+.faq-item[open] .faq-icon {
+  transform: rotate(45deg);
+  background: var(--color-gold-tint);
+  color: var(--color-gold);
+}
+@keyframes faqIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* همتای همان قاعده در style.css: کاربری که حرکت نمی‌خواهد نباید منتظرِ
+     انیمیشن بماند. ScrollFx هم همین را می‌خواند و کلاس را همان اول می‌گذارد،
+     پس این قاعده فقط تورِ دوم است. */
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    transition-delay: 0s;
+  }
+  .faq-item[open] .faq-body {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   پوسته‌ی صفحه‌ی ورود — همتای `.auth-page` در frontend/css/style.css
+   ============================================================
+   نامِ کلاس‌ها عیناً همان‌های Express است (auth-page, auth-shell, auth-layout,
+   auth-col, auth-aside, aa-*, aap-ic, auth-bg, ab-*, af-*, auth-back, auth-card,
+   auth-trust, auth-legal). این عمدی است: `shellParity.test.ts` فهرستِ همین
+   کلاس‌ها را بین دو نسخه مقایسه می‌کند، پس یکسان‌بودنِ نام‌ها یعنی نگهبان
+   می‌تواند حذفِ یک بخش را بگیرد، نه اینکه به‌خاطرِ نام‌گذاریِ متفاوت کور بماند.
+
+   رنگ‌ها از متغیرهای همین تم می‌آیند (--color-teal و…)، نه مقدارِ ثابت؛ پس
+   تغییرِ پالت یک‌جا اثر می‌گذارد. تمِ پایه‌ی این پروژه با `.auth-page` در
+   Express یکی است (هر دو تیره)، بنابراین بازنویسیِ رنگِ کارت و اینپوت‌ها لازم
+   نبود — فقط چیزی که *نبود*: پس‌زمینه‌ی زنده، دکمه‌ی بازگشت، ستونِ معرفی،
+   ردیفِ اعتماد و خطوطِ حقوقی.
+   ------------------------------------------------------------ */
+
+.auth-page {
+  background: #07100d;
+  color: #eef7f2;
+  overflow-x: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-shell {
+  flex: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(34px, 7vw, 92px) clamp(18px, 6vw, 100px);
+  position: relative;
+  z-index: 1;
+}
+
+/* پس‌زمینه‌ی زنده: سه هاله که آرام نفس می‌کشند + وسایل خانه که شناورند */
+.auth-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.5;
+  filter: saturate(0.7);
+}
+.ab-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.5;
+  animation: abDrift 16s ease-in-out infinite alternate;
+}
+.ab-1 {
+  width: 520px; height: 520px; top: -160px; right: -120px;
+  background: radial-gradient(circle, rgba(37, 214, 176, 0.32), transparent 65%);
+}
+.ab-2 {
+  width: 460px; height: 460px; bottom: -140px; left: -120px;
+  background: radial-gradient(circle, rgba(245, 185, 90, 0.2), transparent 65%);
+  animation-delay: -5s; animation-duration: 19s;
+}
+.ab-3 {
+  width: 380px; height: 380px; top: 38%; left: 52%;
+  background: radial-gradient(circle, rgba(240, 83, 143, 0.14), transparent 65%);
+  animation-delay: -10s; animation-duration: 23s;
+}
+@keyframes abDrift {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(-46px, 36px) scale(1.12); }
+}
+.ab-float {
+  position: absolute;
+  width: 44px; height: 44px;
+  color: var(--color-teal);
+  opacity: 0.1;
+  animation: abFloat 9s ease-in-out infinite;
+}
+.af-1 { top: 16%; right: 10%; animation-delay: 0s; }
+.af-2 { top: 64%; right: 16%; width: 36px; height: 36px; animation-delay: -2s; color: var(--color-gold); }
+.af-3 { top: 26%; left: 12%; animation-delay: -4s; }
+.af-4 { top: 72%; left: 8%; width: 52px; height: 52px; animation-delay: -6s; color: var(--color-gold); }
+.af-5 { top: 8%; left: 42%; width: 38px; height: 38px; animation-delay: -3s; }
+.af-6 { top: 84%; left: 48%; width: 34px; height: 34px; animation-delay: -7s; color: var(--color-pink); }
+@keyframes abFloat {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-22px) rotate(5deg); }
+}
+
+/* دکمه‌ی بازگشت — جای هدرِ حذف‌شده؛ بدونش مشتری در صفحه‌ی ورود گیر می‌افتد */
+.auth-back {
+  position: fixed;
+  top: 28px;
+  right: clamp(18px, 4vw, 60px);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #b7c9c1;
+  background: rgba(18, 31, 26, 0.7);
+  border: 1px solid rgba(157, 192, 177, 0.3);
+  backdrop-filter: blur(8px);
+  transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.auth-back svg { width: 16px; height: 16px; }
+.auth-back:hover {
+  color: var(--color-teal);
+  border-color: rgba(37, 214, 176, 0.4);
+  transform: translateX(-2px);
+}
+
+/* چیدمان دوستونه: فرم یک‌طرف، «چرا اینجا خرید کنم» طرف دیگر */
+.auth-layout {
+  width: min(1120px, 100%);
+  margin: auto;
+  display: grid;
+  grid-template-columns: minmax(360px, 0.82fr) minmax(430px, 1fr);
+  gap: clamp(48px, 9vw, 150px);
+  align-items: center;
+  direction: ltr;
+}
+.auth-col, .auth-aside { direction: rtl; }
+.auth-col { order: 1; display: flex; flex-direction: column; align-items: center; }
+.auth-aside { order: 2; max-width: 560px; animation: authIn 0.6s 0.08s cubic-bezier(0.22, 0.9, 0.32, 1.2) both; }
+
+.aa-kicker {
+  display: inline-flex;
+  padding: 8px 14px;
+  border: 1px solid rgba(245, 185, 90, 0.28);
+  border-radius: 999px;
+  color: #f5c76f;
+  background: rgba(245, 185, 90, 0.08);
+  font-size: 13px;
+  font-weight: 800;
+}
+.aa-title {
+  font-size: clamp(28px, 3.4vw, 48px);
+  line-height: 1.5;
+  letter-spacing: -1px;
+  margin: 22px 0 12px;
+  color: #f3f8f5;
+}
+.aa-title span {
+  /* همان قاعده‌ی style.css: متن با گرادیان فیروزه→طلایی رنگ می‌شود، با
+     `color` به‌عنوان پشتوانه برای مرورگرهایی که background-clip:text ندارند. */
+  background: linear-gradient(90deg, var(--color-teal), var(--color-gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--color-teal);
+}
+
+/* راهنمای زیر هر کنترل — همتای `.field-hint` در style.css */
+.field-hint {
+  font-size: 11.5px;
+  color: var(--color-ink-dim);
+  margin: 7px 0 0;
+}
+.aa-lead {
+  color: #9db1a9;
+  line-height: 2;
+  font-size: 15px;
+  max-width: 470px;
+}
+.aa-points {
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 20px;
+}
+.aa-points li { display: flex; gap: 15px; align-items: center; }
+.aap-ic {
+  width: 40px; height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(37, 214, 176, 0.25);
+  border-radius: 12px;
+  color: var(--color-teal);
+  background: rgba(37, 214, 176, 0.08);
+  flex: none;
+  transition: transform 0.2s ease;
+}
+.aap-ic svg { width: 20px; height: 20px; }
+.aa-points b { display: block; color: #eef7f2; font-size: 15px; margin-bottom: 3px; }
+.aa-points em { display: block; color: #81958d; font-style: normal; font-size: 12px; }
+.aa-points li:nth-child(2) .aap-ic { background: var(--color-gold-tint); border-color: rgba(245, 185, 90, 0.22); color: var(--color-gold); }
+.aa-points li:nth-child(3) .aap-ic { background: var(--color-pink-tint); border-color: rgba(240, 83, 143, 0.22); color: var(--color-pink); }
+.aa-points li:hover .aap-ic { transform: translateY(-2px) scale(1.06); }
+.aa-note {
+  margin-top: 28px;
+  padding: 14px 17px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  color: #91a59e;
+  font-size: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.025);
+}
+.aa-note svg { width: 17px; height: 17px; color: var(--color-teal); flex: none; }
+
+/* کارتِ ورود — همان حاشیه‌ی بالای فیروزه‌ای، نوارِ درخشان و ورودِ نرم */
+.auth-card {
+  width: min(430px, 100%);
+  padding: 34px 38px 30px;
+  border: 1px solid rgba(137, 183, 166, 0.3);
+  border-top: 2px solid var(--color-teal);
+  border-radius: 24px;
+  background: rgba(15, 31, 25, 0.82);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+  position: relative;
+  overflow: hidden;
+  animation: authIn 0.55s cubic-bezier(0.22, 0.9, 0.32, 1.2) both;
+}
+@keyframes authIn {
+  from { opacity: 0; transform: translateY(26px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.auth-card::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-teal), var(--color-gold), var(--color-pink), var(--color-teal));
+  background-size: 250% 100%;
+  animation: authShimmer 7s linear infinite;
+}
+@keyframes authShimmer { to { background-position: -250% 0; } }
+
+/* سه قولِ فروشگاه درست زیر کارت + دو خطِ حقوقی */
+.auth-trust {
+  width: min(430px, 100%);
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+  color: #9db1a9;
+  font-size: 11px;
+  animation: authIn 0.55s 0.18s cubic-bezier(0.22, 0.9, 0.32, 1.2) both;
+}
+.auth-trust span { display: flex; align-items: center; gap: 5px; }
+.auth-trust svg { width: 15px; height: 15px; color: var(--color-teal); }
+.auth-legal {
+  color: #81958d;
+  font-size: 11px;
+  text-align: center;
+  line-height: 2;
+  margin: 12px 0 0;
+}
+.auth-legal a { color: var(--color-teal); }
+.auth-legal a:hover { color: var(--color-gold); }
+
+/* موبایل و تبلت: یک‌ستونه و ستونِ معرفی حذف — فرم باید بالا بماند */
+@media (max-width: 800px) {
+  .auth-shell { padding-top: 80px; }
+  .auth-layout { display: block; }
+  .auth-aside { display: none; }
+  .auth-col { width: min(430px, 100%); margin: auto; }
+  .auth-card { padding: 28px 22px; }
+  .auth-back { top: 18px; }
+}
+@media (max-width: 560px) {
+  .auth-back { top: 14px; right: 14px; padding: 9px 13px; font-size: 12.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-blob, .ab-float, .auth-card, .auth-aside, .auth-trust { animation: none; }
+  .auth-card::before { animation: none; }
+  .aa-points li:hover .aap-ic { transform: none; }
+  .auth-back { transition: none; }
+}
+

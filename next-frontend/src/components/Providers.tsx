@@ -4,6 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { ToastProvider } from "./Toast";
 import { ServiceWorkerRegistrar } from "./ServiceWorkerRegistrar";
+import { IconSprite } from "./IconSprite";
+import { ScrollFx } from "./ScrollFx";
+import { BottomNav } from "./BottomNav";
+import { WelcomePrompt } from "./WelcomePrompt";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -27,7 +31,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
           داشته باشد. */}
       <ToastProvider>
         <ServiceWorkerRegistrar />
+        {/* اسپرایتِ آیکون‌ها — همتای همان تزریقِ ابتدای common.js. قبل از
+            `children` است تا آیکون‌های دسته‌بندی در دراور و منوی کشوییِ هدر
+            آماده باشند. */}
+        <IconSprite />
         {children}
+        {/* سه پوسته‌ی سراسریِ باقی‌مانده از `common.js` — هر سه داخلِ
+            QueryClientProvider هستند چون سبد/حسابِ کاربر را از کشِ مشترکِ
+            هدر می‌خوانند و هیچ درخواستِ تازه‌ای نمی‌زنند. */}
+        <ScrollFx />
+        <BottomNav />
+        <WelcomePrompt />
       </ToastProvider>
     </QueryClientProvider>
   );

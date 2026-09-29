@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { addToCart, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { WELCOME_INTENT_EVENT } from "@/lib/welcome";
 
 // ============================================================
 // افزودن به سبد — منطقِ مشترکِ کارتِ محصول و صفحه‌ی محصول
@@ -40,6 +41,11 @@ export function useAddToCart() {
       // بی‌دلیل عوض شده است.
       if (cart.notice) toast(cart.notice, { tone: "info" });
       if (cart.couponNotice) toast(cart.couponNotice, { tone: "info" });
+      // سیگنالِ «علاقه‌ی واقعی» — همتای همان خطی که در common.js:190 بعد از
+      // افزودن به سبد فرستاده می‌شود. شنونده‌اش کادرِ خوش‌آمد است (نه اینجا):
+      // کسی که کالا در سبد گذاشته، دعوت به ثبت‌نام برایش مزاحمت نیست، چون
+      // سبدِ مهمان با بستنِ مرورگر گم می‌شود.
+      document.dispatchEvent(new Event(WELCOME_INTENT_EVENT));
     },
     onError: (err) => {
       toast(

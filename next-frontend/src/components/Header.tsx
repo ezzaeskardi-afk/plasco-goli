@@ -5,10 +5,20 @@ import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getCart, getMe, getProducts } from "@/lib/api";
+import { getCart, getCategories, getMe, getProducts } from "@/lib/api";
 import { useShopInfo } from "@/lib/useShopInfo";
+import { AnnouncementBar } from "@/components/AnnouncementBar";
+import { MobileDrawer } from "@/components/MobileDrawer";
+import { Icon, SpriteIcon } from "@/components/Icon";
 import { useWishlistIds } from "@/lib/useWishlist";
-import type { CartResponse, AuthMeResponse, Product } from "@/lib/types";
+import { HEADER_SCROLLED_AT } from "@/lib/scrollFx";
+import { useScrollPast } from "@/lib/useScrollPast";
+import type {
+  AuthMeResponse,
+  CartResponse,
+  Product,
+  ShopCategory,
+} from "@/lib/types";
 
 // عددِ نشانگرِ سبد باید فارسی باشد. بقیه‌ی سایت همه‌جا از این استفاده می‌کند و
 // فقط این دو نقطه لاتین مانده بود؛ کنارِ «۳ قلم» یک «3» تو ذوق می‌زد.
@@ -26,7 +36,7 @@ function toToman(price: number): string {
 // تکراریِ تایپِ حرف‌به‌حرف را می‌گیرد. Enter همیشه به /products?q= می‌رود —
 // پیشنهاد فقط میان‌بُر است، نه سدِ راه.
 
-function SearchBox({ compact = false }: { compact?: boolean }) {
+function SearchBox() {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
@@ -94,7 +104,9 @@ function SearchBox({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <div ref={boxRef} className={`relative ${compact ? "w-full" : "hidden lg:block w-64"}`}>
+    // فقط ≥۹۰۰px — همان نقطه‌ی شکستِ Express. زیرِ آن، جستجو در منوی کشویی
+    // است (`#drawerSearch`)، نه در هدر.
+    <div ref={boxRef} className="relative hidden min-[900px]:block w-64">
       <form onSubmit={submit} role="search">
         <input
           type="search"
@@ -162,9 +174,165 @@ function SearchBox({ compact = false }: { compact?: boolean }) {
   );
 }
 
+// ============================================================
+// منوی کشوییِ دسته‌بندی — همتای `#catMenu` + `initCatMenu` (common.js:494)
+// ============================================================
+// این منو در نسخه‌ی Next نبود، با اینکه تنها راهِ دیدنِ **کلِ** نقشه‌ی
+// دسته‌بندی‌ها در یک نگاه بود. فهرستش از `/api/shop/categories` می‌آید (همان
+// کاری که `initDynamicCats` می‌کرد) و آیکونِ هر دسته از خودِ سرور می‌آید.
+//
+// تا وقتی پاسخ نرسیده فقط «نمایش همه‌ی محصولات» هست — نه یک فهرستِ ثابتِ
+// دستی. نسخه‌ی Express فهرستِ ثابتی در HTML داشت که با پاسخِ سرور جایگزین
+// می‌شد؛ آن فهرستِ ثابت به‌مرور از دیتابیس جدا می‌افتاد و دسته‌ی حذف‌شده را
+// نشان می‌داد.
+
+const CAT_LINK =
+  "flex items-center gap-2.5 px-3.5 py-2.5 text-[13px] rounded-lg transition-colors hover:bg-surface-2";
+
+function CatMenu({ categories }: { categories: ShopCategory[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative flex h-full items-center">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="true"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 text-[13.5px] font-bold"
+        style={{ color: open ? "var(--color-teal)" : "var(--color-ink)" }}
+      >
+        <Icon name="menu" size={18} style={{ color: "var(--color-gold)" }} />
+        دسته‌بندی کالاها
+        <Icon
+          name="chevronDown"
+          size={14}
+          className="transition-transform"
+          style={{
+            color: "var(--color-ink-soft)",
+            transform: open ? "rotate(180deg)" : undefined,
+          }}
+        />
+      </button>
+
+      <div
+        role="menu"
+        className={`absolute top-full right-0 z-50 min-w-[248px] flex-col rounded-[16px] p-2 transition-opacity ${
+          open ? "flex opacity-100" : "pointer-events-none invisible opacity-0"
+        }`}
+        style={{
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-line-strong)",
+          boxShadow: "var(--shadow)",
+        }}
+      >
+        {categories.map((cat) => (
+          <Link
+            key={cat.id}
+            role="menuitem"
+            href={`/products?category=${encodeURIComponent(cat.name)}`}
+            onClick={() => setOpen(false)}
+            className={CAT_LINK}
+          >
+            <SpriteIcon id={cat.icon} size={22} /> {cat.name}
+          </Link>
+        ))}
+        <Link
+          role="menuitem"
+          href="/products"
+          onClick={() => setOpen(false)}
+          className={CAT_LINK}
+        >
+          <Icon name="package" size={20} style={{ color: "var(--color-teal)" }} />
+          نمایش همه‌ی محصولات
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// ردیفِ دومِ هدر (فقط ≥۹۰۰px) — همتای `div.subnav` در Express
+// ============================================================
+// ‏`subnav` زیرِ ۹۰۰px پنهان می‌شود و جایش منوی کشویی می‌آید — عیناً همان
+// قاعده‌ی `@media (max-width:900px)` نسخه‌ی اصلی.
+//
+// «خرید عمده» عمداً به فهرستِ Express اضافه شده: آنجا هیچ لینکی به
+// wholesale.html از صفحه‌ی اصلی نمی‌رفت و فروشگاه B2B آن را از دست می‌داد.
+// (بقیه‌ی پنج لینک همان‌های Express‌اند.)
+
+const SUBNAV_LINKS = [
+  { href: "/", label: "خانه" },
+  { href: "/products", label: "محصولات" },
+  { href: "/wholesale", label: "خرید عمده" },
+  { href: "/#about", label: "درباره ما" },
+  { href: "/#faq", label: "سوالات متداول" },
+  { href: "/#contact", label: "تماس با ما" },
+];
+
+function Subnav({ categories }: { categories: ShopCategory[] }) {
+  const pathname = usePathname();
+
+  return (
+    <div
+      className="hidden min-[900px]:block"
+      style={{ borderTop: "1px solid var(--color-line)" }}
+    >
+      <div className="mx-auto flex h-11 max-w-[1180px] items-center gap-7 px-6">
+        <CatMenu categories={categories} />
+        <nav className="flex items-center gap-5 text-[13.5px] font-medium" aria-label="منوی اصلی">
+          {SUBNAV_LINKS.map((link) => {
+            const active = link.href === "/" ? pathname === "/" : pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="transition-colors hover:text-teal"
+                style={{ color: active ? "var(--color-teal)" : "var(--color-ink-soft)" }}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <span
+          className="ms-auto flex items-center gap-2 text-[12.5px] font-bold"
+          style={{ color: "var(--color-ink-soft)" }}
+        >
+          <Icon name="truck" size={16} style={{ color: "var(--color-gold)" }} />
+          ارسال سریع به سراسر کشور
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function Header() {
   const pathname = usePathname();
   const shop = useShopInfo();
+
+  // همتای `header.site.scrolled` در style.css (common.js:391). بدونِ این،
+  // هدرِ چسبیده همان زمینهٔ روشنِ اولیه را نگه می‌داشت و وقتی مشتری روی
+  // محتوای روشن اسکرول می‌کرد، مرزِ هدر گم می‌شد.
+  const scrolled = useScrollPast(HEADER_SCROLLED_AT);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // TanStack Query — کش خودکار، staleTime ۳۰s
   const { data: cartData } = useQuery<CartResponse>({
@@ -183,241 +351,195 @@ export function Header() {
     refetchOnMount: true,
   });
 
+  // همان درخواستی که `initDynamicCats` می‌زد: دسته‌بندی‌ها از پنل می‌آیند و
+  // هدر/منو نباید فهرستِ ثابتی داشته باشند.
+  const { data: categories = [] } = useQuery<ShopCategory[]>({
+    queryKey: ["categories"],
+    queryFn: getCategories,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
   const { data: wishIds } = useWishlistIds();
   const wishCount = wishIds?.length ?? 0;
 
   const cartCount = cartData?.count || 0;
   const user = authData?.user || null;
 
-  const isActive = (href: string) => pathname === href;
+  // با هر جابه‌جاییِ صفحه منو بسته می‌شود. لازم است چون ناوبریِ Next سمتِ
+  // کلاینت است و کامپوننت unmount نمی‌شود؛ بدونِ این، منو بعد از رفتن به صفحه‌ی
+  // جدید هم باز می‌ماند و روی محتوا افتاده است.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
 
   return (
-    <header
-      className="sticky top-0 z-50 border-b"
-      style={{
-        background: "var(--color-surface)",
-        borderColor: "var(--color-line-strong)",
-      }}
-    >
-      {/* نوار اعلان — همتای initShopBar در نسخه‌ی Express (common.js:820).
-          فروشگاهِ بسته پیامِ ناپدیدشدنی ندارد: تا باز شود باید دیده بماند. */}
-      {shop && !shop.shopOpen && (
+    <>
+      {/* نوارِ اطلاعیه **بیرونِ** هدر است، نه داخلش. تفاوت رفتار جدی است:
+          هدر `sticky` است، پس اگر نوار داخلش باشد تا ابد بالای صفحه می‌ماند،
+          در حالی که در نسخه‌ی Express نوار بالای هدر در جریانِ صفحه بود و با
+          اسکرول کنار می‌رفت (`initShopBar` آن را به ابتدای body می‌گذاشت). */}
+      <AnnouncementBar shop={shop} />
+
+      <header
+        className="sticky top-0 z-50 border-b"
+        style={{
+          background: scrolled ? "rgba(8,14,12,.94)" : "var(--color-surface)",
+          boxShadow: scrolled ? "0 14px 40px -22px rgba(0,0,0,.8)" : "none",
+          transition: "background .2s ease, box-shadow .2s ease",
+          borderColor: "var(--color-line-strong)",
+        }}
+      >
+        {/* نوارِ سه‌رنگِ برند — همتای `header.site::before` در style.css */}
         <div
-          className="px-4 py-1.5 text-center text-xs font-bold"
-          style={{ background: "var(--color-coral)", color: "var(--color-ink-on-warm)" }}
-          role="alert"
-        >
-          {shop.announcement || "فروشگاه موقتاً بسته است؛ ثبت سفارش فعلاً ممکن نیست"}
-        </div>
-      )}
+          className="h-[3px]"
+          aria-hidden="true"
+          style={{
+            background:
+              "linear-gradient(90deg, var(--color-teal), var(--color-gold) 50%, var(--color-coral))",
+          }}
+        />
 
-      <div className="mx-auto flex max-w-[1180px] items-center gap-4 px-6 py-3">
-        {/* لوگو */}
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span
-            className="text-xl font-extrabold"
-            style={{ color: "var(--color-teal)" }}
-          >
-            پلاسکو گلی
-          </span>
-        </Link>
-
-        {/* منوی اصلی */}
-        <nav className="hidden md:flex gap-1 text-sm font-medium">
+        <div className="mx-auto flex max-w-[1180px] items-center gap-3 px-6 py-3 min-[900px]:gap-[18px]">
+          {/* لوگو — نشان + نام + زیرنویس، عیناً ساختار Express */}
           <Link
             href="/"
-            className={`px-3 py-2 rounded-lg transition-colors ${
-              isActive("/")
-                ? "bg-teal-tint text-teal"
-                : "text-ink-soft hover:text-ink hover:bg-surface-2"
-            }`}
+            className="flex shrink-0 items-center gap-3"
+            aria-label="پلاسکو گلی — صفحه اصلی"
           >
-            خانه
-          </Link>
-          <Link
-            href="/products"
-            className={`px-3 py-2 rounded-lg transition-colors ${
-              pathname.startsWith("/products") ||
-              pathname.startsWith("/product")
-                ? "bg-teal-tint text-teal"
-                : "text-ink-soft hover:text-ink hover:bg-surface-2"
-            }`}
-          >
-            محصولات
-          </Link>
-          <Link
-            href="/wholesale"
-            className={`px-3 py-2 rounded-lg transition-colors ${
-              isActive("/wholesale")
-                ? "bg-teal-tint text-teal"
-                : "text-ink-soft hover:text-ink hover:bg-surface-2"
-            }`}
-          >
-            خرید عمده
-          </Link>
-          <Link
-            href="/terms"
-            className={`px-3 py-2 rounded-lg transition-colors ${
-              isActive("/terms")
-                ? "bg-teal-tint text-teal"
-                : "text-ink-soft hover:text-ink hover:bg-surface-2"
-            }`}
-          >
-            قوانین
-          </Link>
-        </nav>
-
-        {/* جستجوی دسکتاپ */}
-        <SearchBox />
-
-        <div className="flex-1" />
-
-        {/* دکمه‌های سمت چپ */}
-        <div className="flex items-center gap-1">
-          {/* علاقه‌مندی‌ها — همتای قلبِ هدر در نسخه‌ی Express (common.js:668) */}
-          <Link
-            href="/account#wishlist"
-            className="relative rounded-full p-2 transition-colors"
-            style={{ color: "var(--color-ink-soft)" }}
-            aria-label={`علاقه‌مندی‌ها ${wishCount > 0 ? `(${toFa(wishCount)})` : ""}`}
-          >
-            <svg
-              width="20" height="20" viewBox="0 0 20 20"
-              fill="none" stroke="currentColor" strokeWidth="1.8"
-              strokeLinecap="round" strokeLinejoin="round"
-            >
-              <path d="M10 17s-6.5-4.1-8.2-8A4.6 4.6 0 0110 5.4 4.6 4.6 0 0118.2 9c-1.7 3.9-8.2 8-8.2 8z" />
-            </svg>
-            {wishCount > 0 && (
+            <span className="h-12 w-12 shrink-0 overflow-hidden rounded-[14px]">
+              {/* eslint-disable-next-line @next/next/no-img-element -- نشانِ ۴۸px که از rewrite مسیر /picture سرو می‌شود */}
+              <img
+                src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jpg"
+                alt="لوگوی پلاسکو گلی"
+                width={48}
+                height={48}
+                className="h-12 w-12 object-cover"
+              />
+            </span>
+            <span className="flex flex-col leading-tight">
               <span
-                className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-full text-[9px] font-bold"
-                style={{
-                  background: "var(--color-pink)",
-                  color: "#fff",
-                }}
-                aria-label={`${toFa(wishCount)} کالا در علاقه‌مندی‌ها`}
+                className="text-lg font-extrabold"
+                style={{ color: "var(--color-teal)" }}
               >
-                {toFa(wishCount)}
+                پلاسکو گلی
               </span>
-            )}
+              <small
+                className="hidden text-[11px] font-normal min-[900px]:block"
+                style={{ color: "var(--color-ink-soft)" }}
+              >
+                فروشگاه لوازم پلاستیکی خانه
+              </small>
+            </span>
           </Link>
 
-          <Link
-            href="/cart"
-            className="relative rounded-full p-2 transition-colors"
-            style={{ color: "var(--color-ink-soft)" }}
-            aria-label={`سبد خرید ${cartCount > 0 ? `${cartCount} قلم` : ""}`}
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            >
-              <circle cx="7" cy="17" r="1.5" />
-              <circle cx="15" cy="17" r="1.5" />
-              <path d="M2 3h2.5L7 12h8l2-6H5" />
-            </svg>
-            {cartCount > 0 && (
-              <span
-                className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold"
-                style={{
-                  background: "var(--color-coral)",
-                  color: "var(--color-ink-on-warm)",
-                }}
-                // عددِ تنها برای صفحه‌خوان بی‌معنی است؛ با برچسب می‌فهمد چیست.
-                aria-label={`${toFa(cartCount)} قلم در سبد`}
-              >
-                {toFa(cartCount)}
-              </span>
-            )}
-          </Link>
+          <SearchBox />
 
-          {user ? (
+          <div className="flex-1" />
+
+          {/* دکمه‌های سمت چپ */}
+          <div className="flex items-center gap-1">
+            {/* علاقه‌مندی‌ها — همتای قلبِ هدر در نسخه‌ی Express (common.js:668) */}
             <Link
-              href={user.isAdmin || user.isStaff ? "/admin" : "/account"}
-              className="rounded-full px-4 py-2 text-sm font-semibold transition-colors"
-              style={{
-                background: "var(--color-teal)",
-                color: "#04211B",
-              }}
+              href="/account#wishlist"
+              className="relative rounded-full p-2 transition-colors"
+              style={{ color: "var(--color-ink-soft)" }}
+              aria-label={`علاقه‌مندی‌ها ${wishCount > 0 ? `(${toFa(wishCount)})` : ""}`}
             >
-              {user.fullName || "حساب من"}
+              <Icon name="heart" size={20} />
+              {wishCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] flex items-center justify-center rounded-full text-[9px] font-bold"
+                  style={{
+                    background: "var(--color-pink)",
+                    color: "#fff",
+                  }}
+                  aria-label={`${toFa(wishCount)} کالا در علاقه‌مندی‌ها`}
+                >
+                  {toFa(wishCount)}
+                </span>
+              )}
             </Link>
-          ) : (
+
             <Link
-              href="/login"
-              className="rounded-full px-4 py-2 text-sm font-semibold transition-colors"
-              style={{
-                background: "var(--color-teal)",
-                color: "#04211B",
-              }}
+              href="/cart"
+              className="relative rounded-full p-2 transition-colors"
+              style={{ color: "var(--color-ink-soft)" }}
+              aria-label={`سبد خرید ${cartCount > 0 ? `${cartCount} قلم` : ""}`}
             >
-              ورود
+              <Icon name="cart" size={20} />
+              {cartCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold"
+                  style={{
+                    background: "var(--color-coral)",
+                    color: "var(--color-ink-on-warm)",
+                  }}
+                  // عددِ تنها برای صفحه‌خوان بی‌معنی است؛ با برچسب می‌فهمد چیست.
+                  aria-label={`${toFa(cartCount)} قلم در سبد`}
+                >
+                  {toFa(cartCount)}
+                </span>
+              )}
             </Link>
-          )}
+
+            {user ? (
+              <Link
+                href={user.isAdmin || user.isStaff ? "/admin" : "/account"}
+                className="rounded-full px-4 py-2 text-sm font-semibold transition-colors"
+                style={{
+                  background: "var(--color-teal)",
+                  color: "#04211B",
+                }}
+              >
+                {user.fullName || "حساب من"}
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="rounded-full px-4 py-2 text-sm font-semibold transition-colors"
+                style={{
+                  background: "var(--color-teal)",
+                  color: "#04211B",
+                }}
+              >
+                ورود
+              </Link>
+            )}
+
+            {/* دکمه‌ی منو — فقط زیرِ ۹۰۰px، همتای `.menu-toggle` */}
+            <button
+              type="button"
+              className="flex min-[900px]:hidden rounded-full p-2 transition-colors"
+              style={{ color: "var(--color-ink-soft)" }}
+              aria-label="باز کردن منو"
+              aria-expanded={drawerOpen}
+              aria-controls="drawer"
+              onClick={() => setDrawerOpen(true)}
+            >
+              <Icon name="menu" size={20} />
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* زیرمنوی موبایل */}
-      <nav className="md:hidden flex gap-1 px-4 pb-2 text-sm overflow-x-auto">
-        <Link
-          href="/"
-          className={`shrink-0 px-3 py-1.5 rounded-lg ${
-            isActive("/")
-              ? "bg-teal-tint text-teal font-medium"
-              : "text-ink-soft"
-          }`}
-        >
-          خانه
-        </Link>
-        <Link
-          href="/products"
-          className={`shrink-0 px-3 py-1.5 rounded-lg ${
-            pathname.startsWith("/products")
-              ? "bg-teal-tint text-teal font-medium"
-              : "text-ink-soft"
-          }`}
-        >
-          محصولات
-        </Link>
-        <Link
-          href="/cart"
-          className={`shrink-0 px-3 py-1.5 rounded-lg ${
-            isActive("/cart")
-              ? "bg-teal-tint text-teal font-medium"
-              : "text-ink-soft"
-          }`}
-        >
-          سبد {cartCount > 0 && `(${toFa(cartCount)})`}
-        </Link>
-        <Link
-          href={
-            user
-              ? user.isAdmin || user.isStaff
-                ? "/admin"
-                : "/account"
-              : "/login"
+        <Subnav categories={categories} />
+      </header>
+
+      <MobileDrawer
+        open={drawerOpen}
+        onClose={(options) => {
+          setDrawerOpen(false);
+          if (options?.restoreFocus !== false) {
+            // فوکوس به دکمه‌ی منو برمی‌گردد، مگر وقتی کاربر روی یک لینک زده
+            // و صفحه در حال عوض شدن است.
+            document
+              .querySelector<HTMLButtonElement>('[aria-controls="drawer"]')
+              ?.focus();
           }
-          className={`shrink-0 px-3 py-1.5 rounded-lg ${
-            isActive("/login") ||
-            isActive("/account") ||
-            isActive("/admin")
-              ? "bg-teal-tint text-teal font-medium"
-              : "text-ink-soft"
-          }`}
-        >
-          {user ? "پروفایل" : "ورود"}
-        </Link>
-      </nav>
-
-      {/* جستجوی موبایل — ردیفِ جدا، همیشه دیده شود */}
-      <div className="lg:hidden px-4 pb-2">
-        <SearchBox compact />
-      </div>
-    </header>
+        }}
+        categories={categories}
+        user={user}
+      />
+    </>
   );
 }

@@ -148,7 +148,9 @@ export function OrderTrackingSection() {
   } as const;
 
   return (
-    <section className="mx-auto max-w-[1180px] px-6 pb-16">
+    // `id="track"` لازم است: پاورقی و منوی موبایل با `/#track` به همین بخش
+    // لینک می‌دهند (همتای `#track` در index.html نسخه‌ی Express).
+    <section id="track" className="mx-auto max-w-[1180px] px-6 pb-16 scroll-mt-28">
       <div className="rounded-[26px] p-6 md:p-8" style={{ background: "var(--color-surface)" }}>
         <h2 className="text-xl md:text-2xl font-extrabold text-ink mb-2">
           پیگیری سفارش
