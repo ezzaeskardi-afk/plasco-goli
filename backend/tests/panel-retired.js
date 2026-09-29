@@ -28,6 +28,19 @@
 //   • `next-frontend/src/app/internalLinks.test.ts` — فهرستِ ممنوعه‌ای که خودش
 //     نگهبانِ طرفِ Next است.
 // هر استثنای دیگری باید با توجیه اضافه شود، نه با شل‌کردنِ الگو.
+//
+// ---------- دو تصحیحِ لازم پس از پورتِ برابری (وگرنه نگهبان روی کارِ درست قرمز می‌شد) ----------
+//   ۱. **کامنت ارجاع نیست.** نگهبان خط‌به‌خط و بدونِ نگاه به کامنت می‌خواند،
+//      پس یادداشتی مثلِ «این مسیر دیگر هیچ‌وقت باز نمی‌شود» هم قرمز می‌شد —
+//      یعنی نگهبان روی چیزی قرمز می‌شد که *خودش* محافظش است. کامنت نمی‌تواند
+//      کاربر را به ۴۰۴ بفرستد، پس اول کامنت‌ها خنثی می‌شوند (با حفظِ شماره‌ی
+//      خط).
+//   ۲. **استثنا روی «فایل + نام» است، نه کلِ فایل.** جدولِ نشانی‌های عصرِ
+//      Express در `legacyUrls.ts` ناچاراً `/admin.html` را می‌نویسد تا بگوید
+//      چرا ۴۰۴ می‌ماند، و دو آزمون همان تصمیم را می‌سنجند. ولی همان فایل
+//      نباید اجازه بگیرد `js/admin.js` یا `invoice.css` را هم ببرد — آن دو
+//      داراییِ واقعیِ پنل‌اند. پس استثنا جفت‌محور است و خودش هم کهنه‌شدنی نیست
+//      (بخشِ ۳ می‌سنجد که هر استثنا واقعاً همان‌جا باشد).
 
 const fs = require('fs');
 const path = require('path');
@@ -55,6 +68,20 @@ const REF_ALLOWED_FILES = new Set([
   // خودِ همین فایل: فهرستِ الگوها و نمونه‌های ساختگیِ بخشِ ۳ ناچاراً همان نام‌ها
   // را دارند. جای دیگری شل نمی‌شود؛ استثنا فقط جایی است که خودِ ناظر است.
   'backend/tests/panel-retired.js',
+]);
+
+// استثناهای دقیق‌تر: «فایل::نام». این سه، جاهایی هستند که نامِ *نشانیِ*
+// بازنشسته عمداً می‌آید و ارجاع نیست — هر سه هم می‌گویند «۴۰۴ بماند»:
+//   • جدولِ `legacyUrls.ts`: کارش همین است که بگوید کدام نشانیِ عصرِ Express
+//     تغییرِ مسیر می‌خورد و کدام نمی‌خورد؛ `/admin.html` عمداً در فهرستِ
+//     «بدونِ تغییرِ مسیر» است.
+//   • دو آزمونی که همین ماندنِ ۴۰۴ را می‌سنجند (یکی در همان جدول، یکی در
+//     همتای نوارِ پایینِ موبایل: در Express هم `admin.html` هرگز `common.js`
+//     را لود نمی‌کرد، پس نوارِ پایین را نمی‌دید).
+const REF_ALLOWED_PAIRS = new Set([
+  'next-frontend/src/lib/legacyUrls.ts::admin.html',
+  'next-frontend/src/lib/legacyUrls.test.ts::admin.html',
+  'next-frontend/src/components/BottomNav.test.tsx::admin.html',
 ]);
 
 // درخت‌هایی که اسکن می‌شوند — همه‌ی جایی که یک ارجاع می‌تواند بی‌صدا بشکند
@@ -129,6 +156,21 @@ function unescapeText(line) {
   return flat.replace(/routes[/\\]+admin\.js/g, '');
 }
 
+/** کامنت را با فاصله عوض می‌کند ولی `\n`ها را نگه می‌دارد تا شماره‌ی خط‌ها
+ *  جابه‌جا نشود (گزارشِ [FAIL] با شماره‌ی خط می‌آید و باید دقیق باشد). */
+const blankOut = (m) => m.replace(/[^\n]/g, ' ');
+
+/** همان کاری که اسکنِ دارایی‌ها می‌کند، برای ارجاع‌های متنی: کامنت نمی‌تواند
+ *  کاربر را به ۴۰۴ بفرستد، پس پیش از تطبیق حذف می‌شود. `://` دست‌نخورده
+ *  می‌ماند تا آدرسِ کاملِ `https://…` خراب نشود. */
+function stripComments(text, ext) {
+  if (ext === '.html') return text.replace(/<!--[\s\S]*?-->/g, blankOut);
+  if (ext === '.css') return text.replace(/\/\*[\s\S]*?\*\//g, blankOut);
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, blankOut)
+    .replace(/(^|[^:])\/\/[^\n]*/gm, '$1');
+}
+
 console.log('\n-- ۲) ارجاع‌های متنی --');
 const scanFiles = [
   ...SCAN_ROOTS.flatMap((r) => walk(path.join(REPO, r))),
@@ -139,14 +181,21 @@ const findings = [];
 for (const file of scanFiles) {
   const name = rel(file);
   if (REF_ALLOWED_FILES.has(name)) continue;
-  if (!TEXT_EXT.has(path.extname(file).toLowerCase())) continue;
-  let text;
-  try { text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+  const ext = path.extname(file).toLowerCase();
+  if (!TEXT_EXT.has(ext)) continue;
+  let raw;
+  try { raw = fs.readFileSync(file, 'utf8'); } catch { continue; }
   scanned++;
-  text.split(/\r?\n/).forEach((line, i) => {
+  // کامنت ارجاع نیست: یادداشتی که می‌گوید «این مسیر دیگر باز نمی‌شود» باید
+  // آزاد باشد، وگرنه نگهبان روی همان چیزی قرمز می‌شود که محافظش است.
+  const source = stripComments(raw, ext);
+  source.split(/\r?\n/).forEach((line, i) => {
     const probe = unescapeText(line);
     for (const token of TOKENS) {
-      if (probe.includes(token)) findings.push(`${name}:${i + 1} → ${token} | ${line.trim().slice(0, 90)}`);
+      if (!probe.includes(token)) continue;
+      // استثنا فقط برای «همین نام در همین فایل» است، نه کلِ فایل
+      if (REF_ALLOWED_PAIRS.has(`${name}::${token}`)) continue;
+      findings.push(`${name}:${i + 1} → ${token} | ${line.trim().slice(0, 90)}`);
     }
   });
 }
@@ -164,24 +213,43 @@ if (refCount === 0) {
 // بررسی‌های بالا «سبز» می‌شوند بدونِ اینکه چیزی سنجیده باشند. پس خودِ الگو را
 // روی یک رشته‌ی ساختگی می‌آزماییم و تعدادِ فایل‌های اسکن‌شده را هم کف می‌گذاریم.
 console.log('\n-- ۳) خودِ نگهبان --');
+// این نمونه‌ها همان مسیرِ واقعیِ اسکن را می‌گذرند (خنثی‌کردنِ کامنت + unescape)،
+// وگرنه یک آزمونِ خودی که روندِ واقعی را نمی‌سنجد، فقط اطمینانِ قلابی می‌دهد.
 const selfTests = [
-  ['  <a href="/admin.html">پنل</a>', 'admin.html'],
-  ['  <script src="js/admin.js?v=66">', 'js/admin.js'],
-  ['  /admin\\.html$/', 'admin.html'],
-  ['  routes\\admin.js — API', null],
-  ['  routes/admin.js — API', null],
-  ['  // پنلِ قدیمیِ Express (حذف‌شده)', null],
+  ['  <a href="/admin.html">پنل</a>', 'admin.html', '.html'],
+  ['  <script src="js/admin.js?v=66">', 'js/admin.js', '.html'],
+  ['  /admin\\.html$/', 'admin.html', '.ts'],
+  ['  routes\\admin.js — API', null, '.ts'],
+  ['  routes/admin.js — API', null, '.ts'],
+  ['  // پنلِ قدیمیِ Express (حذف‌شده)', null, '.ts'],
+  // کامنت نمی‌تواند کاربر را به ۴۰۴ بفرستند — این چهار شکل باید خنثی شوند،
+  // وگرنه نگهبان روی یادداشتِ «این مسیر مرده است» قرمز می‌شود.
+  ['  // است و `/admin.html` هم رشته‌ای با `/admin` شروع می‌شود', null, '.ts'],
+  ['  {/* <a href="/admin.html">پنل</a> */}', null, '.tsx'],
+  ['  <!-- <script src="js/admin.js"></script> -->', null, '.html'],
+  ['  /* background: url(/css/invoice.css); */', null, '.css'],
+  // ...ولی نامِ همان مسیر در *کدِ زنده* باید همان‌طور گرفته شود.
+  ['  href="/admin.html"', 'admin.html', '.tsx'],
+  ['  const css = "/css/invoice.css";', 'invoice.css', '.ts'],
 ];
 let selfOk = true;
-for (const [line, expected] of selfTests) {
-  const probe = unescapeText(line);
+for (const [line, expected, ext] of selfTests) {
+  const probe = unescapeText(stripComments(line, ext || '.ts'));
   const hit = TOKENS.find((t) => probe.includes(t)) || null;
   if (hit !== expected) {
     selfOk = false;
     notOk('آزمونِ الگو', `«${line}» → ${hit || 'چیزی پیدا نشد'}، انتظار: ${expected || 'چیزی'}`);
   }
 }
-if (selfOk) ok(`الگو روی ${selfTests.length} نمونه‌ی ساختگی درست رفتار کرد (شاملِ routes/admin.js که باید رد شود)`);
+if (selfOk) ok(`الگو روی ${selfTests.length} نمونه‌ی ساختگی درست رفتار کرد (شاملِ routes/admin.js که باید رد شود، و کامنت‌هایی که نباید بگیرند)`);
+// استثنای کهنه هم خودش یک خطا است: اگر فایل عوض شود و آن نام را دیگر نبرد،
+// استثنا بی‌صدا نگهبان را شل کرده است.
+const stalePairs = [...REF_ALLOWED_PAIRS].filter((key) => {
+  const [file, token] = key.split('::');
+  try { return !fs.readFileSync(path.join(REPO, file), 'utf8').includes(token); }
+  catch { return true; }
+});
+if (stalePairs.length) notOk('استثنای کهنه', `این فایل‌ها دیگر آن نام را ندارند: ${stalePairs.join('، ')}`);
 if (scanned >= 100) ok(`اسکن واقعاً ${scanned} فایل را دید`);
 else notOk('فهرستِ اسکن', `فقط ${scanned} فایل — یعنی ریشه‌ها یا پسوندها دیگر نمی‌خوانند`);
 
