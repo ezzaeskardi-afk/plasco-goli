@@ -50,6 +50,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  legacyRedirect,
+  LEGACY_PAGE_ALIASES,
+  LEGACY_NO_ALIAS,
+} from "@/lib/legacyUrls";
+import { LEGACY_QUERY_KEYS } from "@/lib/productQuery";
 
 // ------------------------------------------------------------
 // مسیرهای پایه
@@ -327,6 +333,11 @@ function scanSrc(): Ref[] {
   );
   for (const file of files) {
     const relPath = rel(FRONTEND_DIR, file);
+    // تنها فایلی که این نام‌ها را *تعریف* می‌کند و نه ارجاع می‌دهد:
+    // `lib/legacyUrls.ts` خودِ نقشهٔ ترجمه است — اگر اسکن شود، نگهبان روی
+    // نقشهٔ خودش قرمز می‌شود. جایش، آزمونِ «هر نامِ دنیای Express تصمیم دارد»
+    // پایین‌تر تضمین می‌کند این معافیت یک روزنه نباشد.
+    if (file.endsWith(path.join("lib", "legacyUrls.ts"))) continue;
     const raw = fs.readFileSync(file, "utf8");
     const clean = file.endsWith(".css")
       ? stripCssComments(raw)
@@ -541,7 +552,7 @@ describe("پیوندهای داخلی و مسیرهای ثابتِ Next", () => 
     expect(orphans).toEqual([]);
   });
 
-  it("next.config فقط API و عکس را پروکسی می‌کند و ریدایرکتِ بازگشتِ پرداخت سرِ جایش است", async () => {
+  it("next.config فقط API و عکس را پروکسی می‌کند", async () => {
     // خودِ فایلِ پیکربندی خوانده می‌شود، نه یک کپیِ دستی از محتوایش: تنها راهِ
     // اینکه این آزمون روزی «سبزِ دروغین» نشود، خواندنِ همان چیزی است که Next
     // اجرا می‌کند.
@@ -549,18 +560,43 @@ describe("پیوندهای داخلی و مسیرهای ثابتِ Next", () => 
 
     const rewrites = (await config.rewrites!()) as { source: string }[];
     expect(rewrites.map((r) => r.source)).toEqual(["/api/:path*", "/picture/:path*"]);
+  });
 
-    // درگاه پرداخت (routes/orders.js) مشتری را به آدرسِ *نسبیِ*
-    // `/order-success.html` برمی‌گرداند. این نام از دنیای Express مانده و روی
-    // مبدأِ Next وجود ندارد؛ اگر این ریدایرکت برود، مشتریِ پول‌داده به صفحه‌ی
-    // مرده می‌رسد. تنها استثنای عمدیِ فهرستِ بالاست، پس صریح سنجیده می‌شود.
-    const redirects = (await config.redirects!()) as {
-      source: string;
-      destination: string;
-      permanent: boolean;
-    }[];
-    expect(redirects).toEqual([
-      { source: "/order-success.html", destination: "/order-success", permanent: false },
-    ]);
+  it("بازگشتِ درگاهِ پرداخت به صفحه‌ی زنده می‌رسد و کوئری‌اش حفظ می‌شود", () => {
+    // درگاه (routes/orders.js) مشتری را به آدرسِ *نسبیِ* `/order-success.html`
+    // برمی‌گرداند — نامی از دنیای Express که روی مبدأِ Next وجود ندارد. اگر این
+    // نگاشت برود، مشتریِ پول‌داده صفحه‌ی مرده می‌بیند (و `orderId` گم می‌شود،
+    // یعنی صفحه‌ی نتیجه نمی‌داند کدام سفارش را پیگیری کند).
+    //
+    // جای این نگاشت از `next.config.redirects()` به `middleware.ts` منتقل شد تا
+    // **همه‌ی** نشانی‌های `.html` در یک جا و قابلِ سنجش باشند؛ پس همان قرارداد
+    // اینجا و روی خودِ تابع سنجیده می‌شود، نه روی شکلِ پیکربندی.
+    expect(legacyRedirect("/order-success.html", "?orderId=42")).toBe(
+      "/order-success?orderId=42",
+    );
+  });
+
+  it("هر نامِ دنیای Express یا ریدایرکت دارد یا دلیلِ مکتوبِ نداشتنش", () => {
+    // این آزمون همان چیزی است که اجازه می‌دهد `legacyUrls.ts` از اسکنِ ارجاع
+    // معاف باشد: نقشهٔ ترجمه باید *کامل* باشد. اگر روزی نامی به فهرستِ
+    // `EXPRESS_ERA` اضافه شود و کسی یادش برود تصمیم بگیرد، همین‌جا قرمز می‌شود.
+    const missing = [...EXPRESS_ERA].filter(
+      (name) =>
+        // `/product.html` شکلِ خاصِ خودش را دارد (شناسه از کوئری به مسیر می‌رود).
+        name !== "product.html" &&
+        !(name in LEGACY_PAGE_ALIASES) &&
+        !(name in LEGACY_NO_ALIAS),
+    );
+    expect(missing).toEqual([]);
+
+    // و کلیدهای کوئریِ عصرِ Express هم باید افتاده باشند: بدونِ این،
+    // `/products.html?cat=…` باز می‌شد ولی *بی‌فیلتر* — که بدترین حالت است،
+    // چون مشتری فکر می‌کند آن دسته خالی است.
+    expect(LEGACY_QUERY_KEYS).toMatchObject({
+      cat: "category",
+      min: "minPrice",
+      max: "maxPrice",
+      inStock: "inStockOnly",
+    });
   });
 });
