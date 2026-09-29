@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { apiBase } from "@/lib/site";
+import { isLegacyHtmlPath, legacyRedirect } from "@/lib/legacyUrls";
 
 // ============================================================
 // نگهبانِ مسیرها
@@ -104,9 +105,6 @@ const PANEL_HEADERS = ["x-panel-access", "x-panel-role", "x-panel-phone"];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const needsAuth = PROTECTED_ROUTES.some((r) => pathname.startsWith(r));
-  const guestOnly = GUEST_ONLY_ROUTES.some((r) => pathname.startsWith(r));
-
   // هدرهای `x-panel-*` را **همیشه** دور می‌ریزیم، حتی وقتی کاری با پنل نداریم.
   // بدونِ این، یک کاربر می‌توانست `x-panel-access: full` را خودش بفرستد و در
   // مسیری که ما مقدار نمی‌گذاریم، مقدارِ خودش را به پوسته برساند. (امروز چنین
@@ -114,6 +112,32 @@ export async function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   for (const h of PANEL_HEADERS) requestHeaders.delete(h);
   const pass = () => NextResponse.next({ request: { headers: requestHeaders } });
+
+  // ============================================================
+  // نشانی‌های عصرِ Express
+  // ============================================================
+  // این باید **قبل از** هر کار دیگری بیاید: نه به بک‌اند درخواست می‌زنیم و نه
+  // وارد منطقِ ورود می‌شویم — این مسیرها فقط باید به معادلِ امروزی‌شان برسند.
+  // ریدایرکت عمدی است (نه rewrite): یک نشانیِ کانونیکال می‌ماند، نه دو نسخه‌ی
+  // همان صفحه در نوار آدرس و در ایندکسِ گوگل. قطعه‌ی URL (`#products`) را خودِ
+  // مرورگر روی مقصد نگه می‌دارد، چون `Location` قطعه ندارد.
+  const legacy = legacyRedirect(pathname, request.nextUrl.search);
+  if (legacy) return NextResponse.redirect(new URL(legacy, request.url), 307);
+
+  // و هر `*.html` **دیگری** که نگاشت ندارد اصلاً وارد منطقِ ورود نمی‌شود.
+  // داستانِ این سه خط (باگِ واقعی، نه احتیاطِ نظری): مچر شاملِ `/:page.html`
+  // است و `/admin.html` هم از نظرِ رشته‌ای با `/admin` شروع می‌شود، پس در
+  // `PROTECTED_ROUTES` می‌افتاد و کاربر را به `/login?redirect=/admin.html`
+  // می‌برد. یعنی مرورگر پیامِ «رد شد، اجازه ندارید» می‌داد و یک صفحه‌ی ورود
+  // نشان می‌داد — برای نشانی‌ای که در نسخه‌ی Express عمداً ۴۰۴ است. نتیجه‌اش
+  // هم این بود که نگهبانِ `panel-retired` نمی‌توانست این تفاوت را بگیرد.
+  //
+  // `/offline.html` هم از همین خط رد می‌شود و همان چیزی است که می‌خواهیم:
+  // فایلِ واقعیِ `public/` است و باید سرو شود، نه ریدایرکت.
+  if (isLegacyHtmlPath(pathname)) return pass();
+
+  const needsAuth = PROTECTED_ROUTES.some((r) => pathname.startsWith(r));
+  const guestOnly = GUEST_ONLY_ROUTES.some((r) => pathname.startsWith(r));
 
   if (!needsAuth && !guestOnly) return pass();
 
@@ -155,6 +179,11 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    // هر `/چیزی.html` — نشانی‌های عصرِ Express. پوششِ اینجا و نه در
+    // `next.config.ts` عمدی است: یک جا، و قابلِ سنجش در Vitest.
+    // (`/offline.html` را نگاشت ریدایرکت نمی‌کند و از فایلِ واقعیِ `public/`
+    // سرو می‌شود.)
+    "/:page.html",
     "/checkout/:path*",
     "/account/:path*",
     "/admin",
