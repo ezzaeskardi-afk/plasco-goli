@@ -321,17 +321,26 @@ export function LoginForm() {
   };
 
   return (
-    <div
-      className="mx-auto max-w-[420px] rounded-[26px] overflow-hidden"
-      style={{
-        background: "var(--color-surface)",
-        boxShadow: "var(--shadow)",
-      }}
-    >
-      {/* برند */}
-      <div className="text-center pt-8 pb-4">
+    // ظاهرِ کارت (`auth-card`) از globals.css می‌آید: همان حاشیه‌ی بالای فیروزه‌ای،
+    // نوارِ درخشان، شعاعِ ۲۴ و ورودِ نرمِ نسخه‌ی Express. عمداً استایلِ درون‌خطی
+    // نداریم تا این کارت با بقیه‌ی ظاهرِ صفحه‌ی ورود یک‌جا از CSS بیاید.
+    <div className="auth-card mx-auto w-full">
+      {/* برند — نشان + نام، عیناً ساختار `div.logo` نسخه‌ی Express؛ کارتِ ورود
+          تنها جایی است که لوگو بالای فرم می‌نشیند. */}
+      <div className="mb-6 flex items-center justify-center gap-3">
+        <span className="h-12 w-12 shrink-0 overflow-hidden rounded-[14px]">
+          {/* eslint-disable-next-line @next/next/no-img-element -- نشانِ ۴۸px که از rewrite مسیر /picture سرو می‌شود */}
+          <img
+            src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jpg"
+            alt="لوگوی پلاسکو گلی"
+            width={48}
+            height={48}
+            decoding="async"
+            className="h-12 w-12 object-cover"
+          />
+        </span>
         <span
-          className="text-2xl font-extrabold"
+          className="text-xl font-extrabold"
           style={{ color: "var(--color-teal)" }}
         >
           پلاسکو گلی
@@ -353,10 +362,13 @@ export function LoginForm() {
 
       {/* مراحل */}
       <div className="flex items-center justify-center gap-2 px-6 pb-6">
+        {/* شماره‌ی مرحله با رقمِ فارسی نوشته می‌شود: در نسخه‌ی Express هم
+            `<i>۱</i>` بود. `num` عددی می‌ماند چون منطقِ فعال/گذشته با آن
+            مقایسه می‌شود؛ `fa` فقط شکلِ نمایش است. */}
         {[
-          { label: "شماره", num: 1 },
-          { label: "کد", num: 2 },
-          { label: "نام", num: 3 },
+          { label: "شماره", num: 1, fa: "۱" },
+          { label: "کد", num: 2, fa: "۲" },
+          { label: "نام", num: 3, fa: "۳" },
         ].map((s, i) => {
           const active =
             (s.num === 1 && step === "phone") ||
@@ -390,7 +402,7 @@ export function LoginForm() {
                     : "var(--color-ink-dim)",
                 }}
               >
-                {s.num}
+                {s.fa}
               </div>
               <span
                 className="text-[10px]"
@@ -424,7 +436,7 @@ export function LoginForm() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-            className="w-full rounded-full py-3 px-4 text-sm outline-none mb-4"
+            className="w-full rounded-full py-3 px-4 text-sm outline-none mb-1"
             style={{
               background: "var(--color-surface-2)",
               color: "var(--color-ink)",
@@ -433,6 +445,13 @@ export function LoginForm() {
             autoFocus
             dir="ltr"
           />
+
+          {/* راهنمایِ اینپوت — در Express زیرِ همین کادر بود (`p.field-hint`).
+              کارکردش این است که مشتری سرِ «۰۹۱۲… یا ‎۹۸۹۱۲…؟» شک نکند و
+              بداند ارقام فارسی هم پذیرفته می‌شود. */}
+          <p className="field-hint mb-4">
+            ارقام فارسی و فرمت‌هایی مثل ‎+۹۸‎ هم پذیرفته می‌شود.
+          </p>
 
           {error && (
             <p className="text-xs mb-3" style={{ color: "var(--color-coral)" }}>
@@ -652,16 +671,11 @@ export function LoginForm() {
         </form>
       )}
 
-      {/* فوتر فرم */}
-      <div className="px-6 pb-6">
-        <p className="text-[11px] text-center" style={{ color: "var(--color-ink-dim)" }}>
-          با ورود،{" "}
-          <a href="/terms" className="underline" style={{ color: "var(--color-teal)" }}>
-            قوانین و مقررات
-          </a>{" "}
-          فروشگاه را می‌پذیرید.
-        </p>
-      </div>
+      {/*
+        خطِ «قوانین و مقررات» عمداً از داخلِ کارت برداشته شد: در Express هر دو
+        خطِ حقوقی بیرونِ کارت و در `AuthShell` می‌نشستند. حالا هر دو یک‌جا
+        آن‌جاست تا دو نسخه‌ی موازی از یک متن نداشته باشیم.
+      */}
     </div>
   );
 }

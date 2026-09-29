@@ -3,6 +3,7 @@
 // ============================================================
 
 import { SITE_URL, SHOP_NAME, OG_IMAGE } from "@/lib/site";
+import { HOME_FAQ, type FaqItem } from "@/lib/faq";
 
 /* ---------- Store (صفحه اصلی) ---------- */
 export function StoreJsonLd() {
@@ -56,36 +57,19 @@ export function WebSiteJsonLd() {
 }
 
 /* ---------- FAQPage (صفحه اصلی) ---------- */
-export function FAQPageJsonLd() {
+// ⚠️ از `HOME_FAQ` می‌خواند و نه از یک آرایه‌ی دستی — دلیلش در lib/faq.ts:
+// علامت‌گذاریِ FAQ که روی صفحه **دیده نمی‌شود** نقضِ صریحِ راهنمای گوگل است و
+// می‌تواند جریمه‌ی اسپم بیاورد. تا امروز همین اتفاق افتاده بود: Next داده‌ی
+// ساختاریافته‌ی FAQ داشت ولی بخشِ سوالاتِ متداول را نداشت.
+export function FAQPageJsonLd({ items = HOME_FAQ }: { items?: FaqItem[] } = {}) {
   const ld = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: [
-      {
-        "@type": "Question",
-        name: "چطور سفارش بدم؟",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "محصول را به سبد اضافه کنید، با شماره موبایل وارد شوید، آدرس تحویل بدهید و پرداخت کنید.",
-        },
-      },
-      {
-        "@type": "Question",
-        name: "هزینه ارسال چقدر است؟",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "ارسال به سراسر کشور. برای سفارش‌های بالای ۳ میلیون تومان رایگان است.",
-        },
-      },
-      {
-        "@type": "Question",
-        name: "آیا محصولات ضمانت دارند؟",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "بله، تمام محصولات پلاسکو گلی ضمانت اصل بودن دارند.",
-        },
-      },
-    ],
+    mainEntity: items.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: { "@type": "Answer", text: item.answer },
+    })),
   };
   return (
     <script

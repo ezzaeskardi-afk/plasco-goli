@@ -36,7 +36,8 @@ export async function ProductReviews({ productId }: { productId: number }) {
 
   return (
     // id لازم است: امتیازِ بالای صفحه‌ی محصول به #reviews لینک می‌دهد.
-    <section id="reviews" className="mt-16 scroll-mt-24">
+    // `data-reveal` — همتای `#pdReviews` در product.html.
+    <section id="reviews" data-reveal="" className="mt-16 scroll-mt-24">
       <h2 className="text-xl font-extrabold mb-6" style={{ color: "var(--color-ink)" }}>
         دیدگاه خریداران
       </h2>
