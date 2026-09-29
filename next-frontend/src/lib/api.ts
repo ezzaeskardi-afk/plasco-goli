@@ -25,33 +25,111 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+
+  /** خطای شبکه (نرسیدن به سرور) — نه خطای منطقیِ سرور. */
+  network = false;
+  /** مهلت تمام شد (AbortController)، نه قطعیِ واقعیِ اینترنت. */
+  timeout = false;
+  /** مرورگر می‌گوید آفلاین هستیم. */
+  offline = false;
+  /**
+   * کدِ پیگیریِ خطای سرور (فقط ۵xx). Express روی خطاهای واقعیِ سرور یک `ref`
+   * می‌گذارد و اینجا هم نگه داشته می‌شود: مشتری که زنگ می‌زند همان کد را
+   * می‌گوید و مستقیم به یک خطِ لاگ می‌رسیم، نه بین صدها درخواستِ آن دقیقه.
+   */
+  ref: string | null = null;
+}
+
+// سقفِ انتظار برای پاسخ سرور — هم‌عدلِ `NET_TIMEOUT` در common.js نسخه‌ی
+// Express (۲۰ ثانیه). بدونِ این، روی موبایلِ ایران درخواست می‌تواند دقیقه‌ها
+// معلق بماند: دکمه قفل، اسپینر می‌چرخد و مشتری فقط صفحه را می‌بندد.
+const NET_TIMEOUT = 20000;
+
+/**
+ * پیامِ فارسیِ خطای شبکه.
+ *
+ * چرا لازم است: وقتی `fetch` به سرور نمی‌رسد، مرورگر «Failed to fetch»
+ * (سافاری: «Load failed») پرت می‌کند و همان رشته‌ی انگلیسی مستقیم در پیامِ
+ * سایت به مشتری نشان داده می‌شد. پیام باید بگوید چه کاری از دستِ *مشتری*
+ * برمی‌آید، نه اینکه چه شد. همتای `api()` در `frontend/js/common.js`.
+ */
+function networkMessage(err: unknown): string {
+  const aborted = err instanceof Error && err.name === "AbortError";
+  const offline =
+    typeof navigator !== "undefined" && navigator.onLine === false;
+  if (aborted) return "پاسخ سرور خیلی طول کشید. اینترنتت را چک کن و دوباره بزن.";
+  if (offline) return "اینترنت وصل نیست. وصل شو و دوباره امتحان کن.";
+  return "ارتباط با سرور برقرار نشد. چند لحظه بعد دوباره امتحان کن.";
+}
+
+/**
+ * پیامِ پیش‌فرضِ پاسخِ بی‌بدنه (۵۰۲ از nginx، صفحه‌ی خطای پروکسی، بدنه‌ی
+ * خراب). «خطای سرور» به مشتری نمی‌گفت مشکل از کجاست و چه کاری از دستش
+ * برمی‌آید — و همین جمله روی هر دکمه‌ای می‌نشست.
+ */
+function statusMessage(status: number): string {
+  if (status === 401) return "برای این کار باید وارد حساب شوید.";
+  if (status === 403) return "اجازه‌ی این کار را ندارید.";
+  if (status === 404) return "این مورد پیدا نشد؛ شاید حذف شده باشد.";
+  if (status === 413) return "حجم فایل بیش از حد مجاز است.";
+  if (status === 429)
+    return "تعداد درخواست زیاد شد؛ یک دقیقه صبر کنید و دوباره بزنید.";
+  if (status >= 500)
+    return "مشکلی سمت سرور پیش آمد. چند لحظه بعد دوباره امتحان کنید.";
+  return "درخواست انجام نشد؛ دوباره امتحان کنید.";
 }
 
 async function fetcher<T>(
   path: string,
   options: FetchOptions = {},
 ): Promise<T> {
-  const { timeout = 15000, ...init } = options;
+  const { timeout = NET_TIMEOUT, ...init } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
     const url = `${apiBase()}${path}`;
-    const res = await fetch(url, {
-      ...init,
-      // نشستِ Express روی کوکیِ polasco.sid است. بدونِ این، سبد و ورود و
-      // سفارش‌ها هر بار کاربرِ ناشناس می‌بینند.
-      credentials: "include",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        ...init.headers,
-      },
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        ...init,
+        // نشستِ Express روی کوکیِ polasco.sid است. بدونِ این، سبد و ورود و
+        // سفارش‌ها هر بار کاربرِ ناشناس می‌بینند.
+        credentials: "include",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...init.headers,
+        },
+      });
+    } catch (err) {
+      // خطای شبکه `ApiError` نیست؛ به شکلِ هم‌خانواده‌اش درمی‌آید تا مصرف‌کننده
+      // فقط یک نوع خطا بشناسد (همان کاری که نسخه‌ی Express می‌کند).
+      const e = new ApiError(0, networkMessage(err));
+      e.network = true;
+      e.timeout = err instanceof Error && err.name === "AbortError";
+      e.offline =
+        typeof navigator !== "undefined" && navigator.onLine === false;
+      throw e;
+    }
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new ApiError(res.status, err.error || "خطای سرور", err.reason);
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        ref?: string;
+        reason?: string;
+      };
+      const err = new ApiError(
+        res.status,
+        data.error || statusMessage(res.status),
+        data.reason,
+      );
+      // خطای واقعیِ سرور (نه ایرادِ ورودیِ کاربر) کدِ پیگیری دارد.
+      if (res.status >= 500 && data.ref) {
+        err.ref = data.ref;
+        err.message += `\n(کد پیگیری: ${data.ref})`;
+      }
+      throw err;
     }
 
     return res.json();
