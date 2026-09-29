@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 
 // ============================================================
 // محصولِ حذف‌شده — متن از frontend/product-gone.html
@@ -34,6 +35,34 @@ export default function ProductGone() {
           boxShadow: "var(--shadow-sm)",
         }}
       >
+        {/* لوگویِ بالای صفحه و آیکون‌های دکمه‌ها از `product-gone.html`
+            می‌آیند: آن‌جا لوگو به خانه لینک بود و دکمه‌ها آیکونِ سبد و خانه
+            داشتند. لوگو تنها لینکِ *همیشه‌آشنا*ی صفحه است برای کسی که با
+            کلیک روی یک محصولِ حذف‌شده به این‌جا افتاده. */}
+        <Link
+          href="/"
+          className="flex items-center justify-center gap-3 mb-6"
+          aria-label="پلاسکو گلی — صفحه اصلی"
+        >
+          <span className="h-12 w-12 shrink-0 overflow-hidden rounded-[14px]">
+            {/* eslint-disable-next-line @next/next/no-img-element -- نشانِ ۴۸px که از rewrite مسیر /picture سرو می‌شود */}
+            <img
+              src="/picture/logo/aa0b989f259f92d1240eb20d51846643.jpg"
+              alt="لوگوی پلاسکو گلی"
+              width={48}
+              height={48}
+              decoding="async"
+              className="h-12 w-12 object-cover"
+            />
+          </span>
+          <span
+            className="text-lg font-extrabold"
+            style={{ color: "var(--color-teal)" }}
+          >
+            پلاسکو گلی
+          </span>
+        </Link>
+
         <div
           className="w-16 h-16 rounded-full mx-auto mb-5 grid place-items-center"
           style={{
@@ -42,20 +71,7 @@ export default function ProductGone() {
           }}
           aria-hidden="true"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--color-teal)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-8 h-8"
-          >
-            <path d="M16.5 9.4 7.5 4.21" />
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-            <line x1="12" y1="22.08" x2="12" y2="12" />
-          </svg>
+          <Icon name="package" size={32} className="text-teal" />
         </div>
 
         <h1
@@ -75,20 +91,22 @@ export default function ProductGone() {
         <div className="flex flex-wrap gap-2.5 justify-center mt-7">
           <Link
             href="/products"
-            className="rounded-full px-5 py-2.5 text-sm font-bold transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold transition-opacity hover:opacity-90"
             style={{ background: "var(--color-teal)", color: "#04211B" }}
           >
+            <Icon name="cart" size={17} />
             مشاهده‌ی محصولات
           </Link>
           <Link
             href="/"
-            className="rounded-full px-5 py-2.5 text-sm font-bold transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold transition-opacity hover:opacity-90"
             style={{
               background: "transparent",
               color: "var(--color-ink)",
               border: "1px solid var(--color-line-strong)",
             }}
           >
+            <Icon name="home" size={17} />
             صفحه‌ی اصلی
           </Link>
         </div>

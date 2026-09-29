@@ -4,7 +4,11 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "سبد خرید",
-  robots: { index: false },
+  // توضیحِ صفحه و robots عیناً مثلِ `frontend/cart.html`: صفحه‌ی noindex باز هم
+  // توضیح می‌خواهد، چون اگر لینکش جایی به اشتراک گذاشته شود، پیش‌نمایشِ لینک
+  // (تلگرام/واتساپ) از همین متن ساخته می‌شود.
+  description: "مرور و ویرایش سبد خرید شما در فروشگاه پلاسکو گلی.",
+  robots: { index: false, follow: true },
 };
 
 export default function CartPage() {

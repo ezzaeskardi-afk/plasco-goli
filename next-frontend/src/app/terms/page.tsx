@@ -7,13 +7,15 @@ import { WebPageJsonLd } from "@/components/JsonLd";
 
 export const metadata: Metadata = {
   title: "قوانین و راهنمای خرید",
+  // متنِ توضیح عیناً از `terms.html` گرفته شده (کلمه‌به‌کلمه) تا اگر دو
+  // فرانت‌اند روی یک دامنه دیده شوند، گوگل دو متنِ متفاوت برای یک صفحه نبیند.
   description:
-    "قوانین خرید و پرداخت، رویه‌ی ارسال، شرایط لغو و مرجوعی، و حریم خصوصی در فروشگاه پلاسکو گلی.",
+    "قوانین خرید، رویه‌ی ارسال، شرایط لغو و مرجوعی ۷ روزه و حریم خصوصی فروشگاه پلاسکو گلی.",
   alternates: { canonical: "/terms" },
   openGraph: {
     title: "قوانین و راهنمای خرید | پلاسکو گلی",
     description:
-      "قوانین خرید و پرداخت، رویه‌ی ارسال، شرایط لغو و مرجوعی، و حریم خصوصی.",
+      "قوانین خرید، رویه‌ی ارسال، شرایط لغو و مرجوعی ۷ روزه و حریم خصوصی.",
   },
 };
 
@@ -102,7 +104,10 @@ export default function TermsPage() {
 
         <div className="flex flex-col gap-8">
           {SECTIONS.map((s) => (
-            <section key={s.id} id={s.id} className="scroll-mt-24">
+            // `data-reveal` — همتای همان نشانه روی پنج کارتِ terms.html.
+            // اینجا محتوا کاملاً سمتِ سرور رندر می‌شود، پس المان هیچ‌وقت خالی
+            // و بی‌ارتفاع نیست و ناظرِ ScrollFx واقعاً می‌بیندش.
+            <section key={s.id} id={s.id} data-reveal="" className="scroll-mt-24">
               <h2 className="text-lg font-extrabold text-ink mb-3">
                 {s.title}
               </h2>

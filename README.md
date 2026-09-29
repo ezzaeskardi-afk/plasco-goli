@@ -9,7 +9,7 @@
 
 فروشگاه فارسی محصولات پلاستیکی با Next.js (App Router) و backend مبتنی بر Node.js و Express. مشتری محصول را به سبد اضافه می‌کند، با شماره موبایل وارد می‌شود، آدرس تحویل می‌دهد، سفارش ثبت می‌کند و وضعیت سفارش را از حساب کاربری یا صفحه‌ی پیگیری می‌بیند.
 
-> وضعیت فعلی: **۱۱۶۴ تست خودکار، همه سبز** — ۷۳۹ دود + ۸۵ سئو + ۴۷ OWASP + ۴۵ امنیت + ۳۷ تخفیف + ۱۸ یکپارچگیِ گزارشِ بنچمارک + ۱۴ همترازیِ پنجره‌ی صبر + ۳۵ پنجره‌ی ارسال مجدد + ۴ نگهبانِ پنلِ بازنشسته + ۴۲ بررسیِ راستیِ عددهای README + ۹۸ آزمونِ فرانت‌اند (به‌علاوه‌ی نگهبانِ مرزِ راز که شمارش‌پذیر نیست). فرانت‌اند Next.js برابری کامل با Express برای فروشگاه مشتری دارد، صفحه‌ی نتیجه‌ی سفارش خودش وضعیت پرداخت را پیگیری می‌کند، و **هر ۱۳ نمای پنل ادمین** در Next.js است — پنلِ قدیمیِ Express (`frontend/admin.html`) حذف شد و آن مسیر حالا ۴۰۴ می‌دهد.
+> وضعیت فعلی: **۱۲۹۹ تست خودکار، همه سبز** — ۷۳۹ دود + ۸۵ سئو + ۴۷ OWASP + ۴۵ امنیت + ۳۷ تخفیف + ۱۸ یکپارچگیِ گزارشِ بنچمارک + ۱۴ همترازیِ پنجره‌ی صبر + ۳۵ پنجره‌ی ارسال مجدد + ۴ نگهبانِ پنلِ بازنشسته + ۴۲ بررسیِ راستیِ عددهای README + ۲۳۳ آزمونِ فرانت‌اند (به‌علاوه‌ی نگهبانِ مرزِ راز که شمارش‌پذیر نیست). فرانت‌اند Next.js برابری کامل با Express برای فروشگاه مشتری دارد، صفحه‌ی نتیجه‌ی سفارش خودش وضعیت پرداخت را پیگیری می‌کند، و **هر ۱۳ نمای پنل ادمین** در Next.js است — پنلِ قدیمیِ Express (`frontend/admin.html`) حذف شد و آن مسیر حالا ۴۰۴ می‌دهد.
 
 ## وضعیت فنی فعلی
 
@@ -17,7 +17,7 @@
 - **Next.js 15.5** با App Router، React 19، TanStack Query 5، Tailwind v4 — آزمونِ فرانت‌اند با Vitest 5 + jsdom
 - **۱۵۵ تابع** در `db.js` (۲,۹۷۵ خط) — ۲۵ فایل کتابخانه + ۹ مسیر API + ۷ ابزار مدیریتی
 - پنل ادمین: **۱۳ نما از ۱۳** در Next.js — پنلِ Express حذف شد؛ یک‌منبعِ حقیقت در `next-frontend/src/lib/adminSections.ts`
-- تست: دود **۷۳۹** | سئو **۸۵** | OWASP **۴۷** | امنیت **۴۵** | تخفیف **۳۷** | یکپارچگیِ بنچمارک **۱۸** | همترازیِ پنجره‌ی صبر **۱۴** | پنجره‌ی ارسال مجدد **۳۵** | پنلِ بازنشسته **۴** | عددهای README **۴۲** | فرانت‌اند (Vitest) **۹۸** = **۱۱۶۴**
+- تست: دود **۷۳۹** | سئو **۸۵** | OWASP **۴۷** | امنیت **۴۵** | تخفیف **۳۷** | یکپارچگیِ بنچمارک **۱۸** | همترازیِ پنجره‌ی صبر **۱۴** | پنجره‌ی ارسال مجدد **۳۵** | پنلِ بازنشسته **۴** | عددهای README **۴۲** | فرانت‌اند (Vitest) **۲۳۳** = **۱۲۹۹**
 - بنچمارک: **۱۰,۰۰۰ کاربر همزمان — ۱۰۰٪ موفق، صفر خطا**
 - شاخهٔ اصلی: `main` (تنها شاخه — بدون شاخه‌ی جانبی)
 
@@ -133,12 +133,12 @@ npm run test:secrets                  # نگهبانِ مرزِ راز (بی‌�
 
 ```bash
 cd next-frontend
-npm test           # ۹۸ آزمونِ فرانت‌اند — ۲۰ تایش رفتارِ صفحه‌ی نتیجه‌ی سفارش
+npm test           # ۲۳۳ آزمونِ فرانت‌اند — ۲۰ تایش رفتارِ صفحه‌ی نتیجه‌ی سفارش
 npm run test:watch # حالتِ watch
 npm run test:readme-counts # عددهای README را با نتیجه‌ی واقعیِ اجرا می‌سنجد (خودش vitest را اجرا می‌کند)
 ```
 
-> میانِ این ۹۸ آزمون، هشت‌تای نخستِ صفحه‌ی نتیجه‌ی سفارش تنها چیزی در پروژه‌اند که
+> میانِ این ۲۳۳ آزمون، هشت‌تای نخستِ صفحه‌ی نتیجه‌ی سفارش تنها چیزی در پروژه‌اند که
 > رفتارِ **زمان‌محور** را می‌سنجند: ریتمِ ۱۵/۶۰ ثانیه‌ای و سقفِ ۴۷ بررسیِ همان صفحه را. نه typecheck می‌فهمد اگر آن
 > اعداد عوض شوند و نه lint — و شکستنِ این حلقه یعنی مشتریِ پول‌داده تا ابد منتظر
 > مانده یا سرور بی‌دلیل درخواست می‌گیرد. با تایمرِ جعلی همان اعدادِ production
@@ -405,7 +405,7 @@ polasco-goli/
 │       │   ├── products/      ← فهرست محصولات
 │       │   ├── product/[id]/  ← صفحه محصول (گالری + wholesale + «دیگر موجود نیست»)
 │       │   ├── cart/          ← سبد خرید (undo toast)
-│       │   ├── login/         ← ورود (cooldown پایدار + 429)
+│       │   ├── login/         ← ورود (پوسته‌ی تمام‌صفحه + cooldown پایدار + 429)
 │       │   ├── checkout/      ← پرداخت (closed-shop guard + edit address)
 │       │   ├── account/       ← حساب کاربری (۳ تب)
 │       │   ├── wholesale/     ← خرید عمده
@@ -414,19 +414,34 @@ polasco-goli/
 │       │   └── admin/         ← ۱۳ نمای پنل: داشبورد، سفارش‌ها، انبار، مشتری‌ها،
 │       │                        CRM، نظرات، تخفیف‌ها، عمده‌فروشی، گزارش‌ها،
 │       │                        تنظیمات، رویدادها، خطاها، وضعیت سیستم
-│       │   ├── internalLinks.test.ts ← ۵ آزمونِ پیوندهای داخلی و مسیرهای ثابتِ Next
-│       ├── components/        ← ۲۳ کامپوننت + ۳ آزمون + ۳ کامپوننتِ صفحه اصلی + ۱۳ فایلِ محتوای پنل
+│       │   ├── internalLinks.test.ts ← ۷ آزمونِ پیوندهای داخلی و مسیرهای ثابتِ Next
+│       │   ├── shellParity.test.ts  ← ۱۰ آزمونِ برابریِ پوسته با نسخه‌ی Express (منو، دراور، پاورقی، لنگرها، پوسته‌ی ورود)
+│       │   ├── faqParity.test.ts    ← ۴ آزمونِ هم‌خوانیِ سوالاتِ متداول با داده‌ی ساختاریافته
+│       │   ├── seoParity.test.ts    ← ۱۶ آزمونِ برابریِ متادیتا/سئوی صفحه‌ها با نسخه‌ی Express (عنوان، توضیح، robots، کانونیکال)
+│       ├── components/        ← ۳۳ کامپوننت + ۹ آزمون + ۳ کامپوننتِ صفحه اصلی + ۱۳ فایلِ محتوای پنل
 │       │   ├── Header.tsx / Footer.tsx / AdminNav.tsx / Toast.tsx
 │       │   ├── ProductCard.tsx / ProductDetail.tsx / ProductReviews.tsx / StarRow.tsx
 │       │   ├── AccountContent.tsx / CartContent.tsx / CheckoutContent.tsx / CrmContent.tsx
 │       │   ├── LoginForm.tsx / FilterBar.tsx / NotifyMeButton.tsx / WholesaleForm.tsx
 │       │   ├── ReviewForm.tsx / Providers.tsx / JsonLd.tsx / ServiceWorkerRegistrar.tsx
+│       │   ├── ScrollFx.tsx / BottomNav.tsx / WelcomePrompt.tsx / AnnouncementBar.tsx
+│       │   │                  ← پوسته‌های سراسریِ همتای `common.js` نسخه‌ی Express
+│       │   ├── AuthShell.tsx / HideOnStandalone.tsx
+│       │   │                  ← پوسته‌ی تمام‌صفحه‌ی ورود و پنهان‌کردنِ هدر/پاورقی در آن مسیر
+│       │   ├── MobileDrawer.tsx / Icon.tsx / IconSprite.tsx / FooterYear.tsx
+│       │   │                  ← منوی موبایل، آیکون‌ها و سالِ پویای پاورقی
 │       │   ├── OrderSuccessContent.tsx      ← حلقه‌ی پیگیریِ نتیجه‌ی پرداخت
 │       │   ├── OrderSuccessContent.test.tsx ← ۲۰ آزمونِ رفتارِ همین صفحه
 │       │   ├── InvoiceSheet.tsx             ← چاپِ فاکتورِ مشترکِ حساب کاربری و پنل
 │       │   ├── StallNotice.tsx              ← هشدارِ گیرِ بارگذاری (پیامِ HTML، بی‌نیاز به JS)
 │       │   ├── LoginForm.test.tsx           ← ۸ آزمونِ ورود (cooldown، ۴۲۹، ارسال مجدد)
+│       │   ├── AuthShell.test.tsx           ← ۷ آزمونِ پوسته‌ی ورود (آیکون‌ها، ستونِ معرفی، اعتماد، لینک‌ها)
 │       │   ├── StallNotice.test.tsx         ← ۵ آزمونِ هشدارِ بارگذاری
+│       │   ├── AnnouncementBar.test.tsx     ← ۱۳ آزمونِ نوارِ اطلاعیه‌ی سراسری
+│       │   ├── BottomNav.test.tsx           ← ۱۷ آزمونِ ناوبریِ پایینِ موبایل
+│       │   ├── ScrollFx.test.tsx             ← ۸ آزمونِ جلوه‌های اسکرول (نمایان‌شدن + بازگشت به بالا)
+│       │   ├── WelcomePrompt.test.tsx        ← ۱۱ آزمونِ کادرِ خوش‌آمد
+│       │   ├── MobileDrawer.test.tsx         ← ۱۲ آزمونِ منوی کشوییِ موبایل
 │       │   ├── admin/         ← محتوای ۱۳ نمای پنل + AdminBits (اجزای مشترک + toUtc) + NoAccess
 │       │   ├── admin/ProductEditor.tsx ← ویرایشگرِ کالا (دسته، ویژگی‌ها، آپلودِ عکس)
 │       │   ├── admin/ProductEditor.test.tsx ← ۱۰ آزمونِ همان ویرایشگر
@@ -438,12 +453,19 @@ polasco-goli/
 │           ├── productForm.test.ts  ← ۲۷ آزمونِ اعتبارسنجیِ فرمِ کالا
 │           ├── productBulk.test.ts  ← ۱۱ آزمونِ عملیاتِ گروهی
 │           ├── adminApi.test.ts     ← ۱۲ آزمونِ لایهٔ API پنل و مدیریتِ خطا
+│           ├── legacyUrls.test.ts   ← ۱۱ آزمونِ نشانی‌های عصرِ Express (‏`/products.html` ← `/products`)
+│           ├── productQuery.test.ts ← ۱۰ آزمونِ کلیدهای کوئریِ عصرِ Express (‏`cat`/`min`/`max`/`inStock`)
+│           ├── welcome.test.ts      ← ۹ آزمونِ منطقِ کادرِ خوش‌آمد (کی، کجا، با کدام شرط)
+│           ├── jalaliYear.test.ts   ← ۵ آزمونِ سالِ پویای پاورقی (هیچ‌وقت عقب نماند)
 │           ├── navigation.ts  ← ناوبریِ کاملِ جبرانی (جایگزینِ گیرِ بی‌پایان)
 │           ├── types.ts       ← تایپ‌ها (Product, Order, Wishlist, WholesaleInfo, …)
 │           ├── actions.ts     ← Server Actions
 │           ├── site.ts        ← مبدأِ API و آدرسِ سایت (apiBase)
 │           ├── faSearch.ts    ← نرمال‌سازیِ جستجوی فارسی
 │           ├── couponState.ts / recent.ts / redirect.ts
+│           ├── legacyUrls.ts / productQuery.ts ← پلِ نشانی‌ها و کوئری‌های عصرِ Express
+│           ├── welcome.ts / scrollFx.ts / useScrollPast.ts ← منطقِ خالصِ پوسته‌های سراسری
+│           ├── faq.ts / jalaliYear.ts ← سوالاتِ متداول (منبعِ مشترکِ صفحه و JSON-LD) و سالِ شمسی
 │           └── useWishlist.ts / useAddToCart.ts / useShopInfo.ts
 └── picture/                   ← عکس محصولات — بیرونِ frontend
     ├── logo/

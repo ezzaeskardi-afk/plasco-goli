@@ -5,6 +5,10 @@ import { getProducts, getFacets } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
 import { FilterBar } from "@/components/FilterBar";
 import { CollectionPageJsonLd } from "@/components/JsonLd";
+import {
+  normalizeListingQuery,
+  canonicalListingQuery,
+} from "@/lib/productQuery";
 import type { Product } from "@/lib/types";
 
 // ============================================================
@@ -26,17 +30,19 @@ interface ProductsPageProps {
 // SSR — داده‌ها از Express API
 // ============================================================
 async function getProductsData(searchParams: ProductsPageProps["searchParams"]) {
-  const params = await searchParams;
+  // کلیدهای عصرِ Express (`cat`/`min`/`max`/`inStock`) هم اینجا خوانده
+  // می‌شوند، وگرنه فیلترِ یک نشانیِ قدیمی بی‌صدا گم می‌شد.
+  const lp = normalizeListingQuery(await searchParams);
 
   const [productsRes, facets] = await Promise.all([
     getProducts({
-      page: params.page ? Number(params.page) : 1,
-      sort: params.sort,
-      category: params.category,
-      minPrice: params.minPrice ? Number(params.minPrice) : undefined,
-      maxPrice: params.maxPrice ? Number(params.maxPrice) : undefined,
-      inStockOnly: params.inStockOnly === "1",
-      search: params.q,
+      page: lp.page,
+      sort: lp.sort,
+      category: lp.category,
+      minPrice: lp.minPrice,
+      maxPrice: lp.maxPrice,
+      inStockOnly: lp.inStockOnly,
+      search: lp.q,
     }).catch(() => null),
     getFacets().catch(() => null),
   ]);
@@ -60,18 +66,38 @@ function toFa(n: number): string {
 export async function generateMetadata({
   searchParams,
 }: ProductsPageProps): Promise<Metadata> {
-  const params = await searchParams;
+  const lp = normalizeListingQuery(await searchParams);
+  // `sort !== "newest"` هم بخشی از شرط است چون در Express هم بود
+  // (`products.js:96`): مرتب‌سازیِ غیرِ‌پیش‌فرض صفحه را به یک نمایِ گذرا
+  // تبدیل می‌کند و ارزشِ ایندکس‌شدن ندارد.
   const deepFilter = Boolean(
-    params.q || params.minPrice || params.maxPrice || params.inStockOnly,
+    lp.q ||
+      lp.minPrice !== undefined ||
+      lp.maxPrice !== undefined ||
+      lp.inStockOnly ||
+      (lp.sort && lp.sort !== "newest"),
   );
 
-  const sp = new URLSearchParams();
-  if (params.category) sp.set("category", params.category);
-  if (params.page && params.page !== "1") sp.set("page", params.page);
-  const canonical = sp.toString() ? `/products?${sp.toString()}` : "/products";
+  // کانونیکال همیشه با کلیدهای امروزی ساخته می‌شود، حتی وقتی کاربر با یک
+  // نشانیِ قدیمی آمده — وگرنه گوگل دو نسخهٔ همان صفحه را ایندکس می‌کرد.
+  const qs = canonicalListingQuery(lp);
+  const canonical = qs ? `/products?${qs}` : "/products";
+
+  // عنوان دقیقاً مثلِ `products.js:306` ساخته می‌شود:
+  //
+  //     `${S.cat || 'همه‌ی محصولات'}${meta.pages > 1 ? ` — صفحه ${meta.page}` : ''}`
+  //
+  // یعنی برای دسته، صرفاً نامِ دسته (بدونِ «— محصولات») و برای صفحه‌ی دوم به
+  // بعد، پسوندِ «— صفحه ۲». بدونِ این پسوند، صفحه‌ی ۲ و ۳ همان عنوانِ صفحه‌ی ۱
+  // را می‌گرفتند و گوگل آن‌ها را محتوای تکراری می‌دید.
+  const base = lp.category || "همه‌ی محصولات";
+  const title =
+    lp.page > 1 ? `${base} — صفحه ${lp.page}` : base;
 
   return {
-    title: params.category ? `${params.category} — محصولات` : "محصولات",
+    title,
+    description:
+      "فهرست کامل محصولات پلاسکو گلی؛ ظروف نگهداری، لوازم آشپزخانه، سبد، صندلی، تشت و لوازم نظافت. فیلتر بر اساس دسته، قیمت و موجودی.",
     alternates: { canonical },
     ...(deepFilter ? { robots: { index: false, follow: true } } : {}),
   };
@@ -239,7 +265,17 @@ function Pagination({
 // ============================================================
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
   const { productsRes, facets } = await getProductsData(searchParams);
-  const params = await searchParams;
+  const lp = normalizeListingQuery(await searchParams);
+
+  // رکوردِ کانونیکالِ فیلترهای فعال — هم چیپ‌ها و هم صفحه‌بندی از همین
+  // ساخته می‌شوند، تا هر لینکی که خودِ سایت می‌سازد کلیدهای امروزی داشته باشد.
+  const current: Record<string, string> = {};
+  if (lp.q) current.q = lp.q;
+  if (lp.sort) current.sort = lp.sort;
+  if (lp.category) current.category = lp.category;
+  if (lp.minPrice !== undefined) current.minPrice = String(lp.minPrice);
+  if (lp.maxPrice !== undefined) current.maxPrice = String(lp.maxPrice);
+  if (lp.inStockOnly) current.inStockOnly = "1";
 
   const products: Product[] = productsRes?.products || [];
   const meta = productsRes?.meta;
@@ -268,7 +304,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-extrabold text-ink">
-              {params.category || "محصولات"}
+              {lp.category || "محصولات"}
             </h1>
             {total > 0 && (
               <p className="text-xs text-ink-dim mt-1">
@@ -278,7 +314,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
             )}
           </div>
           <div className="w-full md:w-72">
-            <SearchBar defaultValue={params.q} />
+            <SearchBar defaultValue={lp.q} />
           </div>
         </div>
 
@@ -302,20 +338,20 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
 
         {/* چیپ‌های فیلترِ فعال — هر کدام با یک کلیک برداشته می‌شوند
             (همتای products.js:296) */}
-        {(params.q || params.category || params.minPrice || params.maxPrice || params.inStockOnly) && (
+        {Object.keys(current).some((k) => k !== "sort") && (
           <div className="flex flex-wrap gap-1.5 mb-4">
-            {params.q && <FilterChip label={`جستجو: ${params.q}`} removeKey="q" current={params} />}
-            {params.category && (
-              <FilterChip label={params.category} removeKey="category" current={params} />
+            {lp.q && <FilterChip label={`جستجو: ${lp.q}`} removeKey="q" current={current} />}
+            {lp.category && (
+              <FilterChip label={lp.category} removeKey="category" current={current} />
             )}
-            {params.minPrice && (
-              <FilterChip label={`از ${toFa(Number(params.minPrice))} تومان`} removeKey="minPrice" current={params} />
+            {lp.minPrice !== undefined && (
+              <FilterChip label={`از ${toFa(lp.minPrice)} تومان`} removeKey="minPrice" current={current} />
             )}
-            {params.maxPrice && (
-              <FilterChip label={`تا ${toFa(Number(params.maxPrice))} تومان`} removeKey="maxPrice" current={params} />
+            {lp.maxPrice !== undefined && (
+              <FilterChip label={`تا ${toFa(lp.maxPrice)} تومان`} removeKey="maxPrice" current={current} />
             )}
-            {params.inStockOnly === "1" && (
-              <FilterChip label="فقط موجود" removeKey="inStockOnly" current={params} />
+            {lp.inStockOnly && (
+              <FilterChip label="فقط موجود" removeKey="inStockOnly" current={current} />
             )}
           </div>
         )}
@@ -324,11 +360,11 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         <div className="mb-6">
           <Suspense fallback={<FilterBarFallback />}>
             <FilterBar
-              currentSort={params.sort}
-              currentCategory={params.category}
-              currentInStockOnly={params.inStockOnly === "1"}
-              currentMinPrice={params.minPrice ? Number(params.minPrice) : undefined}
-              currentMaxPrice={params.maxPrice ? Number(params.maxPrice) : undefined}
+              currentSort={lp.sort}
+              currentCategory={lp.category}
+              currentInStockOnly={lp.inStockOnly}
+              currentMinPrice={lp.minPrice}
+              currentMaxPrice={lp.maxPrice}
               categories={categories}
               minPrice={facets?.minPrice}
               maxPrice={facets?.maxPrice}
@@ -361,7 +397,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         <Pagination
           page={page}
           totalPages={totalPages}
-          searchParams={params as Record<string, string>}
+          searchParams={current}
         />
       </div>
     </>

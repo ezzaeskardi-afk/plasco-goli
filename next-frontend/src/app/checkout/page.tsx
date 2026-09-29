@@ -4,7 +4,8 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "تکمیل خرید",
-  robots: { index: false },
+  description: "آدرس تحویل رو وارد کنید و سفارش‌تون رو نهایی کنید.",
+  robots: { index: false, follow: true },
 };
 
 export default function CheckoutPage() {

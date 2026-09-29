@@ -210,15 +210,38 @@ export function useInvoicePrint() {
   useEffect(() => {
     if (!printing) return;
     document.documentElement.classList.add("printing-invoice");
+
+    // عنوانِ صفحه هم عوض می‌شود، نه فقط کلاسِ چاپ.
+    //
+    // چرا: عنوانِ صفحه نامِ پیش‌فرضِ فایل PDF است. بدونِ این خط، مشتری‌ای که
+    // سه فاکتور ذخیره می‌کند سه فایلِ هم‌نام می‌گیرد («حساب کاربری من | پلاسکو
+    // گلی») و بین‌شان گم می‌شود. نسخه‌ی Express دقیقاً همین کار را می‌کرد
+    // (`account.js:678`):
+    //
+    //     document.title = `فاکتور سفارش ${PG.num(order.id)} — ${shopName}`
+    //
+    // عدد با ارقامِ فارسی مثلِ `PG.num` نوشته می‌شود (`useGrouping: false`)،
+    // وگرنه شماره‌ی سفارشِ ۱۲۳۴ به شکلِ «1,234» چاپ می‌شد.
+    const prevTitle = document.title;
+    const orderNo = Number(printing.order.id || 0).toLocaleString("fa-IR", {
+      useGrouping: false,
+    });
+    document.title = `فاکتور سفارش ${orderNo} — ${printing.shop.shopName}`;
+
     // صبر برای رندرِ portal قبل از دیالوگِ چاپ
     timer.current = setTimeout(() => {
       window.print();
       document.documentElement.classList.remove("printing-invoice");
+      document.title = prevTitle;
       setPrinting(null);
     }, 60);
     return () => {
       if (timer.current) clearTimeout(timer.current);
       document.documentElement.classList.remove("printing-invoice");
+      // بازگردانیِ عنوان در هر مسیرِ خروج — وگرنه اگر کاربر دیالوگِ چاپ را
+      // لغو کند یا کامپوننت قبل از تایمر unmount شود، تب تا ابد نامِ فاکتور
+      // را نگه می‌دارد و عنوانِ واقعیِ صفحه گم می‌شود.
+      document.title = prevTitle;
     };
   }, [printing]);
 

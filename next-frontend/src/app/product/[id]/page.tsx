@@ -46,13 +46,34 @@ export async function generateMetadata({
 }: ProductPageProps): Promise<Metadata> {
   const { id } = await params;
   const numId = Number(id);
-  if (isNaN(numId)) return { title: "محصول پیدا نشد" };
+
+  // آدرسِ خالی‌از‌عدد (`/product/abc`) هم باید noindex باشد. قبلاً این شاخه
+  // `robots` نداشت و ارثاً **index, follow** می‌گرفت؛ یعنی یک آدرسِ بی‌محتوا
+  // (soft-404) به گوگل می‌گفت «من را ایندکس کن» — دقیقاً همان چیزی که وجودِ
+  // نسخه‌ی Express با کدِ ۴۱۰ برایش ساخته شده بود.
+  if (isNaN(numId)) {
+    return { title: "این محصول دیگر موجود نیست", robots: { index: false, follow: true } };
+  }
 
   const product = await getProduct(numId).catch(() => null);
-  if (!product) return { title: "محصول پیدا نشد", robots: { index: false } };
+  // عنوانِ محصولِ حذف‌شده از `product-gone.html` می‌آید — همان صفحه‌ای که
+  // بدنه‌اش در `product/[id]/not-found.tsx` بازسازی شده است. قبلاً عنوان
+  // «محصول پیدا نشد» بود (عنوانِ مسیرِ کلاینتیِ `/product.html?id=`) که با
+  // بدنه‌ی نمایش‌داده‌شده نمی‌خوابید.
+  if (!product) {
+    return { title: "این محصول دیگر موجود نیست", robots: { index: false, follow: true } };
+  }
 
   return {
-    title: product.title,
+    // قالبی که Express در `product.js:373` سرِ فرآیندِ کلاینتی می‌گذاشت:
+    //
+    //     `${p.title} | خرید با قیمت ${money(p.price)} تومان`
+    //
+    // قیمت داخلِ عنوان دو فایده دارد: در نتایجِ جست‌وجو مشتری همان اول عدد
+    // را می‌بیند (و کلیکِ بی‌هدف کمتر می‌شود)، و در تبِ مرورگر بین ده محصولِ
+    // باز، همین عدد مشخص می‌کند کدام کدام است. templateِ ریشه « | پلاسکو گلی»
+    // را خودش اضافه می‌کند.
+    title: `${product.title} | خرید با قیمت ${product.price.toLocaleString("fa-IR")} تومان`,
     description: `خرید ${product.title} با قیمت ${product.price.toLocaleString("fa-IR")} تومان — ارسال سریع از فروشگاه پلاسکو گلی`,
     openGraph: {
       title: product.title,
@@ -117,9 +138,14 @@ export default async function ProductPage({ params }: ProductPageProps) {
         {/* دیدگاه خریداران */}
         <ProductReviews productId={product.id} />
 
-        {/* محصولات مرتبط */}
+        {/* محصولات مرتبط — `data-reveal` همتای `#pdRelatedWrap` در
+            product.html است. عمداً اینجا هست و نه دورِ `<RecentlyViewed>`:
+            آن یکی محتوایش را سمتِ کلاینت از localStorage می‌خواند و تا آن
+            لحظه یک المانِ بی‌ارتفاع است. ناظرِ IntersectionObserver روی المانِ
+            صفر-ارتفاع هیچ‌وقت فعال نمی‌شود، پس محتوایش برای همیشه نامرئی
+            می‌ماند — بدتر از نداشتنِ انیمیشن. */}
         {related.length > 0 && (
-          <section className="mt-16">
+          <section data-reveal="" className="mt-16">
             <h2 className="text-xl font-extrabold text-ink mb-6">
               محصولات مرتبط
             </h2>
