@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { apiBase } from "@/lib/site";
 import { isLegacyHtmlPath, legacyRedirect } from "@/lib/legacyUrls";
+import {
+  createExistenceCache,
+  existsFromApiStatus,
+  productIdFromPath,
+} from "@/lib/productGone";
 
 // ============================================================
 // نگهبانِ مسیرها
@@ -21,6 +26,50 @@ import { isLegacyHtmlPath, legacyRedirect } from "@/lib/legacyUrls";
 
 const PROTECTED_ROUTES = ["/checkout", "/account", "/admin"];
 const GUEST_ONLY_ROUTES = ["/login"];
+
+// ============================================================
+// محصولِ حذف‌شده = کدِ ۴۱۰، مثلِ Express
+// ============================================================
+// Express برای شناسه‌ای که محصولش نیست کدِ ۴۱۰ می‌دهد (`server.js:526`) تا
+// گوگل سریع از ایندکس خارجش کند. در Next این کار از سمتِ صفحه ممکن نیست:
+// `/product/[id]` پر‌رندر است و پاسخِ `notFound()` را با کدِ ۲۰۰ کش می‌کند
+// (توضیحِ کامل در `lib/productGone.ts`). پس این‌جا می‌پرسیم «این شناسه محصول
+// دارد؟» و اگر ندارد، بدنه‌ی صفحه‌ی `/product-gone` را با کدِ ۴۱۰ می‌فرستیم.
+//
+// «ندارد» یعنی سمتِ سرور ۴۰۴ بگیریم؛ هر نتیجه‌ی دیگری — از جمله خطای شبکه —
+// «دارد» حساب می‌شود. یعنی اگر بک‌اند خواب باشد، صفحه با همان رفتارِ امروز
+// (۲۰۰ + noindex) سرو می‌شود، نه اینکه همه‌ی محصولاتِ سایت ۴۱۰ بگیرند.
+const GONE_CACHE = createExistenceCache();
+
+async function productExists(id: string, cookie: string | null): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const res = await fetch(`${apiBase()}/api/products/${encodeURIComponent(id)}`, {
+      headers: cookie ? { cookie } : undefined,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    // قاعده‌ش در `lib/productGone.ts` توضیح داده و آزموده شده است — سرور برای
+    // شناسه‌ی نامعتبر ۴۰۰ می‌دهد، نه ۴۰۴.
+    return existsFromApiStatus(res.status);
+  } catch {
+    return true;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** بدنه‌ی صفحه‌ی `/product-gone` را می‌گیرد تا با کدِ ۴۱۰ فرستاده شود. */
+async function gonePageBody(request: NextRequest): Promise<string | null> {
+  try {
+    const res = await fetch(new URL("/product-gone", request.url), { cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * کاربرِ نشست — همان چیزی که `/api/auth/me` برمی‌گرداند (`publicUser`).
@@ -136,6 +185,36 @@ export async function middleware(request: NextRequest) {
   // فایلِ واقعیِ `public/` است و باید سرو شود، نه ریدایرکت.
   if (isLegacyHtmlPath(pathname)) return pass();
 
+  // ============================================================
+  // محصولِ حذف‌شده — ۴۱۰ واقعی
+  // ============================================================
+  // جای این بلوک عمدی است: بعد از نگاشتِ نشانی‌های قدیمی (که `/product.html` را
+  // به `/product/N` می‌برد) و قبل از منطقِ ورود. این مسیر محافظت‌شده نیست، پس
+  // اگر پایین‌تر بود هرگز اجرا نمی‌شد.
+  const productId = productIdFromPath(pathname);
+  if (productId) {
+    let exists = GONE_CACHE.get(productId);
+    if (exists === undefined) {
+      exists = await productExists(productId, request.headers.get("cookie"));
+      GONE_CACHE.set(productId, exists);
+    }
+    if (!exists) {
+      const body = await gonePageBody(request);
+      // اگر بدنه نیامد، به همان صفحه‌ی خودِ محصول می‌رویم (۲۰۰ + noindex) —
+      // بهتر از یک صفحه‌ی خالیِ ۴۱۰.
+      if (body !== null) {
+        return new NextResponse(body, {
+          status: 410,
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            // محصولی که برگردد نباید ۴۱۰ِ کش‌شده ببیند.
+            "cache-control": "no-store",
+          },
+        });
+      }
+    }
+  }
+
   const needsAuth = PROTECTED_ROUTES.some((r) => pathname.startsWith(r));
   const guestOnly = GUEST_ONLY_ROUTES.some((r) => pathname.startsWith(r));
 
@@ -193,15 +272,20 @@ export const config = {
     // سرنوشتش به معنای ضمنیِ `*` گره بخورد.
     "/admin/:path*",
     "/login/:path*",
+    // صفحه‌های محصول — برای کدِ ۴۱۰ محصولِ حذف‌شده. `/product-gone` عمداً زیر
+    // این الگو نیست (پس واکشیِ داخلیِ خودش دوباره به middleware نمی‌رسد).
+    "/product/:path*",
   ],
 };
 
-// این لایه دو کار می‌کند و هیچ‌کدام «مجوز» نیست:
+// این لایه سه کار می‌کند و هیچ‌کدام «مجوز» نیست:
 //
 //   ۱. نگهبانیِ ورود — کاربرِ بی‌نشستِ `/admin` به صفحه‌ی ورود می‌رود
 //      (همان کاری که از قبل می‌کرد؛ کاربرِ عادی صفحه‌ی خالی نبیند).
 //   ۲. گفتنِ نقش به پوسته‌ی پنل — از `x-panel-access` استفاده می‌کند تا مشتریِ
 //      عادی به‌جای هفت کادرِ «دسترسی ندارید» یک پیامِ روشن ببیند.
+//   ۳. کدِ ۴۱۰ برای صفحه‌ی محصولِ حذف‌شده — همان کدی که Express می‌داد و از
+//      سمتِ خودِ صفحه در App Router قابلِ گذاشتن نیست.
 //
 // مجوزِ واقعیِ ادمین سمتِ Express اعمال می‌شود و از اینجا قابل دور زدن نیست:
 // حتی اگر کسی هدرها را جعل کند، اولین درخواستِ API سمتِ سرور ۴۰۳ می‌گیرد.
