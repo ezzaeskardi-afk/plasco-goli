@@ -9,6 +9,7 @@ import {
   normalizeListingQuery,
   canonicalListingQuery,
 } from "@/lib/productQuery";
+import { pageSocial } from "@/lib/social";
 import type { Product } from "@/lib/types";
 
 // ============================================================
@@ -99,6 +100,19 @@ export async function generateMetadata({
     description:
       "فهرست کامل محصولات پلاسکو گلی؛ ظروف نگهداری، لوازم آشپزخانه، سبد، صندلی، تشت و لوازم نظافت. فیلتر بر اساس دسته، قیمت و موجودی.",
     alternates: { canonical },
+    // متنِ اشتراک‌گذاری عیناً از `products.html` (که ثابت بود): عنوانِ صفحه با
+    // نامِ برند در og/twitter، و توضیحی که فقط جمله‌ی اولِ توضیحِ متاست
+    // («فیلتر بر اساس دسته، قیمت و موجودی.» در آن نیست). نامِ دسته در `base`
+    // می‌آید، پس og:title برای صفحه‌ی دسته هم گویا می‌ماند.
+    ...pageSocial({
+      path: canonical,
+      title: `${base} | پلاسکو گلی`,
+      description:
+        "فهرست کامل محصولات پلاسکو گلی؛ ظروف نگهداری، لوازم آشپزخانه، سبد، صندلی، تشت و لوازم نظافت.",
+      // در Express کارتِ صفحه‌ی محصولات `summary_large_image` بود (برخلاف
+      // صفحه‌ی اصلی که `summary` داشت)، پس همان عیناً حفظ می‌شود.
+      card: "summary_large_image",
+    }),
     ...(deepFilter ? { robots: { index: false, follow: true } } : {}),
   };
 }

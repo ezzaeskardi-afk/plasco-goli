@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { WebPageJsonLd } from "@/components/JsonLd";
+import { pageSocial } from "@/lib/social";
 
 // متنِ این صفحه از frontend/terms.html برداشته شده — عمداً بازنویسی نشده،
 // چون متنِ حقوقی است و تغییرِ لفظش تصمیمِ مالکِ فروشگاه است نه کارِ مهاجرت.
@@ -12,11 +13,16 @@ export const metadata: Metadata = {
   description:
     "قوانین خرید، رویه‌ی ارسال، شرایط لغو و مرجوعی ۷ روزه و حریم خصوصی فروشگاه پلاسکو گلی.",
   alternates: { canonical: "/terms" },
-  openGraph: {
+  // og:type و متن‌ها عیناً از `terms.html`: آن‌جا og:type=article بود و
+  // توضیحِ twitter با توضیحِ og فرق می‌کرد — هر دو همین‌جا حفظ شده‌اند.
+  ...pageSocial({
+    type: "article",
+    path: "/terms",
     title: "قوانین و راهنمای خرید | پلاسکو گلی",
     description:
-      "قوانین خرید، رویه‌ی ارسال، شرایط لغو و مرجوعی ۷ روزه و حریم خصوصی.",
-  },
+      "رویه‌ی ارسال، شرایط لغو سفارش، مرجوعی ۷ روزه و حریم خصوصی در فروشگاه پلاسکو گلی.",
+    twitterDescription: "رویه‌ی ارسال، شرایط لغو سفارش، مرجوعی ۷ روزه و حریم خصوصی.",
+  }),
 };
 
 const SECTIONS = [
