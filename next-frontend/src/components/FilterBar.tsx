@@ -12,6 +12,10 @@ function toEnDigits(s: string): string {
     .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
 }
 
+function toFa(n: number): string {
+  return new Intl.NumberFormat("fa-IR").format(n);
+}
+
 interface FilterBarProps {
   currentSort?: string;
   currentCategory?: string;
@@ -121,8 +125,8 @@ export function FilterBar({
           <option value="newest">جدیدترین</option>
           <option value="price-asc">ارزان‌ترین</option>
           <option value="price-desc">گران‌ترین</option>
-          <option value="title">الفبایی</option>
-          <option value="stock">موجودی</option>
+          <option value="title">بر اساس نام</option>
+          <option value="stock">بیشترین موجودی</option>
         </select>
 
         <button
@@ -138,7 +142,7 @@ export function FilterBar({
             border: "1px solid var(--color-line)",
           }}
         >
-          فقط موجود
+          فقط کالاهای موجود
         </button>
 
         {categories.slice(0, 6).map((cat) => {
@@ -166,36 +170,43 @@ export function FilterBar({
         })}
       </div>
 
-      {/* بازه‌ی قیمت — همتای فیلترِ قیمتِ products.html (products.js:180) */}
+      {/* بازه‌ی قیمت — همتای فیلترِ قیمتِ products.html (products.js:180).
+          سرتیتر، برچسبِ «از»/«تا» و دکمه‌ی «اعمال قیمت» عیناً همان‌های
+          Express‌اند؛ وگرنه همان یک فیلتر با دو متنِ متفاوت دیده می‌شود. */}
       <form onSubmit={applyPrice} className="flex flex-wrap gap-2 items-center">
-        <span className="text-[11px] text-ink-dim">قیمت (تومان):</span>
-        <input
-          type="text"
-          inputMode="numeric"
-          value={minInput}
-          onChange={(e) => setMinInput(e.target.value)}
-          placeholder={minPrice ? `از ${new Intl.NumberFormat("fa-IR").format(minPrice)}` : "از"}
-          aria-label="کمترین قیمت"
-          className="rounded-full px-3 py-1.5 text-xs outline-none w-32"
-          style={inputStyle}
-        />
-        <span className="text-ink-dim text-xs">تا</span>
-        <input
-          type="text"
-          inputMode="numeric"
-          value={maxInput}
-          onChange={(e) => setMaxInput(e.target.value)}
-          placeholder={maxPrice ? `تا ${new Intl.NumberFormat("fa-IR").format(maxPrice)}` : "تا"}
-          aria-label="بیشترین قیمت"
-          className="rounded-full px-3 py-1.5 text-xs outline-none w-32"
-          style={inputStyle}
-        />
+        <h3 className="text-[11px] font-bold text-ink-soft">محدوده‌ی قیمت</h3>
+        <label className="flex items-center gap-1 text-[11px] text-ink-dim">
+          از
+          <input
+            type="text"
+            inputMode="numeric"
+            value={minInput}
+            onChange={(e) => setMinInput(e.target.value)}
+            placeholder="۰"
+            aria-label="کمترین قیمت"
+            className="rounded-full px-3 py-1.5 text-xs outline-none w-28"
+            style={inputStyle}
+          />
+        </label>
+        <label className="flex items-center gap-1 text-[11px] text-ink-dim">
+          تا
+          <input
+            type="text"
+            inputMode="numeric"
+            value={maxInput}
+            onChange={(e) => setMaxInput(e.target.value)}
+            placeholder="—"
+            aria-label="بیشترین قیمت"
+            className="rounded-full px-3 py-1.5 text-xs outline-none w-28"
+            style={inputStyle}
+          />
+        </label>
         <button
           type="submit"
           className="rounded-full px-3 py-1.5 text-xs font-bold"
           style={{ background: "var(--color-teal)", color: "#04211B" }}
         >
-          اعمال
+          اعمال قیمت
         </button>
         {(currentMinPrice != null || currentMaxPrice != null) && (
           <button
@@ -216,6 +227,13 @@ export function FilterBar({
             {priceError}
           </span>
         )}
+        {/* راهنمای بازه — عیناً متنِ products.js:132. بدونش کاربر نمی‌داند
+            کاتالوگ از کجا تا کجاست و بازه را حدسی می‌زند. */}
+        {maxPrice ? (
+          <p className="text-[11px] text-ink-dim w-full">
+            ارزان‌ترین {toFa(minPrice ?? 0)} — گران‌ترین {toFa(maxPrice)} تومان
+          </p>
+        ) : null}
       </form>
     </div>
   );

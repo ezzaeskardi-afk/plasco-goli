@@ -19,7 +19,7 @@ export default function CartPage() {
         <span>/</span>
         <span className="text-ink-soft">سبد خرید</span>
       </div>
-      <h1 className="text-2xl font-extrabold text-ink mb-6">سبد خرید</h1>
+      <h1 className="text-2xl font-extrabold text-ink mb-6">سبد خرید شما</h1>
       <CartContent />
     </div>
   );

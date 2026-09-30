@@ -24,7 +24,9 @@ import { Icon } from "@/components/Icon";
 const PHONE_DISPLAY = "۰۹۱۱-۳۵۶-۷۴۰۹";
 const PHONE_HREF = "tel:09113567409";
 const WHATSAPP_HREF = "https://wa.me/989113567409";
-const ADDRESS = "ساری، بلوار کشاورز، قبل از مسجد صاحب‌الزمان، مغازه پلاسکو گلی";
+// عیناً همان متنِ پاورقیِ Express (frontend/index.html:550): بدونِ «مغازه
+// پلاسکو گلی» که فقط در بخشِ «تماس با فروشگاه»ی صفحه‌ی اصلی می‌آید.
+const ADDRESS = "ساری، بلوار کشاورز، قبل از مسجد صاحب‌الزمان";
 
 const SOCIAL = [
   { name: "instagram" as const, href: "#", label: "اینستاگرام" },

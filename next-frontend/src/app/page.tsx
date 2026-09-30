@@ -557,9 +557,22 @@ function TestimonialsSection({
 
   return (
     <section className="mx-auto max-w-[1180px] px-6 pb-16">
-      <h2 data-reveal="" className="text-xl md:text-2xl font-extrabold text-ink mb-6">
-        <span className="text-gold">★</span> حرف مشتری‌ها
-      </h2>
+      {/* سرتیتر عیناً مثل index.html:403-410 — یک eyebrow + h2 + یک جملهٔ
+          شفاف که این‌ها تبلیغ نیستند، دیدگاه‌های ثبت‌شدهٔ زیر محصولات‌اند. */}
+      <div data-reveal="" className="mb-6">
+        {/* نقطه‌ی طلاییِ Express یک spanِ CSSی است، نه کاراکتر؛ اگر «●» را
+            متن بگذاریم در متنِ رندرشده ظاهر می‌شود و Express نداردش. */}
+        <Eyebrow>نظر مشتری‌ها</Eyebrow>
+        <h2
+          id="testi-title"
+          className="text-xl md:text-2xl font-extrabold text-ink mt-1"
+        >
+          حرف مشتری‌های واقعی پلاسکو گلی
+        </h2>
+        <p className="text-xs mt-2 text-ink-soft">
+          این‌ها دیدگاه‌های ثبت‌شده زیر خود محصولات‌اند؛ نه متن تبلیغاتی.
+        </p>
+      </div>
       <div data-reveal="" className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {reviews.map((r) => (
           <figure

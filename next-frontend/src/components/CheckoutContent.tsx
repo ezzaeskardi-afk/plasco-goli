@@ -12,6 +12,7 @@ import {
   newIdempotencyKey,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 import { useShopInfo } from "@/lib/useShopInfo";
 import type { CartResponse, Address, User } from "@/lib/types";
 
@@ -24,6 +25,7 @@ function toToman(n: number): string {
 
 export function CheckoutContent() {
   const router = useRouter();
+  const toast = useToast();
   const shop = useShopInfo();
   const shopClosed = Boolean(shop && !shop.shopOpen);
   const [cart, setCart] = useState<CartResponse | null>(null);
@@ -63,6 +65,7 @@ export function CheckoutContent() {
       postalCode: a.postalCode || "",
     });
     setShowAddrForm(true);
+    toast("آدرس را ویرایش کنید؛ موقع پرداخت ذخیره می‌شود", { tone: "info" });
   }
 
   const loadData = useCallback(async () => {
@@ -159,7 +162,11 @@ export function CheckoutContent() {
 
   if (!cart || !user) return null;
 
-  const selectedAddr = addresses.find((a) => a.id === selectedAddrId);
+  const fieldStyle = {
+    background: "var(--color-surface-2)",
+    color: "var(--color-ink)",
+    border: "1px solid var(--color-line-control)",
+  } as const;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -173,28 +180,18 @@ export function CheckoutContent() {
             style={{ background: "var(--color-coral-tint)", color: "var(--color-coral)" }}
             role="alert"
           >
-            فروشگاه موقتاً بسته است؛ ثبت سفارش فعلاً ممکن نیست.
-            {shop?.announcement ? ` ${shop.announcement}` : ""}
+            {shop?.announcement ||
+              "فروشگاه موقتاً تعطیل است و فعلاً سفارش نمی‌پذیرد؛ به‌زودی برمی‌گردیم."}
           </div>
         )}
 
         <h2 className="text-lg font-bold" style={{ color: "var(--color-ink)" }}>
-          آدرس تحویل
+          آدرس تحویل سفارش
         </h2>
 
-        {addresses.length === 0 && !showAddrForm ? (
-          <div className="text-center py-8">
-            <p className="text-sm text-ink-soft mb-4">هیچ آدرسی ثبت نشده</p>
-            <button
-              onClick={startNewAddress}
-              className="rounded-full px-5 py-2 text-sm font-bold transition-colors"
-              style={{ background: "var(--color-teal)", color: "#04211B" }}
-            >
-              ثبت آدرس جدید
-            </button>
-          </div>
-        ) : (
-          addresses.map((addr) => (
+        {/* بدون آدرس، فرم خودش باز است — عیناً تصمیمِ checkout.js:165؛
+            پیامِ خالیِ اضافه‌ای که فقط این‌جا بود حذف شد. */}
+        {addresses.map((addr) => (
             <div
               key={addr.id}
               className={`relative block rounded-[18px] p-4 transition-colors ${
@@ -217,17 +214,16 @@ export function CheckoutContent() {
                   className="accent-[var(--color-teal)]"
                 />
                 <span className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>
-                  {addr.fullName}
-                </span>
-                <span className="text-xs mr-auto" style={{ color: "var(--color-ink-dim)" }} dir="ltr">
-                  {addr.phone}
+                  {addr.fullName} — {addr.city}
                 </span>
               </label>
+              {/* قالبِ نمایشِ آدرس عیناً checkout.js:129-135: خطِ آدرس و بعد
+                  شماره‌ی تماس (ltr). */}
               <div className="text-xs mt-1 mr-6" style={{ color: "var(--color-ink-soft)" }}>
-                {addr.province && `${addr.province}، `}
-                {addr.city && `${addr.city} — `}
                 {addr.addressLine}
-                {addr.postalCode && ` (کدپستی: ${addr.postalCode})`}
+              </div>
+              <div className="text-xs mt-0.5 mr-6" style={{ color: "var(--color-ink-soft)" }} dir="ltr">
+                {addr.phone}
               </div>
               {/* ویرایشِ همان‌جا — همتای checkout.js:110؛ بدونِ این، غلطِ
                   تایپی آدرس یعنی سفارش به جای اشتباه */}
@@ -242,8 +238,7 @@ export function CheckoutContent() {
                 </button>
               )}
             </div>
-          ))
-        )}
+        ))}
 
         {addresses.length > 0 && !showAddrForm && (
           <button
@@ -251,11 +246,11 @@ export function CheckoutContent() {
             className="text-xs font-medium"
             style={{ color: "var(--color-teal)" }}
           >
-            + ثبت آدرس جدید
+            + استفاده از آدرس جدید
           </button>
         )}
 
-        {showAddrForm && (
+        {(showAddrForm || addresses.length === 0) && (
           <form
             onSubmit={handleSaveAddress}
             className="rounded-[18px] p-4 space-y-3"
@@ -264,88 +259,95 @@ export function CheckoutContent() {
             <h3 className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>
               {editAddrId != null ? "ویرایش آدرس" : "آدرس جدید"}
             </h3>
-            <div className="grid grid-cols-2 gap-2">
+            {/* برچسب‌ها و placeholder‌ها عیناً checkout.html:155-172. قبلاً
+                فقط placeholder داشت و برچسبی در کار نبود؛ همان فرم در دو
+                نسخه دو متنِ متفاوت می‌داد. */}
+            <div>
+              <label htmlFor="coFullName" className="block text-[11px] mb-1 text-ink-soft">
+                نام و نام خانوادگی گیرنده
+              </label>
               <input
+                id="coFullName"
                 type="text"
                 value={addrForm.fullName}
                 onChange={(e) => setAddrForm({ ...addrForm, fullName: e.target.value })}
-                placeholder="نام کامل"
                 required
-                className="rounded-full px-3 py-2 text-xs outline-none"
-                style={{
-                  background: "var(--color-surface-2)",
-                  color: "var(--color-ink)",
-                  border: "1px solid var(--color-line-control)",
-                }}
+                className="w-full rounded-full px-3 py-2 text-xs outline-none"
+                style={fieldStyle}
               />
+            </div>
+            <div>
+              <label htmlFor="coPhone" className="block text-[11px] mb-1 text-ink-soft">
+                شماره تماس
+              </label>
               <input
+                id="coPhone"
                 type="tel"
                 value={addrForm.phone}
                 onChange={(e) => setAddrForm({ ...addrForm, phone: e.target.value })}
-                placeholder="شماره موبایل"
+                placeholder="۰۹xxxxxxxxx"
                 required
-                className="rounded-full px-3 py-2 text-xs outline-none"
-                style={{
-                  background: "var(--color-surface-2)",
-                  color: "var(--color-ink)",
-                  border: "1px solid var(--color-line-control)",
-                }}
+                className="w-full rounded-full px-3 py-2 text-xs outline-none"
+                style={fieldStyle}
                 dir="ltr"
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label htmlFor="coProvince" className="block text-[11px] mb-1 text-ink-soft">
+                استان
+              </label>
               <input
+                id="coProvince"
                 type="text"
                 value={addrForm.province}
                 onChange={(e) => setAddrForm({ ...addrForm, province: e.target.value })}
-                placeholder="استان"
-                className="rounded-full px-3 py-2 text-xs outline-none"
-                style={{
-                  background: "var(--color-surface-2)",
-                  color: "var(--color-ink)",
-                  border: "1px solid var(--color-line-control)",
-                }}
+                placeholder="مثلاً تهران"
+                className="w-full rounded-full px-3 py-2 text-xs outline-none"
+                style={fieldStyle}
               />
+            </div>
+            <div>
+              <label htmlFor="coCity" className="block text-[11px] mb-1 text-ink-soft">
+                شهر
+              </label>
               <input
+                id="coCity"
                 type="text"
                 value={addrForm.city}
                 onChange={(e) => setAddrForm({ ...addrForm, city: e.target.value })}
-                placeholder="شهر"
                 required
-                className="rounded-full px-3 py-2 text-xs outline-none"
-                style={{
-                  background: "var(--color-surface-2)",
-                  color: "var(--color-ink)",
-                  border: "1px solid var(--color-line-control)",
-                }}
+                className="w-full rounded-full px-3 py-2 text-xs outline-none"
+                style={fieldStyle}
               />
+            </div>
+            <div>
+              <label htmlFor="coAddressLine" className="block text-[11px] mb-1 text-ink-soft">
+                آدرس کامل
+              </label>
+              <textarea
+                id="coAddressLine"
+                value={addrForm.addressLine}
+                onChange={(e) => setAddrForm({ ...addrForm, addressLine: e.target.value })}
+                required
+                rows={2}
+                className="w-full rounded-[18px] px-3 py-2 text-xs outline-none resize-none"
+                style={fieldStyle}
+              />
+            </div>
+            <div>
+              <label htmlFor="coPostalCode" className="block text-[11px] mb-1 text-ink-soft">
+                کد پستی (اختیاری)
+              </label>
               <input
+                id="coPostalCode"
                 type="text"
                 value={addrForm.postalCode}
                 onChange={(e) => setAddrForm({ ...addrForm, postalCode: e.target.value })}
-                placeholder="کدپستی"
-                className="rounded-full px-3 py-2 text-xs outline-none"
-                style={{
-                  background: "var(--color-surface-2)",
-                  color: "var(--color-ink)",
-                  border: "1px solid var(--color-line-control)",
-                }}
+                className="w-full rounded-full px-3 py-2 text-xs outline-none"
+                style={fieldStyle}
                 dir="ltr"
               />
             </div>
-            <input
-              type="text"
-              value={addrForm.addressLine}
-              onChange={(e) => setAddrForm({ ...addrForm, addressLine: e.target.value })}
-              placeholder="آدرس کامل"
-              required
-              className="w-full rounded-full px-3 py-2 text-xs outline-none"
-              style={{
-                background: "var(--color-surface-2)",
-                color: "var(--color-ink)",
-                border: "1px solid var(--color-line-control)",
-              }}
-            />
 
             <div className="flex gap-2">
               <button
@@ -377,15 +379,20 @@ export function CheckoutContent() {
           className="rounded-[18px] p-4 sticky top-[130px]"
           style={{ background: "var(--color-surface)" }}
         >
-          <h3 className="text-sm font-bold mb-4" style={{ color: "var(--color-ink)" }}>
-            خلاصهٔ سفارش
-          </h3>
+          {/* سرتیترِ همین ستون در Express دو جزء دارد (checkout.html:122-123):
+              eyebrow «خلاصه‌ی سفارش» + سرتیتر «سبد خرید شما» */}
+          <span className="block text-[11px] mb-1" style={{ color: "var(--color-teal)" }}>
+            خلاصه‌ی سفارش
+          </span>
+          <h2 className="text-base font-bold mb-4" style={{ color: "var(--color-ink)" }}>
+            سبد خرید شما
+          </h2>
 
           <div className="space-y-2 text-xs mb-4 max-h-48 overflow-y-auto">
             {cart.items.map((item) => (
               <div key={item.productId} className="flex justify-between">
                 <span className="truncate max-w-[180px]" style={{ color: "var(--color-ink-soft)" }}>
-                  {item.title} ×{toFa(item.qty)}
+                  {item.title} × {toFa(item.qty)}
                 </span>
                 <span className="shrink-0" style={{ color: "var(--color-ink-soft)" }}>
                   {/* subtotal خودِ سرور، نه price×qty. با تخفیف عمده قیمتِ واحد
@@ -398,18 +405,23 @@ export function CheckoutContent() {
           </div>
 
           <div className="space-y-2 text-xs" style={{ borderTop: "1px solid var(--color-line)", paddingTop: "0.75rem" }}>
-            <div className="flex justify-between" style={{ color: "var(--color-ink-soft)" }}>
-              <span>جمع</span>
-              <span>{toToman(cart.total)}</span>
-            </div>
-            {cart.discount > 0 && (
+            {/* ردیف‌های مالی عیناً checkout.html:128-137. ردیفِ «جمع» در
+                Express نبود و حذف شد؛ در عوض «سود شما از تخفیف‌ها» که
+                Express نشان می‌داد این‌جا جا افتاده بود. */}
+            {cart.savings > 0 && (
               <div className="flex justify-between" style={{ color: "var(--color-teal)" }}>
-                <span>تخفیف{cart.coupon ? ` (${cart.coupon.code})` : ""}</span>
+                <span>سود شما از تخفیف‌ها</span>
+                <span>{toToman(cart.savings)}</span>
+              </div>
+            )}
+            {cart.coupon && cart.discount > 0 && (
+              <div className="flex justify-between" style={{ color: "var(--color-teal)" }}>
+                <span>تخفیف ({cart.coupon.code})</span>
                 <span>−{toToman(cart.discount)}</span>
               </div>
             )}
             <div className="flex justify-between" style={{ color: "var(--color-ink-soft)" }}>
-              <span>ارسال</span>
+              <span>هزینه ارسال</span>
               <span>{cart.shippingFee === 0 ? "رایگان" : toToman(cart.shippingFee)}</span>
             </div>
             <div
@@ -419,18 +431,10 @@ export function CheckoutContent() {
                 color: "var(--color-ink)",
               }}
             >
-              <span>مبلغ نهایی</span>
+              <span>مبلغ قابل پرداخت</span>
               <span>{toToman(cart.payable)}</span>
             </div>
           </div>
-
-          {selectedAddr && (
-            <div className="mt-3 text-[11px] rounded-xl p-2" style={{ background: "var(--color-teal-tint)" }}>
-              <span style={{ color: "var(--color-teal)" }}>
-                ارسال به: {selectedAddr.city}
-              </span>
-            </div>
-          )}
 
           {error && (
             <p className="text-xs mt-2" style={{ color: "var(--color-coral)" }}>
@@ -451,11 +455,18 @@ export function CheckoutContent() {
             }}
           >
             {placing ? (
-              <span className="inline-block w-4 h-4 rounded-full border-2 border-[#04211B]/30 border-t-[#04211B] animate-spin" />
+              <>
+                <span className="inline-block w-4 h-4 rounded-full border-2 border-[#04211B]/30 border-t-[#04211B] animate-spin" />
+                در حال انتقال به درگاه…
+              </>
             ) : (
               "پرداخت و ثبت سفارش"
             )}
           </button>
+          {/* یادداشتِ زیرِ دکمه — عیناً checkout.html:186 */}
+          <p className="text-[11px] mt-2 text-center" style={{ color: "var(--color-ink-dim)" }}>
+            با کلیک روی «پرداخت»، به درگاه پرداخت زرین‌پال منتقل می‌شوید.
+          </p>
         </div>
       </div>
     </div>
