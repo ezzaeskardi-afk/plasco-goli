@@ -345,6 +345,29 @@ function siteBase(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
+// مسیرِ عکس، تضمین‌شده «دقیقاً یک‌بار کدشده».
+//
+// باگِ واقعی: مقدارِ `image` را خودِ API از قبل percent-encoded برمی‌گرداند
+// (`/picture/products/%D8%B3…jpg`) و این‌جا `encodeURI` دوباره روی آن می‌رفت؛
+// نتیجه `%25D8…` بود — نشانی‌ای که ۴۰۴ می‌دهد. هر چهار جایی که عکسِ محصول به
+// بیرون معرفی می‌شد همین را داشتند: og:image، twitter:image، `image` داده‌ی
+// ساختاریافته و `<image:loc>` نقشه‌ی سایت.
+//
+// الگوریتم باید idempotent باشد؛ یک تله دارد: خودِ `encodeURI` هم `%` را به
+// `%25` تبدیل می‌کند، پس «یک‌بار decode، یک‌بار encode» نمی‌تواند دوبار‌کدشده
+// را تشخیص دهد. پس امضای دقیقِ آن (`%25` + یک جفت رقمِ هگز) علامتِ کار است:
+//   ۱) دوبار‌کدشده → یک لایه رمزگشایی؛  ۲) از قبل کدشده → دست نزن؛
+//   ۳) خام → یک‌بار کد کن.
+// همین تابع در Next هم هست (`lib/site.ts: publicImagePath`) و باید یکی بماند.
+function imagePath(raw) {
+  if (!raw) return '';
+  if (/%25[0-9A-Fa-f]{2}/.test(raw)) {
+    try { return decodeURI(raw); } catch (e) { /* مثل خام */ }
+  }
+  if (/%[0-9A-Fa-f]{2}/.test(raw)) return raw;
+  try { return encodeURI(raw); } catch (e) { return raw; }
+}
+
 // ---------- پاسخ‌های API کش نمی‌شوند ----------
 // پاسخی که هیچ هدر کشی ندارد را پروکسیِ میانی (یا خودِ مرورگر) می‌تواند با حدس
 // خودش نگه دارد؛ برای /auth/me یا سفارش‌ها یعنی ریسک دیده‌شدن اطلاعات یک کاربر
@@ -511,7 +534,7 @@ app.get('/product/:id', (req, res) => {
   const base = siteBase(req);
   const title = `${product.title} | پلاسکو گلی`;
   const desc = `خرید ${product.title} — ${product.description} قیمت: ${Number(product.price).toLocaleString('fa-IR')} تومان.`;
-  const img = product.image ? base + encodeURI(product.image) : '';
+  const img = product.image ? base + imagePath(product.image) : '';
   html = html
     // product.html (پوسته‌ی بدون محتوا) noindex است؛ اما صفحه‌ی واقعیِ محصول با
     // آدرس تمیز /product/:id باید ایندکس شود. اینجا آن را برمی‌گردانیم.
@@ -602,7 +625,7 @@ function productJsonLd(product, base) {
     returnMethod: 'https://schema.org/ReturnByMail'
   };
 
-  if (product.image) node.image = [base + encodeURI(product.image)];
+  if (product.image) node.image = [base + imagePath(product.image)];
 
   try {
     const r = getProductReviews(product.id);
@@ -691,7 +714,7 @@ function buildItemList(base) {
     position: i + 1,
     url: `${base}/product/${p.id}`,
     name: p.title,
-    image: p.image ? base + encodeURI(p.image) : undefined,
+    image: p.image ? base + imagePath(p.image) : undefined,
     offers: {
       '@type': 'Offer',
       price: Number(p.price) * 10,
@@ -807,7 +830,7 @@ app.get('/sitemap.xml', (req, res) => {
 
   // تگ image برای مغازه‌ای که فروشش با عکس است، ورودیِ جست‌وجوی تصویر می‌آورد.
   const imageTag = (p) => p.image
-    ? `<image:image><image:loc>${escHtml(base + encodeURI(p.image))}</image:loc><image:title>${escHtml(p.title)}</image:title></image:image>`
+    ? `<image:image><image:loc>${escHtml(base + imagePath(p.image))}</image:loc><image:title>${escHtml(p.title)}</image:title></image:image>`
     : '';
 
   // صفحه‌ی فهرست و صفحه‌های دسته.

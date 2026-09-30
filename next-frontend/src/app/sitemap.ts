@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getProducts } from "@/lib/api";
-import { SITE_URL } from "@/lib/site";
+import { SITE_URL, publicImagePath } from "@/lib/site";
 
 // بدونِ این، sitemap فقط یک بار موقعِ build ساخته می‌شد و محصولِ جدید هرگز
 // به گوگل معرفی نمی‌شد.
@@ -50,7 +50,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           lastModified: now,
           changeFrequency: "weekly",
           priority: 0.6,
-          images: p.image ? [`${SITE_URL}${encodeURI(p.image)}`] : undefined,
+          // `publicImagePath` و نه `encodeURI`: مقدار از API از قبل کدشده
+          // می‌آید؛ encodeURI دوباره‌اش می‌کرد و `<image:loc>` یک نشانیِ
+          // ۴۰۴ می‌شد (سنجیده شد).
+          images: p.image
+            ? [`${SITE_URL}${publicImagePath(p.image)}`]
+            : undefined,
         });
       }
 
