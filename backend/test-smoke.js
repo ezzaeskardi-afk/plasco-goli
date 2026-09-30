@@ -1940,6 +1940,40 @@ function shutdown(code) {
     check('V18 داده‌ی ساختاریافته: تاریخ اعتبار قیمتِ ساختگی ادعا نشده',
       ld && !('priceValidUntil' in ld.offers));
 
+    // نگهبانِ یک کلاسِ باگِ واقعی: نشانیِ عکسی که سرور می‌سازد باید **واقعاً
+    // ۲۰۰ بدهد**. یک بار `encodeURI` روی مقداری که خودِ API از قبل کدشده بود
+    // اجرا می‌شد و `%25D8…` می‌ساخت؛ نتیجه این بود که og:image، `image` داده‌ی
+    // ساختاریافته و `<image:loc>` هر سه ۴۰۴ می‌دادند — یعنی گوگل و واتساپ
+    // عکسی نمی‌دیدند و هیچ تستی هم قرمز نمی‌شد.
+    const probeImage = async (u) => {
+      const r = await fetch(u);
+      return { status: r.status, type: r.headers.get('content-type') || '' };
+    };
+    const isImage = (r) => r.status === 200 && /^image\//.test(r.type);
+    const ldImg = ld && Array.isArray(ld.image) && ld.image[0];
+    const ldImgRes = ldImg ? await probeImage(ldImg) : { status: 0, type: '' };
+    check('V18 داده‌ی ساختاریافته: نشانیِ عکسِ Product واقعاً ۲۰۰ می‌دهد',
+      Boolean(ldImg) && isImage(ldImgRes), `${ldImg} → ${ldImgRes.status} ${ldImgRes.type}`);
+    const ogImg = (pPage.match(/property="og:image" content="([^"]+)"/) || [])[1];
+    const ogImgRes = ogImg ? await probeImage(ogImg) : { status: 0, type: '' };
+    check('V18 og:image صفحه‌ی محصول واقعاً ۲۰۰ می‌دهد',
+      Boolean(ogImg) && isImage(ogImgRes), `${ogImg} → ${ogImgRes.status} ${ogImgRes.type}`);
+    const smImg = (sm.match(/<image:loc>([^<]+)<\/image:loc>/) || [])[1];
+    const smImgRes = smImg ? await probeImage(smImg) : { status: 0, type: '' };
+    check('V18 نقشه‌ی سایت: نشانیِ <image:loc> واقعاً ۲۰۰ می‌دهد',
+      Boolean(smImg) && isImage(smImgRes), `${smImg} → ${smImgRes.status} ${smImgRes.type}`);
+
+    // و همان کلاسِ باگ برای خودِ صفحه‌ها: دامنه‌ی نمونه فقط در `sitemap.xml` و
+    // `robots.txt` سنجیده می‌شد، در حالی که HTMLِ صفحه‌ها هم می‌تواند با آن
+    // سرو شود. `wholesale.html` روتی نداشت که جایگزینی را انجام دهد، پس
+    // canonical و og:urlاش به `polasco-goli.example.com` اشاره می‌کرد — یعنی
+    // به گوگل می‌گفت «نسخه‌ی اصلیِ من روی دامنه‌ای است که وجود ندارد».
+    for (const page of ['/', '/products.html', '/terms.html', '/wholesale.html']) {
+      const pageHtml = await (await fetch(BASE + page)).text();
+      check(`V18 صفحه‌ی ${page}: هیچ دامنه‌ی نمونه‌ای در HTML نیست`,
+        !pageHtml.includes('polasco-goli.example.com'));
+    }
+
     // ============ V19: رهگیری سفارش بدون ورود ============
     // یک سفارشِ واقعیِ همین تست را با شماره‌ی صاحبش رهگیری می‌کنیم.
     const trackOrderId = orderRes.data.orderId;   // سفارشی که بالاتر ساخته شد
