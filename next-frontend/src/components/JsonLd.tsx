@@ -2,26 +2,57 @@
 // JSON-LD — دقیقاً مطابق با Express (همان schemaها، همان داده‌ها)
 // ============================================================
 
-import { SITE_URL, SHOP_NAME, OG_IMAGE } from "@/lib/site";
+import {
+  SITE_URL,
+  SHOP_NAME,
+  OG_IMAGE,
+  SHOP_PHONE,
+  STORE_ADDRESS,
+  publicImagePath,
+} from "@/lib/site";
 import { HOME_FAQ, type FaqItem } from "@/lib/faq";
 
 /* ---------- Store (صفحه اصلی) ---------- */
 export function StoreJsonLd() {
+  // این بلوک عیناً از `index.html` نسخه‌ی Express می‌آید — با همان کلیدها و
+  // همان مقادیر. اندازه‌گیریِ زنده نشان داد پرتِ اولیه‌ی Next چهار میدان را
+  // جا انداخته بود (telephone، currenciesAccepted، paymentAccepted، نشانیِ
+  // کامل) و یک میدان را **غلط** گفته بود: `openingHours` را تا ۱۸:۰۰ می‌بست
+  // در حالی که متنِ خودِ فروشگاه — هم در Express و هم در پرتِ Next —
+  // «شنبه تا پنجشنبه، ۹ صبح تا ۸ شب» است. یعنی دادهٔ ساختاریافته با صفحهٔ
+  // تماس تناقض داشت؛ همان چیزی که گوگل برایش هشدار می‌دهد.
   const ld = {
     "@context": "https://schema.org",
     "@type": "Store",
+    // `@id` نقطهٔ اتصالِ بقیهٔ اسکیماهاست: `WebSite.publisher` و
+    // `CollectionPage.isPartOf` به همین ارجاع می‌دهند (در Express هم بود).
+    "@id": `${SITE_URL}/#store`,
     name: SHOP_NAME,
-    url: SITE_URL,
+    url: `${SITE_URL}/`,
     description:
-      "فروشگاه اینترنتی محصولات پلاستیکی با کیفیت — ارسال سریع به سراسر کشور",
+      "فروشگاه تخصصی لوازم پلاستیکی خانه؛ تشت، صندلی، ظروف نگهداری، سبد و لوازم آشپزخانه و حمام.",
     image: `${SITE_URL}${OG_IMAGE}`,
-    // telephone عمداً نیست: قبلاً رشته‌ی خالی بود و schema.org برای مقدارِ
-    // خالی هشدار می‌دهد. هر وقت شماره‌ی فروشگاه قطعی شد، همین‌جا اضافه شود.
-    address: { "@type": "PostalAddress", addressCountry: "IR" },
-    openingHours: "Sa-Th 09:00-18:00",
+    telephone: SHOP_PHONE,
     // priceRange باید بازه‌ی قیمت باشد نه کدِ ارز (قبلاً "IRR" بود، که
-    // بی‌معنی است — ارز جای خودش در Offer.priceCurrency آمده).
-    priceRange: "۵۰٬۰۰۰ – ۲٬۰۰۰٬۰۰۰ تومان",
+    // بی‌معنی است — ارز جای خودش در Offer.priceCurrency آمده). `$$` همان
+    // مقداری است که Express می‌داد و گوگل هم همین شکل را مستند کرده.
+    priceRange: "$$",
+    currenciesAccepted: "IRR",
+    paymentAccepted: "پرداخت آنلاین زرین‌پال",
+    address: { "@type": "PostalAddress", ...STORE_ADDRESS },
+    openingHoursSpecification: {
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: [
+        "Saturday",
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+      ],
+      opens: "09:00",
+      closes: "20:00",
+    },
   };
   return (
     <script
@@ -36,9 +67,13 @@ export function WebSiteJsonLd() {
   const ld = {
     "@context": "https://schema.org",
     "@type": "WebSite",
+    "@id": `${SITE_URL}/#website`,
     name: SHOP_NAME,
-    url: SITE_URL,
+    url: `${SITE_URL}/`,
     inLanguage: "fa-IR",
+    // ارجاعِ متقابل به همان Store بالا — همان کاری که Express می‌کرد و
+    // پایهٔ شناساییِ «فروشگاه» به‌عنوان یک موجودیتِ واحد است.
+    publisher: { "@id": `${SITE_URL}/#store` },
     potentialAction: {
       "@type": "SearchAction",
       target: {
@@ -98,7 +133,7 @@ export function ItemListJsonLd({
       position: i + 1,
       url: `${SITE_URL}/product/${p.id}`,
       name: p.title,
-      image: p.image ? `${SITE_URL}${encodeURI(p.image)}` : undefined,
+      image: p.image ? `${SITE_URL}${publicImagePath(p.image)}` : undefined,
       offers: {
         "@type": "Offer",
         price: p.price * 10, // ریال
@@ -128,14 +163,12 @@ export function CollectionPageJsonLd({
   const ld = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
+    "@id": `${SITE_URL}/products#collection`,
     name,
     description,
     url: `${SITE_URL}/products`,
-    isPartOf: {
-      "@type": "WebSite",
-      name: SHOP_NAME,
-      url: SITE_URL,
-    },
+    inLanguage: "fa-IR",
+    isPartOf: { "@id": `${SITE_URL}/#website` },
   };
   return (
     <script
@@ -204,12 +237,15 @@ export function ProductJsonLd({
         returnMethod: "https://schema.org/ReturnByMail",
       },
     },
+    // `publicImagePath` و نه `encodeURI`: مقدارِ `image` از خودِ API **از قبل
+    // کدشده** می‌آید و کدکردنِ دوباره‌اش `%25D8…` می‌ساخت؛ نشانی‌ای که ۴۰۴
+    // می‌دهد و گوگل هم همان را از `image` برمی‌دارد.
     image: [
       product.image
-        ? `${SITE_URL}${encodeURI(product.image)}`
+        ? `${SITE_URL}${publicImagePath(product.image)}`
         : undefined,
       ...product.images.map((img) =>
-        img ? `${SITE_URL}${encodeURI(img)}` : "",
+        img ? `${SITE_URL}${publicImagePath(img)}` : "",
       ),
     ].filter(Boolean),
     // ستاره‌ها در نتایج گوگل. تنها راهِ رسیدنِ این ستاره‌ها به نتایج است و در
