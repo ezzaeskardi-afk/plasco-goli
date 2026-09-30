@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { WholesaleForm } from "@/components/WholesaleForm";
 import { WebPageJsonLd } from "@/components/JsonLd";
+import { pageSocial } from "@/lib/social";
 
 // معادلِ frontend/wholesale.html — متن و فیلدها از همان صفحه برداشته شده‌اند.
 
@@ -10,11 +11,16 @@ export const metadata: Metadata = {
   description:
     "درخواست قیمت و خرید عمده لوازم پلاستیکی خانه از پلاسکو گلی. برای فروشگاه‌ها، مراکز پخش و خرید سازمانی.",
   alternates: { canonical: "/wholesale" },
-  openGraph: {
+  // متنِ og همان توضیحِ متا است و متنِ twitter کوتاه‌تر — دقیقاً همان تفاوتی
+  // که `wholesale.html` داشت.
+  ...pageSocial({
+    path: "/wholesale",
     title: "خرید عمده | پلاسکو گلی",
     description:
       "درخواست قیمت و خرید عمده لوازم پلاستیکی خانه از پلاسکو گلی. برای فروشگاه‌ها، مراکز پخش و خرید سازمانی.",
-  },
+    twitterDescription:
+      "درخواست قیمت و خرید عمده لوازم پلاستیکی خانه از پلاسکو گلی.",
+  }),
 };
 
 const POINTS = [

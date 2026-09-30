@@ -6,6 +6,8 @@ import { ProductReviews } from "@/components/ProductReviews";
 import { ProductCardGrid } from "@/components/ProductCard";
 import { RecentlyViewed } from "@/components/home/RecentlyViewed";
 import { ProductJsonLd, BreadcrumbJsonLd } from "@/components/JsonLd";
+import { pageSocial } from "@/lib/social";
+import { publicImagePath } from "@/lib/site";
 import type { Metadata } from "next";
 
 // ISR: هر ۶۰ ثانیه چک می‌کنه، اما تا وقتی تغییری نکرده از کش استفاده می‌کنه
@@ -64,6 +66,24 @@ export async function generateMetadata({
     return { title: "این محصول دیگر موجود نیست", robots: { index: false, follow: true } };
   }
 
+  const priceFa = product.price.toLocaleString("fa-IR");
+
+  // توضیحِ متا عیناً همان چیزی است که روتِ `/product/:id` نسخهٔ Express داخل
+  // HTML تزریق می‌کرد (`server.js`):
+  //
+  //     `خرید ${title} — ${description} قیمت: ${price} تومان.`
+  //
+  // این همان متنی است که خزنده‌ها می‌بینند (بقیهٔ متاها را JS بعداً عوض
+  // می‌کند). تنها تفاوت: اگر محصول توضیحی نداشته باشد، آن تیرهٔ خالی با
+  // فاصله‌ی اضافه چاپ نمی‌شود.
+  const description = `خرید ${product.title}${
+    product.description ? ` — ${product.description}` : ""
+  } قیمت: ${priceFa} تومان.`;
+
+  // عنوانی که Express هم در متا و هم در altِ عکس می‌گذاشت
+  // («${p.title} | پلاسکو گلی»).
+  const brandedTitle = `${product.title} | پلاسکو گلی`;
+
   return {
     // قالبی که Express در `product.js:373` سرِ فرآیندِ کلاینتی می‌گذاشت:
     //
@@ -73,14 +93,32 @@ export async function generateMetadata({
     // را می‌بیند (و کلیکِ بی‌هدف کمتر می‌شود)، و در تبِ مرورگر بین ده محصولِ
     // باز، همین عدد مشخص می‌کند کدام کدام است. templateِ ریشه « | پلاسکو گلی»
     // را خودش اضافه می‌کند.
-    title: `${product.title} | خرید با قیمت ${product.price.toLocaleString("fa-IR")} تومان`,
-    description: `خرید ${product.title} با قیمت ${product.price.toLocaleString("fa-IR")} تومان — ارسال سریع از فروشگاه پلاسکو گلی`,
-    openGraph: {
-      title: product.title,
-      description: `خرید ${product.title} از فروشگاه پلاسکو گلی`,
-      images: product.image ? [{ url: product.image, width: 600, height: 600 }] : [],
+    title: `${product.title} | خرید با قیمت ${priceFa} تومان`,
+    description,
+    // عیناً همان تگ‌هایی که Express سرور-ساید تزریق می‌کرد: og:type=product،
+    // og:site_name، og:url، og:image:alt و کارتِ twitterِ مخصوصِ محصول. قبل
+    // از این، لینکِ محصول در واتساپ/تلگرام با عنوان و **لوگو**ی عمومیِ سایت
+    // پیش‌نمایش داده می‌شد، نه با عکس و عنوانِ خودِ محصول.
+    ...pageSocial({
+      path: `/product/${product.id}`,
+      title: brandedTitle,
+      description,
+      card: product.image ? "summary_large_image" : "summary",
+      image: product.image ? publicImagePath(product.image) : undefined,
+      imageAlt: brandedTitle,
+      // Express صفحهٔ محصول هیچ `twitter:description`ی نداشت؛ نبودنش یعنی
+      // توییتر به og:description برمی‌گردد — همان رفتاری که آن‌جا بود.
+      twitterDescription: null,
+    }),
+    robots: {
+      index: true,
+      follow: true,
+      // صریح نوشتنِ این، لازم است: `robots`ِ صفحه **کامل** جایگزینِ robotsِ
+      // layout می‌شود، پس `max-image-preview:large`ِ ریشه از دست می‌رفت و
+      // صفحه‌های محصول — پرارزش‌ترین صفحات این فروشگاه — با پیش‌نمایشِ
+      // تصویرِ کوچک در گوگل می‌نشستند.
+      "max-image-preview": "large",
     },
-    robots: { index: true, follow: true },
   };
 }
 
@@ -106,13 +144,51 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const related = await getRelatedProducts(numId).catch(() => []);
 
+  // تگ‌های قیمتِ فیسبوک (product:price:*) و `og:price:standard_amount`.
+  //
+  // چرا این‌جا و نه در `generateMetadata`: آبجکتِ `Metadata` این کلیدها را
+  // نمی‌شناسد و `metadata.other` همه را با `name=` چاپ می‌کند، در حالی که
+  // استانداردِ og/فیسبوک `property=` می‌خواهد. React نسخهٔ ۱۹ این متاها را از
+  // هر جای درخت به `<head>` می‌برد، پس همان چیزی را می‌سازند که Express
+  // سرور-ساید در head می‌گذاشت.
+  const priceMeta = (
+    <>
+      {/* `og:type=product` را نمی‌توان از آبجکتِ `Metadata` داد: خودِ Next
+          مقدارهای ناشناسِ og:type را رد می‌کند و build را می‌شکند
+          (`generate/opengraph.js`). پس مثل بقیهٔ تگ‌های محصول، یک تگِ واقعی
+          است و همان چیزی را می‌سازد که Express سرور-ساید می‌گذاشت. */}
+      <meta property="og:type" content="product" />
+      <meta property="product:price:amount" content={String(product.price * 10)} />
+      <meta property="product:price:currency" content="IRR" />
+      {Number(product.oldPrice) > Number(product.price) && (
+        <meta
+          property="og:price:standard_amount"
+          content={String(Number(product.oldPrice) * 10)}
+        />
+      )}
+    </>
+  );
+
   return (
     <>
+      {priceMeta}
       <ProductJsonLd product={product} />
       <BreadcrumbJsonLd
         items={[
           { name: "خانه", url: "/" },
-          { name: "محصولات", url: "/products" },
+          // میانهٔ مسیر در Express **دستهٔ خودِ محصول** بود، نه فهرستِ کل:
+          //
+          //     { name: p.category, item: `…/index.html?cat=${…}#products` }
+          //
+          // روی Next معادلِ همان فیلتر، `/products?category=…` است (کلیدهای
+          // عصرِ Express هم در `productQuery.ts` خوانده می‌شوند، ولی نشانی‌ای
+          // که خودمان می‌سازیم با کلیدهای امروزی ساخته می‌شود).
+          product.category
+            ? {
+                name: product.category,
+                url: `/products?category=${encodeURIComponent(product.category)}`,
+              }
+            : { name: "محصولات", url: "/products" },
           { name: product.title, url: `/product/${product.id}` },
         ]}
       />

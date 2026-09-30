@@ -6,6 +6,7 @@ import { StoreJsonLd, WebSiteJsonLd, FAQPageJsonLd, ItemListJsonLd } from "@/com
 import { OrderTrackingSection } from "@/components/home/OrderTracking";
 import { Icon, SpriteIcon, type IconName } from "@/components/Icon";
 import { HOME_FAQ } from "@/lib/faq";
+import { pageSocial } from "@/lib/social";
 import { RecentlyViewed } from "@/components/home/RecentlyViewed";
 import { PromoBanner } from "@/components/home/PromoBanner";
 import type { Metadata } from "next";
@@ -36,6 +37,19 @@ export const metadata: Metadata = {
   description:
     "خرید آنلاین لوازم پلاستیکی خانه از پلاسکو گلی؛ تشت، صندلی، ظروف نگهداری، سبد لباس و لوازم آشپزخانه با جنس اصل، قیمت منصفانه، ارسال سریع و پرداخت امن زرین‌پال.",
   alternates: { canonical: "/" },
+  // متن‌های اشتراک‌گذاری عیناً از `index.html`. دو تفاوتِ ریز که در همان فایل
+  // بود و این‌جا حفظ می‌شود: (۱) og:title **و** twitter:title کوتاه‌تر از
+  // `<title>`اند («…خانه» در برابر «…خانه و آشپزخانه»)، (۲) توضیحِ twitter با
+  // توضیحِ og فرق می‌کند. پس عمداً `twitterTitle` داده نمی‌شود تا از همان
+  // عنوانِ og استفاده شود — همان چیزی که `index.html` داشت.
+  ...pageSocial({
+    path: "/",
+    title: "پلاسکو گلی | فروشگاه آنلاین لوازم پلاستیکی خانه",
+    description:
+      "از تشت و صندلی تا هر چیزی که یک خانه برای زندگی روزمره لازم دارد؛ جنس اصل، قیمت منصفانه، ارسال سریع و پرداخت امن.",
+    twitterDescription:
+      "خرید آنلاین لوازم پلاستیکی خانه؛ جنس اصل، قیمت منصفانه، ارسال سریع.",
+  }),
 };
 
 // ============================================================

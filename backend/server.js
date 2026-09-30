@@ -763,6 +763,13 @@ app.get('/', renderHomepage);
 app.get('/index.html', renderHomepage);
 app.get('/terms.html', renderSeoPage('terms.html'));
 app.get('/products.html', renderSeoPage('products.html'));
+// `wholesale.html` از قلم افتاده بود: فایلش در `frontend/` است، ولی هیچ روتی
+// نداشت، پس مستقیم از `express.static` سرو می‌شد و جایگزینیِ دامنه‌ی نمونه
+// هیچ‌وقت رویش اجرا نمی‌شد. نتیجه: یک صفحه‌ی **ایندکس‌شدنی** که
+// `<link rel="canonical">` و `og:url`اش به `https://polasco-goli.example.com`
+// اشاره می‌کرد — یعنی به گوگل می‌گفت «نسخه‌ی اصلیِ من روی دامنه‌ای است که
+// وجود ندارد». canonicalِ غلط از نبودنش بدتر است.
+app.get('/wholesale.html', renderSeoPage('wholesale.html'));
 
 // robots.txt داینامیک — فایل ثابت قبلی دامنه‌ی نمونه را داشت و خط Sitemap هم
 // دو بار تکرار شده بود. این نسخه همیشه دامنه‌ی واقعیِ همان درخواست را می‌نویسد،
