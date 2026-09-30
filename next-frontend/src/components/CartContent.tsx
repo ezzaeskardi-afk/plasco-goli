@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { useShopInfo, lowStockThreshold } from "@/lib/useShopInfo";
 import type { CartResponse } from "@/lib/types";
 
 function toFa(n: number): string {
@@ -60,6 +61,9 @@ function useOptimisticCart(cart: CartResponse | null) {
 export function CartContent() {
   const queryClient = useQueryClient();
   const toast = useToast();
+  // هوک باید پیش از هر returnِ زودهنگام صدا زده شود؛ وگرنه ترتیبِ هوک‌ها
+  // بین رندرِ «در حال بارگذاری» و رندرِ سبد عوض می‌شود و React خطا می‌دهد.
+  const shop = useShopInfo();
   const [couponCode, setCouponCode] = useState("");
   const [couponMsg, setCouponMsg] = useState("");
 
@@ -186,13 +190,18 @@ export function CartContent() {
   ) {
     return (
       <div className="text-center py-16">
-        <p className="text-ink-soft text-sm mb-4">سبد خریدتون خالیه</p>
+        <h3 className="text-base font-bold mb-2" style={{ color: "var(--color-ink)" }}>
+          سبد خریدتون خالیه
+        </h3>
+        <p className="text-ink-soft text-sm mb-4">
+          برید یه سر به محصولات بزنید، چیز خوب پیدا می‌کنید.
+        </p>
         <Link
           href="/products"
           className="inline-block rounded-full px-6 py-2.5 text-sm font-bold transition-colors"
           style={{ background: "var(--color-teal)", color: "#04211B" }}
         >
-          مشاهدهٔ محصولات
+          مشاهده محصولات
         </Link>
       </div>
     );
@@ -284,6 +293,10 @@ export function CartContent() {
                     disabled={
                       item.qty >= item.maxQty || updateMutation.isPending
                     }
+                    aria-label={`زیاد کردن تعداد ${item.title}`}
+                    title={
+                      item.qty >= item.maxQty ? "بیشتر از این موجود نیست" : undefined
+                    }
                     className="w-8 h-8 flex items-center justify-center text-sm font-bold transition-colors hover:bg-teal-tint disabled:opacity-30"
                     style={{ color: "var(--color-teal)" }}
                   >
@@ -305,23 +318,19 @@ export function CartContent() {
                         : removeMutation.mutate(item.productId)
                     }
                     disabled={updateMutation.isPending}
-                    className="w-8 h-8 flex items-center justify-center text-sm font-bold transition-colors hover:bg-coral-tint disabled:opacity-30"
+                    aria-label={
+                      item.qty > 1
+                        ? `کم کردن تعداد ${item.title}`
+                        : "حذف"
+                    }
+                    className={
+                      item.qty > 1
+                        ? "w-8 h-8 flex items-center justify-center text-sm font-bold transition-colors hover:bg-coral-tint disabled:opacity-30"
+                        : "h-8 px-2.5 flex items-center justify-center text-[11px] font-bold transition-colors hover:bg-coral-tint disabled:opacity-30"
+                    }
                     style={{ color: "var(--color-coral)" }}
                   >
-                    {item.qty > 1 ? (
-                      "−"
-                    ) : (
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M5 5l10 10M15 5l-10 10" />
-                      </svg>
-                    )}
+                    {item.qty > 1 ? "−" : "حذف"}
                   </button>
                 </div>
 
@@ -376,23 +385,38 @@ export function CartContent() {
                     className="text-[11px] mt-0.5"
                     style={{ color: "var(--color-ink-dim)" }}
                   >
-                    جمع: {toToman(item.subtotal)}
+                    {toToman(item.subtotal)}
                   </div>
+                  {item.savings > 0 && (
+                    <div
+                      className="text-[11px] mt-0.5"
+                      style={{ color: "var(--color-teal)" }}
+                    >
+                      {toToman(item.savings)} تومان سود
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {item.wholesale?.applies && (
-                <p
-                  className="text-[11px] mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5"
-                  style={{
-                    background: "var(--color-gold-tint)",
-                    color: "var(--color-gold)",
-                  }}
-                >
-                  تخفیف عمده اعمال شد — {toFa(item.wholesale.discount)}٪ (از{" "}
-                  {toFa(item.wholesale.minQty)} عدد)
-                </p>
-              )}
+                  {item.wholesale?.applies && (
+                    <span
+                      className="text-[11px] mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5"
+                      style={{
+                        background: "var(--color-gold-tint)",
+                        color: "var(--color-gold)",
+                      }}
+                    >
+                      تخفیف عمده اعمال شد — {toFa(item.wholesale.discount)}٪ (از{" "}
+                      {toFa(item.wholesale.minQty)} عدد)
+                    </span>
+                  )}
+                  {/* هشدارِ موجودی — دقیقاً مثل frontend/js/cart.js:159: فقط
+                      وقتی واقعاً کم است، وگرنه بی‌دلیل نگران‌کننده می‌شود. */}
+                  {item.stock <= lowStockThreshold(shop) && (
+                    <span className="block text-[11px] mt-1.5 text-coral">
+                      تنها {toFa(item.stock)} عدد در انبار
+                    </span>
+                  )}
             </div>
           </div>
         ))}
@@ -408,7 +432,7 @@ export function CartContent() {
             className="text-sm font-bold mb-4"
             style={{ color: "var(--color-ink)" }}
           >
-            خلاصهٔ سفارش
+            خلاصه‌ی سفارش
           </h3>
 
           {/* کوپن */}
@@ -417,15 +441,16 @@ export function CartContent() {
               <span style={{ color: "var(--color-teal)" }}>
                 {/* `.code` لازم است: سرور آبجکت می‌فرستد. قبلاً خودِ آبجکت رندر
                     می‌شد و صفحه با هر کدِ تخفیفِ معتبر به صفحه‌ی خطا می‌افتاد. */}
-                کد تخفیف: {displayCart.coupon.code}
+                کد {displayCart.coupon.code} اعمال شد
               </span>
               <button
                 onClick={() => removeCouponMutation.mutate()}
                 disabled={removeCouponMutation.isPending}
-                className="underline"
+                aria-label="برداشتن کد تخفیف"
+                className="text-base leading-none"
                 style={{ color: "var(--color-ink-dim)" }}
               >
-                حذف
+                ×
               </button>
             </div>
           ) : (
@@ -434,7 +459,8 @@ export function CartContent() {
                 type="text"
                 value={couponCode}
                 onChange={(e) => setCouponCode(e.target.value)}
-                placeholder="کد تخفیف"
+                placeholder="کد تخفیف دارید؟"
+                aria-label="کد تخفیف"
                 className="flex-1 rounded-full px-3 py-1.5 text-xs outline-none"
                 style={{
                   background: "var(--color-surface-2)",
@@ -486,7 +512,7 @@ export function CartContent() {
               className="flex justify-between"
               style={{ color: "var(--color-ink-soft)" }}
             >
-              <span>جمع اقلام</span>
+              <span>جمع کالاها</span>
               <span>{toToman(displayCart.total)}</span>
             </div>
             {/* صرفه‌جویی از تخفیفِ خودِ محصولات — جدا از کد تخفیف. سرور
@@ -496,7 +522,7 @@ export function CartContent() {
                 className="flex justify-between"
                 style={{ color: "var(--color-teal)" }}
               >
-                <span>صرفه‌جویی شما</span>
+                <span>سود شما از تخفیف‌ها</span>
                 <span>{toToman(displayCart.savings)}</span>
               </div>
             )}
@@ -539,7 +565,7 @@ export function CartContent() {
                     color: "var(--color-gold)",
                   }}
                 >
-                  {toToman(displayCart.freeShippingGap)} تا ارسال رایگان
+                  فقط {toToman(displayCart.freeShippingGap)} دیگر تا ارسال رایگان!
                 </div>
               )}
             <div
@@ -549,7 +575,7 @@ export function CartContent() {
                 color: "var(--color-ink)",
               }}
             >
-              <span>قابل پرداخت</span>
+              <span>مبلغ قابل پرداخت</span>
               <span>{toToman(displayCart.payable)}</span>
             </div>
           </div>
@@ -574,6 +600,15 @@ export function CartContent() {
           >
             تکمیل خرید
           </Link>
+          {/* فهرستِ اطمینان — عیناً همان سه قلمِ frontend/cart.html */}
+          <ul
+            className="mt-4 space-y-1.5 text-[11px]"
+            style={{ color: "var(--color-ink-dim)" }}
+          >
+            <li>پرداخت امن با درگاه زرین‌پال</li>
+            <li>ارسال داخل شهر همان روز</li>
+            <li>۷ روز مهلت مرجوعی</li>
+          </ul>
         </div>
       </div>
     </div>

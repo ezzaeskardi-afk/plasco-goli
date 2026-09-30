@@ -35,10 +35,16 @@ async function getProductsData(searchParams: ProductsPageProps["searchParams"]) 
   // می‌شوند، وگرنه فیلترِ یک نشانیِ قدیمی بی‌صدا گم می‌شد.
   const lp = normalizeListingQuery(await searchParams);
 
+  // `sort` و `limit` همیشه فرستاده می‌شوند — عیناً products.js:246 که
+  // `{page, limit, sort}` را همه‌وقت می‌گذارد. بدونش سرور شاخهٔ قدیمیِ
+  // «همه‌ی کالاها بدون صفحه‌بندی» را برمی‌گرداند: نه `meta` می‌آید (پس خطِ
+  // «۳۸ کالا · صفحه‌ی ۱ از ۲» هرگز نشان داده نمی‌شد) و نه صفحه‌بندیِ ۲۴تاییِ
+  // Express رعایت می‌شد (۳۸ کارت یک‌جا در برابر ۲۴).
   const [productsRes, facets] = await Promise.all([
     getProducts({
       page: lp.page,
-      sort: lp.sort,
+      sort: lp.sort || "newest",
+      limit: 24,
       category: lp.category,
       minPrice: lp.minPrice,
       maxPrice: lp.maxPrice,
@@ -151,12 +157,14 @@ function SearchBar({ defaultValue }: { defaultValue?: string }) {
 }
 
 function FilterBarFallback() {
+  // اسکلتِ بی‌متن — عیناً مثلِ خودِ Express (products.js:148): آنجا هم
+  // جای «در حال بارگذاری…» چند خطِ اسکلت نشان داده می‌شود تا متنِ اضافه‌ای
+  // که فقط در یکی از دو نسخه هست تولید نشود.
   return (
-    <div
-      className="rounded-full px-4 py-1.5 text-xs text-ink-dim"
-      style={{ background: "var(--color-surface)" }}
-    >
-      بارگذاری فیلترها...
+    <div className="flex flex-wrap gap-2" aria-hidden="true">
+      <div className="h-7 w-28 rounded-full animate-pulse" style={{ background: "var(--color-surface)" }} />
+      <div className="h-7 w-40 rounded-full animate-pulse" style={{ background: "var(--color-surface)" }} />
+      <div className="h-7 w-32 rounded-full animate-pulse" style={{ background: "var(--color-surface)" }} />
     </div>
   );
 }
@@ -322,7 +330,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
             </h1>
             {total > 0 && (
               <p className="text-xs text-ink-dim mt-1">
-                {toFa(total)} محصول پیدا شد
+                <b className="font-bold">{toFa(total)}</b> کالا
                 {totalPages > 1 && ` · صفحه‌ی ${toFa(page)} از ${toFa(totalPages)}`}
               </p>
             )}
@@ -365,7 +373,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
               <FilterChip label={`تا ${toFa(lp.maxPrice)} تومان`} removeKey="maxPrice" current={current} />
             )}
             {lp.inStockOnly && (
-              <FilterChip label="فقط موجود" removeKey="inStockOnly" current={current} />
+              <FilterChip label="فقط کالاهای موجود" removeKey="inStockOnly" current={current} />
             )}
           </div>
         )}
@@ -387,12 +395,16 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         </div>
 
         {/* گرید محصولات */}
+        {/* حالتِ خالی — عیناً متنِ products.js:285 */}
         {products.length > 0 ? (
           <ProductCardGrid products={products} />
         ) : (
           <div className="text-center py-16">
+            <b className="block text-sm font-bold mb-1" style={{ color: "var(--color-ink)" }}>
+              با این فیلترها چیزی پیدا نشد
+            </b>
             <p className="text-ink-soft text-sm mb-3">
-              محصولی با این مشخصات پیدا نشد.
+              می‌توانی یکی از فیلترها را برداری یا همه را پاک کنی.
             </p>
             <Link
               href="/products"

@@ -25,7 +25,13 @@ export function jalaliYear(date: Date = new Date()): string {
   return new Intl.DateTimeFormat("fa-IR", { year: "numeric" }).format(date);
 }
 
-/** متنِ کاملِ پاورقی — عیناً همان جمله‌ی Express، فقط با سالِ درست. */
+/**
+ * متنِ کاملِ پاورقی — عیناً همان جمله‌ی Express، فقط با سالِ درست.
+ *
+ * نقطه‌گذاری هم مثلِ Express است (نقطه پس از «پلاسکو گلی»، نه خطِ تیره):
+ * `common.js:375` → «© 2026 پلاسکو گلی. تمامی حقوق محفوظ است.» پس تنها
+ * تفاوتِ باقی‌مانده، تقویم/رقمِ سال است که حذفش عمدی نیست بلکه خواسته است.
+ */
 export function footerNotice(date: Date = new Date()): string {
-  return `© ${jalaliYear(date)} پلاسکو گلی — تمامی حقوق محفوظ است.`;
+  return `© ${jalaliYear(date)} پلاسکو گلی. تمامی حقوق محفوظ است.`;
 }
