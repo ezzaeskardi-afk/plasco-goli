@@ -121,6 +121,14 @@ jobs:
       - name: README count guard
         run: node tests/readme-counts.js
 
+      # ---------- خودِ نگهبان‌ها ----------
+      # هارنسِ تخریبی: برای هر نگهبانِ سبک چند خرابیِ عمدی می‌سازد و انتظار دارد
+      # قرمز شود (و دلیلِ درست را بگوید)، بعد فایل را بایت‌به‌بایت برمی‌گرداند و
+      # با SHA-256 تأیید می‌کند. بدونِ این، «سبزِ خالی» از «نگهبانِ خراب» قابلِ
+      # تفکیک نیست — و نگهبانی که هیچ نمی‌گیرد از نبودنش بدتر است.
+      - name: Guard mutation harness (backend guards)
+        run: node tests/guard-mutations.js --scope=backend
+
   frontend:
     name: Next.js typecheck, lint, test and build (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
@@ -186,6 +194,13 @@ jobs:
       - name: README counts (frontend)
         run: npm run test:readme-counts
 
+      # همان هارنسِ تخریبی، این بار روی نگهبان‌های Vitest و اسکریپتِ عددهای
+      # README: فایلِ منبعِ محافظت‌شده عمداً شکسته می‌شود و باید *همان* آزمونِ
+      # مشخص قرمز شود (گزارشِ JSON خوانده می‌شود، نه فقط کدِ خروج). بک‌اند لازم
+      # نیست؛ فقط vitestِ نصب‌شده و خودِ مخزن.
+      - name: Guard mutation harness (frontend guards)
+        run: node ../backend/tests/guard-mutations.js --scope=frontend
+
       - name: Install backend dependencies
         run: npm ci
         working-directory: backend
@@ -233,3 +248,29 @@ jobs:
             echo '::error::no product pages were prerendered - the SSG path is broken'
             exit 1
           fi
+
+      # ---------- برابریِ زنده، با جهش ----------
+      # اجراکننده‌ی زنده سرورِ واقعی می‌خواهد؛ بک‌اند ممکن است از stepِ بیلد زنده
+      # مانده باشد و اگر نه خودمان بالا می‌آوریم. Next هم با `next start` روی همان
+      # بیلدی که همین حالا ساخته شد بالا می‌آید. بعد هارنس یک خرابیِ عمدی در متنِ
+      # Express می‌سازد و انتظار دارد اجراکننده «واگراییِ تازه» ببیند و قرمز شود.
+      - name: Live parity guard mutations
+        run: |
+          set -euo pipefail
+
+          if ! curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
+            ( cd ../backend && node server.js > /tmp/backend-parity.log 2>&1 & )
+          fi
+          if ! curl -fsS http://127.0.0.1:3001/ > /dev/null 2>&1; then
+            ( npm run start > /tmp/next-parity.log 2>&1 & )
+          fi
+
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1 \
+              && curl -fsS http://127.0.0.1:3001/ > /dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+
+          node ../backend/tests/guard-mutations.js --scope=live
