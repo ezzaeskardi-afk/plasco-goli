@@ -338,6 +338,12 @@ function scanSrc(): Ref[] {
     // نقشهٔ خودش قرمز می‌شود. جایش، آزمونِ «هر نامِ دنیای Express تصمیم دارد»
     // پایین‌تر تضمین می‌کند این معافیت یک روزنه نباشد.
     if (file.endsWith(path.join("lib", "legacyUrls.ts"))) continue;
+    // `lib/parityManifest.ts` هم مثلِ legacyUrls نقشه است، نه ارجاع: ردیفِ
+    // هر صفحه آدرسِ *نسخه‌ی Express* و آدرسِ همتای Next را کنار هم می‌گذارد
+    // (یکی از محورهایش دقیقاً همین .htmlهاست). این معافیت هم روزنه نیست:
+    // آزمونِ `parityManifest.test.ts` هر آدرسِ Next را با درختِ واقعیِ
+    // app/public می‌سنجد و هر صفحهٔ Express را با فایلِ واقعی روی دیسک.
+    if (file.endsWith(path.join("lib", "parityManifest.ts"))) continue;
     const raw = fs.readFileSync(file, "utf8");
     const clean = file.endsWith(".css")
       ? stripCssComments(raw)
