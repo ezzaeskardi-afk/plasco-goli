@@ -372,8 +372,11 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
             {lp.maxPrice !== undefined && (
               <FilterChip label={`تا ${toFa(lp.maxPrice)} تومان`} removeKey="maxPrice" current={current} />
             )}
+            {/* Express این‌جا «فقط موجود» می‌نویسد (products.js:111) در حالی که
+                چک‌باکسِ ستونِ فیلتر «فقط کالاهای موجود» است — دو متنِ عمداً
+                متفاوت که باید همان‌طور بمانند (نگهبانش در copyParity). */}
             {lp.inStockOnly && (
-              <FilterChip label="فقط کالاهای موجود" removeKey="inStockOnly" current={current} />
+              <FilterChip label="فقط موجود" removeKey="inStockOnly" current={current} />
             )}
           </div>
         )}
@@ -414,7 +417,10 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
                 color: "var(--color-teal)",
               }}
             >
-              پاک کردن فیلترها
+              {/* عیناً متنِ `#plReset` در products.html:197 — «پاک کردن همه‌ی
+                  فیلترها». نسخه‌ی قبلی «پاک کردن فیلترها» بود و همین اختلافِ
+                  یک‌کلمه‌ای را گاردِ برابریِ فروشگاه (parityManifest) گرفت. */}
+              پاک کردن همه‌ی فیلترها
             </Link>
           </div>
         )}
