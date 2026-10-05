@@ -375,6 +375,410 @@ const RESTORED: { what: string; re: RegExp }[] = [
   { what: "«خلاصهٔ سفارش» با همزهٔ ترکیبی", re: /خلاصه\u0654/ },
 ];
 
+// ============================================================
+// ۵) فروشگاه — صفحهٔ اصلی، صفحهٔ محصول، قوانین و عمده
+// ============================================================
+// چله اضافه شد: تا امروز این نگهبان فقط سبد/پرداخت/فیلترها را قفل می‌کرد،
+// ولی گزارشِ برابری (`parity:storefront`) ۳۷ بدهیِ بازِ متنی داشت — هیروی صفحهٔ
+// اصلی، نوارِ متحرک، فیلترهای همان صفحه، پیگیری سفارش، «پیشنهاد ویژه»،
+// سرتیترهای صفحهٔ محصول، متنِ قوانین و دکمهٔ شناورِ تماس. همه پیاده شدند و از
+// این پس این‌جا جمله‌به‌جمله قفل می‌شوند. قاعده همان است: **منبعِ حقیقت خودِ
+// `frontend/`** — اگر روزی Express عوض شود، آزمون می‌گوید «منبعِ حقیقت عوض
+// شده»، نه اینکه بی‌صدا سبز بماند.
+
+const INDEX_HTML = "index.html";
+const PRODUCT_HTML_ = "product.html";
+const TERMS_HTML = "terms.html";
+const WHOLESALE_HTML = "wholesale.html";
+
+const NEXT_HOME = "src/app/page.tsx";
+const NEXT_MARQUEE = "src/components/Marquee.tsx";
+const NEXT_HOME_FILTER = "src/components/home/HomeFilterBar.tsx";
+const NEXT_TRACKING = "src/components/home/OrderTracking.tsx";
+const NEXT_RECENT = "src/components/home/RecentlyViewed.tsx";
+const NEXT_PROMO = "src/components/home/PromoBanner.tsx";
+const NEXT_CONTACT_FAB = "src/components/ContactFab.tsx";
+const NEXT_PRODUCT_DETAIL = "src/components/ProductDetail.tsx";
+const NEXT_PRODUCT_REVIEWS = "src/components/ProductReviews.tsx";
+const NEXT_PRODUCT_PAGE = "src/app/product/[id]/page.tsx";
+const NEXT_TERMS = "src/app/terms/page.tsx";
+
+// نوارِ متحرکِ اعتماد — شش جملهٔ `index.html:260`
+const MARQUEE_ITEMS = [
+  "ارسال سریع به سراسر کشور",
+  "پرداخت امن زرین‌پال",
+  "ضمانت اصالت کالا",
+  "۷ روز مهلت مرجوعی",
+  "مشاوره‌ی صادقانه",
+  "قیمت منصفانه",
+];
+
+// چهار چیپِ اعتمادِ هیرو (آیکون ↔ متن)
+const HERO_CHIPS: [string, string][] = [
+  ["i-shield", "جنس درجه‌یک"],
+  ["i-tag", "قیمت مناسب"],
+  ["i-truck", "ارسال سریع"],
+  ["i-check", "ضمانت اصالت کالا"],
+];
+
+// گزینه‌های مرتب‌سازیِ همین نوار در Express (value ↔ برچسب)
+const HOME_SORTS: [string, string][] = [
+  ["default", "پیش‌فرض"],
+  ["cheap", "ارزان‌ترین"],
+  ["expensive", "گران‌ترین"],
+  ["newest", "جدیدترین"],
+  ["name", "حروف الفبا"],
+];
+
+/** الگوی مشترکِ `a.fab` در هر چهار صفحهٔ Express (index/products/product/wholesale) */
+const FAB_RE =
+  /<a class="fab" href="tel:09113567409">\s*<svg><use href="#i-phone"\/>\s*<\/svg>\s*<span class="fab-label">([^<]+)<\/span>/;
+
+const STORE_CLAIMS: Claim[] = [
+  // ---------- هیرو ----------
+  {
+    what: "eyebrowِ هیرو",
+    from: INDEX_HTML,
+    re: /<span class="eyebrow"><span class="dot"><\/span> (فروشگاه محله[^<]+)<\/span>/,
+    to: NEXT_HOME,
+  },
+  {
+    what: "سرتیترِ هیرو",
+    from: INDEX_HTML,
+    re: /<h1 id="hero-title">([\s\S]*?)<\/h1>/,
+    to: NEXT_HOME,
+    // سرتیتر در JSX با `{" "}` و `<em>` شکسته است، پس شکلِ جمله سنجیده می‌شود.
+    nextRe: /هر چی خانه‌ی شما لازم داره،[\s\S]*?پلاستیکی و رنگی[\s\S]*?همین‌جاست/,
+  },
+  { what: "لیدِ هیرو", from: INDEX_HTML, re: /<p class="lead">([\s\S]*?)<\/p>/, to: NEXT_HOME },
+  {
+    what: "دکمهٔ اصلیِ هیرو",
+    from: INDEX_HTML,
+    re: /<a href="#products" class="btn btn-primary">\s*<svg><use href="#i-cart"\/><\/svg> ([^<]+)/,
+    to: NEXT_HOME,
+  },
+  ...HERO_CHIPS.map(([icon, label]) => ({
+    what: `چیپِ اعتماد «${label}»`,
+    from: INDEX_HTML,
+    re: new RegExp(`<span class="trust-chip"><svg><use href="#${icon}"\\/><\\/svg> ([^<]+)</span>`),
+    to: NEXT_HOME,
+  })),
+  {
+    what: "برچسبِ شناور «کیفیت مطمئن»",
+    from: INDEX_HTML,
+    re: /<div class="float-tag tag-1"><svg><use href="#i-shield"\/><\/svg> ([^<]+)<\/div>/,
+    to: NEXT_HOME,
+  },
+  {
+    what: "برچسبِ شناور «ارسال همون‌روز»",
+    from: INDEX_HTML,
+    re: /<div class="float-tag tag-2"><svg><use href="#i-truck"\/><\/svg> ([^<]+)<\/div>/,
+    to: NEXT_HOME,
+  },
+  // ---------- نوارِ متحرکِ اعتماد ----------
+  ...MARQUEE_ITEMS.map((item) => ({
+    what: `قلمِ نوارِ متحرک «${item}»`,
+    from: INDEX_HTML,
+    re: new RegExp(`${item} <b>✦`),
+    to: NEXT_MARQUEE,
+    nextRe: new RegExp(item),
+  })),
+  // ---------- بخشِ محصولات و فیلترهای صفحهٔ اصلی ----------
+  {
+    what: "eyebrowِ بخشِ محصولات",
+    from: INDEX_HTML,
+    re: /<span class="eyebrow"><span class="dot"><\/span> (پرفروش[^<]+)<\/span>/,
+    to: NEXT_HOME,
+  },
+  {
+    what: "سرتیترِ بخشِ محصولات",
+    from: INDEX_HTML,
+    re: /<h2 id="products-title">([^<]+)<\/h2>/,
+    to: NEXT_HOME,
+  },
+  {
+    what: "زیرنویسِ بخشِ محصولات",
+    from: INDEX_HTML,
+    re: /<p>(محصول موردنظرتون[^<]*)<\/p>/,
+    to: NEXT_HOME,
+  },
+  {
+    what: "برچبندِ مرتب‌سازی در صفحهٔ اصلی",
+    from: INDEX_HTML,
+    re: /<label for="sortSelect"><svg><use href="#i-sort"\/><\/svg> ([^<]+)<\/label>/,
+    to: NEXT_HOME_FILTER,
+  },
+  ...HOME_SORTS.map(([value, label]) => ({
+    what: `گزینهٔ مرتب‌سازیِ صفحهٔ اصلی «${label}»`,
+    from: INDEX_HTML,
+    re: new RegExp(`<option value="${value}">([^<]+)</option>`),
+    to: NEXT_HOME_FILTER,
+  })),
+  {
+    what: "برچسبِ بازهٔ قیمتِ صفحهٔ اصلی",
+    from: INDEX_HTML,
+    re: /<label for="priceMin"><svg><use href="#i-tag"\/><\/svg> ([^<]+)<small>/,
+    to: NEXT_HOME_FILTER,
+  },
+  {
+    what: "placeholderِ حداقلِ قیمتِ صفحهٔ اصلی",
+    from: INDEX_HTML,
+    re: /id="priceMin"[^>]*placeholder="([^"]+)"/,
+    to: NEXT_HOME_FILTER,
+  },
+  {
+    what: "placeholderِ حداکثرِ قیمتِ صفحهٔ اصلی",
+    from: INDEX_HTML,
+    re: /id="priceMax"[^>]*placeholder="([^"]+)"/,
+    to: NEXT_HOME_FILTER,
+  },
+  {
+    what: "دکمهٔ «مشاهده‌ی همه‌ی محصولات»",
+    from: INDEX_HTML,
+    re: /<span id="allProductsCtaText">([^<]+)<\/span>/,
+    to: NEXT_HOME,
+  },
+  {
+    what: "یادداشتِ زیرِ دکمهٔ همهٔ محصولات",
+    from: INDEX_HTML,
+    re: /<p class="products-cta-note">([^<]+)<\/p>/,
+    to: NEXT_HOME,
+  },
+  // ---------- بخش‌های صفحهٔ اصلی ----------
+  {
+    what: "eyebrowِ «ادامه‌ی گشت‌وگذار»",
+    from: INDEX_HTML,
+    re: /<span class="eyebrow"><span class="dot"><\/span> (ادامه‌ی گشت[^<]+)<\/span>/,
+    to: NEXT_RECENT,
+  },
+  {
+    what: "سرتیترِ «اخیراً دیده‌اید»",
+    from: INDEX_HTML,
+    re: /<h2 id="recent-title" class="h-22">([^<]+)<\/h2>/,
+    to: NEXT_RECENT,
+  },
+  {
+    what: "eyebrowِ «پیشنهاد ویژه»",
+    from: INDEX_HTML,
+    re: /<span class="eyebrow"><span class="dot"><\/span> (پیشنهاد ویژه)<\/span>/,
+    to: NEXT_PROMO,
+  },
+  {
+    what: "خطِ «کد تخفیف:» بنر",
+    from: INDEX_HTML,
+    re: /<p id="promoCodeLine" hidden>(کد تخفیف:)/,
+    to: NEXT_PROMO,
+  },
+  {
+    what: "دکمهٔ بنرِ «پیشنهاد ویژه»",
+    from: INDEX_HTML,
+    re: /<a href="#products" class="btn btn-ghost">([^<]+)<\/a>/,
+    to: NEXT_PROMO,
+  },
+  {
+    what: "eyebrowِ «نظر مشتری‌ها»",
+    from: INDEX_HTML,
+    re: /<span class="eyebrow"><span class="dot"><\/span> (نظر مشتری‌ها)<\/span>/,
+    to: NEXT_HOME,
+  },
+  {
+    what: "سرتیترِ «حرف مشتری‌های واقعی»",
+    from: INDEX_HTML,
+    re: /<h2 id="testi-title">([^<]+)<\/h2>/,
+    to: NEXT_HOME,
+  },
+  {
+    what: "یادداشتِ زیرِ سرتیترِ دیدگاه‌ها",
+    from: INDEX_HTML,
+    re: /<p>(این‌ها دیدگاه‌های ثبت‌شده[^<]*)<\/p>/,
+    to: NEXT_HOME,
+  },
+  {
+    what: "eyebrowِ «راه‌های ارتباطی»",
+    from: INDEX_HTML,
+    re: /<span class="eyebrow"><span class="dot"><\/span> (راه‌های ارتباطی)<\/span>/,
+    to: NEXT_HOME,
+  },
+  {
+    what: "سرتیترِ «سر بزنید یا پیام بدید»",
+    from: INDEX_HTML,
+    re: /<h2 id="contact-title">([^<]+)<\/h2>/,
+    to: NEXT_HOME,
+  },
+  // ---------- پیگیریِ سفارش ----------
+  {
+    what: "eyebrowِ پیگیری سفارش",
+    from: INDEX_HTML,
+    re: /<span class="eyebrow"><span class="dot"><\/span> (پیگیری سفارش)<\/span>/,
+    to: NEXT_TRACKING,
+  },
+  {
+    what: "سرتیترِ «سفارشم کجاست؟»",
+    from: INDEX_HTML,
+    re: /<h2 id="track-title">([^<]+)<\/h2>/,
+    to: NEXT_TRACKING,
+  },
+  {
+    what: "جملهٔ راهنمای پیگیری",
+    from: INDEX_HTML,
+    re: /<p>(شماره‌ی سفارش و موبایلی[^<]*)<\/p>/,
+    to: NEXT_TRACKING,
+  },
+  {
+    what: "برچسبِ شماره سفارش",
+    from: INDEX_HTML,
+    re: /<span>(شماره سفارش)<\/span>/,
+    to: NEXT_TRACKING,
+  },
+  {
+    what: "برچسبِ شماره موبایل",
+    from: INDEX_HTML,
+    re: /<span>(شماره موبایل)<\/span>/,
+    to: NEXT_TRACKING,
+  },
+  {
+    what: "placeholderِ شماره سفارش",
+    from: INDEX_HTML,
+    re: /id="trackOrderId"[\s\S]{0,120}?placeholder="([^"]+)"/,
+    to: NEXT_TRACKING,
+  },
+  {
+    what: "placeholderِ شماره موبایل",
+    from: INDEX_HTML,
+    re: /id="trackPhone"[\s\S]{0,120}?placeholder="([^"]+)"/,
+    to: NEXT_TRACKING,
+  },
+  {
+    what: "دکمهٔ پیگیری",
+    from: INDEX_HTML,
+    re: /id="trackBtn">([^<]+)<\/button>/,
+    to: NEXT_TRACKING,
+  },
+  {
+    what: "راهنمای پیدا کردنِ شماره سفارش",
+    from: INDEX_HTML,
+    re: /<p class="track-hint">([^<]+)<\/p>/,
+    to: NEXT_TRACKING,
+  },
+  // ---------- دکمهٔ شناورِ تماس: در هر چهار صفحهٔ Express ----------
+  ...[
+    [INDEX_HTML, "صفحهٔ اصلی"],
+    [PRODUCTS_HTML, "فهرستِ محصولات"],
+    [PRODUCT_HTML_, "صفحهٔ محصول"],
+    [WHOLESALE_HTML, "فروشِ عمده"],
+  ].map(([from, label]) => ({
+    what: `دکمهٔ شناورِ تماس در ${label}`,
+    from,
+    re: FAB_RE,
+    to: NEXT_CONTACT_FAB,
+  })),
+  // ---------- صفحهٔ محصول ----------
+  {
+    what: "قلمِ مزایای محصول (ارسال)",
+    from: PRODUCT_HTML_,
+    re: /<li><svg><use href="#i-truck"\/><\/svg> ([^<]+)<\/li>/,
+    to: NEXT_PRODUCT_DETAIL,
+  },
+  {
+    what: "قلمِ مزایای محصول (پرداخت)",
+    from: PRODUCT_HTML_,
+    re: /<li><svg><use href="#i-lock"\/><\/svg> ([^<]+)<\/li>/,
+    to: NEXT_PRODUCT_DETAIL,
+  },
+  {
+    what: "قلمِ مزایای محصول (مرجوعی)",
+    from: PRODUCT_HTML_,
+    re: /<li><svg><use href="#i-check-circle"\/><\/svg> ([^<]+)<\/li>/,
+    to: NEXT_PRODUCT_DETAIL,
+  },
+  {
+    what: "قلمِ مزایای محصول (اصالت)",
+    from: PRODUCT_HTML_,
+    re: /<li><svg><use href="#i-shield"\/><\/svg> ([^<]+)<\/li>/,
+    to: NEXT_PRODUCT_DETAIL,
+  },
+  {
+    what: "دکمهٔ خریدِ دسکتاپ",
+    from: PRODUCT_HTML_,
+    re: /<button class="buy-btn" id="pdBuy"><svg><use href="#i-cart"\/><\/svg> <span>([^<]+)<\/span><\/button>/,
+    to: NEXT_PRODUCT_DETAIL,
+  },
+  {
+    what: "eyebrowِ دیدگاه‌ها",
+    from: PRODUCT_HTML_,
+    re: /<span class="eyebrow"><span class="dot"><\/span> (دیدگاه خریداران)<\/span>/,
+    to: NEXT_PRODUCT_REVIEWS,
+  },
+  {
+    what: "سرتیترِ دیدگاه‌ها",
+    from: PRODUCT_HTML_,
+    re: /<h2 class="h-22">(نظر کسانی[^<]*)<\/h2>/,
+    to: NEXT_PRODUCT_REVIEWS,
+  },
+  {
+    what: "eyebrowِ محصولاتِ مرتبط",
+    from: PRODUCT_HTML_,
+    re: /<span class="eyebrow"><span class="dot"><\/span> (از همین دسته)<\/span>/,
+    to: NEXT_PRODUCT_PAGE,
+  },
+  {
+    what: "سرتیترِ محصولاتِ مرتبط",
+    from: PRODUCT_HTML_,
+    re: /<h2 class="h-22">(محصولات مرتبط)<\/h2>/,
+    to: NEXT_PRODUCT_PAGE,
+  },
+  // ---------- قوانین و راهنمای خرید ----------
+  ...[
+    ["buy", "خرید و پرداخت"],
+    ["returns", "لغو و مرجوعی"],
+  ].map(([id, label]) => ({
+    what: `برچسبِ میان‌برِ «${label}» در قوانین`,
+    from: TERMS_HTML,
+    re: new RegExp(`<a href="#${id}">([^<]+)</a>`),
+    to: NEXT_TERMS,
+  })),
+  {
+    what: "سرتیترِ بخشِ لغو سفارش در قوانین",
+    from: TERMS_HTML,
+    re: /<article class="terms-card" data-reveal id="returns">\s*<h2><svg><use href="#i-refresh"\/><\/svg> ([^<]+)<\/h2>/,
+    to: NEXT_TERMS,
+  },
+  // شناسه‌های بخش‌ها هم باید مثلِ Express بمانند، وگرنه لینکِ عمیقِ قدیمی
+  // (`terms.html#rules`) بعد از ریدایرکت به بخشِ اشتباه می‌رسد.
+  ...["buy", "shipping", "returns", "privacy", "rules"].map((id) => ({
+    what: `شناسهٔ بخشِ «${id}» در قوانین`,
+    from: TERMS_HTML,
+    re: new RegExp(`<a href="#${id}">`),
+    to: NEXT_TERMS,
+    nextRe: new RegExp(`id: "${id}"`),
+  })),
+];
+
+// فایل‌هایی که «باید عیناً یکی باشند» برایشان سنجیده می‌شود
+const EXPRESS_STORE_CORPUS = [INDEX_HTML, PRODUCT_HTML_, TERMS_HTML, WHOLESALE_HTML];
+const NEXT_STORE_CORPUS = [
+  NEXT_HOME,
+  NEXT_MARQUEE,
+  NEXT_HOME_FILTER,
+  NEXT_TRACKING,
+  NEXT_PROMO,
+  NEXT_CONTACT_FAB,
+  NEXT_PRODUCT_DETAIL,
+  NEXT_PRODUCT_REVIEWS,
+  NEXT_PRODUCT_PAGE,
+  NEXT_TERMS,
+];
+
+// ---------- ۶) واگراییهایی که در همین کار بسته شدند ----------
+// همان قاعده‌ی دو طرفه: نه در Next باید باشند، نه در Express — اگر در Express
+// بودند، یعنی واژه‌ی درست آن‌جا همین بوده و ما اشتباه یکسان‌سازی کرده‌ایم.
+const STORE_RESTORED: { what: string; re: RegExp }[] = [
+  { what: "«ارسال سریع از سراسر کشور» به‌جای متنِ `product.html:170`", re: /ارسال سریع از سراسر کشور/ },
+  { what: "«ارسال رایگان بالای…» به‌جای «خرید بالای … تومان، ارسال رایگان»", re: /ارسال رایگان بالای/ },
+  { what: "«۷ روز ضمانت بازگشت کالا» به‌جای «۷ روز مهلت مرجوعی»", re: /ضمانت بازگشت کالا/ },
+  { what: "«افزودن به سبد خرید» به‌جای «افزودن به سبد»", re: /افزودن به سبد خرید/ },
+];
+
 const describeExpress = HAS_EXPRESS ? describe : describe.skip;
 
 describeExpress("متنِ سبد، پرداخت و فیلترها بین Express و Next یکی است", () => {
@@ -382,6 +786,7 @@ describeExpress("متنِ سبد، پرداخت و فیلترها بین Express
     ["سبد خرید", CART_CLAIMS],
     ["پرداخت", CHECKOUT_CLAIMS],
     ["فیلترها", FILTER_CLAIMS],
+    ["فروشگاه", STORE_CLAIMS],
   ] as const) {
     it(`هر برچسبِ ${label} که Express می‌نویسد در Next هست`, () => {
       // نگهبانِ خودِ آزمون: اگر استخراج خراب شود، فهرستِ خالی هم سبز می‌شود.
@@ -437,6 +842,26 @@ describeExpress("متنِ سبد، پرداخت و فیلترها بین Express
     for (const file of EXPRESS_CORPUS) {
       const exp = flat(readExpress(file));
       for (const r of RESTORED) {
+        expect(r.re.test(exp), `${r.what} در frontend/${file} هست — یکسان‌سازی اشتباه بود`).toBe(
+          false,
+        );
+      }
+    }
+  });
+
+  it("واگرایی‌های فروشگاه به سورسِ Next برنگشتند", () => {
+    for (const file of NEXT_STORE_CORPUS) {
+      const next = flat(stripComments(readNext(file)));
+      for (const r of STORE_RESTORED) {
+        expect(r.re.test(next), `${r.what} به ${file} برگشت`).toBe(false);
+      }
+    }
+  });
+
+  it("همان واژه‌های فروشگاه در Express هم نبودند", () => {
+    for (const file of EXPRESS_STORE_CORPUS) {
+      const exp = flat(readExpress(file));
+      for (const r of STORE_RESTORED) {
         expect(r.re.test(exp), `${r.what} در frontend/${file} هست — یکسان‌سازی اشتباه بود`).toBe(
           false,
         );

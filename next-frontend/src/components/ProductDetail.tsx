@@ -402,7 +402,7 @@ export function ProductDetail({ product }: { product: Product }) {
                 ? "اضافه شد"
                 : busy
                   ? "در حال افزودن…"
-                  : "افزودن به سبد خرید"}
+                  : "افزودن به سبد"}
             </button>
           </div>
         )}
@@ -427,25 +427,32 @@ export function ProductDetail({ product }: { product: Product }) {
           </div>
         )}
 
-        {/* مزایا — همتای perks در js/product.js:190-200 */}
+        {/* مزایا — عیناً همان پنج قلمِ `ul.pd-perks` در product.html:169-175
+            (متنِ ارسالِ رایگان را `js/product.js:48-56` با `PG.freeShipNote()`
+            می‌سازد: «خرید بالای N تومان، ارسال رایگان» — و فقط وقتی هم آستانه
+            و هم هزینهٔ ارسال تعیین شده باشد). */}
         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs" style={{ color: "var(--color-ink-soft)" }}>
           <li className="flex items-center gap-2">
             <span className="text-teal">✓</span>
-            ارسال سریع از سراسر کشور
+            ارسال سریع؛ داخل شهر همان روز
+          </li>
+          {shop && shop.freeShippingOver > 0 && shop.shippingCost > 0 && (
+            <li className="flex items-center gap-2">
+              <span className="text-teal">✓</span>
+              خرید بالای {toToman(shop.freeShippingOver)} تومان، ارسال رایگان
+            </li>
+          )}
+          <li className="flex items-center gap-2">
+            <span className="text-teal">✓</span>
+            پرداخت امن زرین‌پال
           </li>
           <li className="flex items-center gap-2">
             <span className="text-teal">✓</span>
-            {shop && shop.freeShippingOver > 0
-              ? `ارسال رایگان بالای ${toToman(shop.freeShippingOver)}`
-              : "ارسال به سراسر کشور"}
+            ۷ روز مهلت مرجوعی
           </li>
           <li className="flex items-center gap-2">
             <span className="text-teal">✓</span>
-            پرداخت امنِ زرین‌پال
-          </li>
-          <li className="flex items-center gap-2">
-            <span className="text-teal">✓</span>
-            ۷ روز ضمانت بازگشت کالا
+            ضمانت اصالت کالا
           </li>
         </ul>
 

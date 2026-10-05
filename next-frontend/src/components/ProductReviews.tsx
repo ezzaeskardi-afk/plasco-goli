@@ -1,5 +1,6 @@
 import { getProductReviews } from "@/lib/api";
 import { StarRow } from "@/components/StarRow";
+import { Eyebrow } from "@/components/Eyebrow";
 import { ReviewForm } from "@/components/ReviewForm";
 
 // ============================================================
@@ -38,9 +39,16 @@ export async function ProductReviews({ productId }: { productId: number }) {
     // id لازم است: امتیازِ بالای صفحه‌ی محصول به #reviews لینک می‌دهد.
     // `data-reveal` — همتای `#pdReviews` در product.html.
     <section id="reviews" data-reveal="" className="mt-16 scroll-mt-24">
-      <h2 className="text-xl font-extrabold mb-6" style={{ color: "var(--color-ink)" }}>
-        دیدگاه خریداران
-      </h2>
+      {/* سرتیتر عیناً مثل `#pdReviews` در product.html:189-192: برچسبِ
+          «دیدگاه خریداران» بالا و عنوان «نظر کسانی که این جنس را خریده‌اند»
+          پایین. قبلاً برچسبِ بخش به‌جای عنوان نشسته بود، پس متنِ اصلیِ
+          سرتیتر («نظر کسانی که…») روی صفحه نبود. */}
+      <div className="mb-6">
+        <Eyebrow>دیدگاه خریداران</Eyebrow>
+        <h2 className="text-xl font-extrabold" style={{ color: "var(--color-ink)" }}>
+          نظر کسانی که این جنس را خریده‌اند
+        </h2>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* خلاصه‌ی امتیاز */}

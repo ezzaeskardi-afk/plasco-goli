@@ -247,8 +247,8 @@ const GUARDS = [
       {
         label: 'جمعِ کلِ README از جمعِ اجزا جدا بیفتد',
         file: 'README.md',
-        find: '۱۳۵۰',
-        replace: '۱۳۴۹',
+        find: '۱۳۵۹',
+        replace: '۱۳۵۸',
         all: true,
         expect: /جمع/,
       },
@@ -296,7 +296,7 @@ const GUARDS = [
       {
         label: 'یک needle به رشته‌ای بی‌ربط عوض شود',
         file: 'next-frontend/src/lib/parityManifest.ts',
-        find: 'needle: "با اعتماد چند نسل",',
+        find: 'needle: "در حال بارگذاری",',
         replace: 'needle: "این رشته در Express نیست (mutation)",',
         failedTest: 'needle',
       },
@@ -628,8 +628,8 @@ const GUARDS = [
       {
         label: 'عددِ کلِ فرانت‌اند در README یک کم شود',
         file: 'README.md',
-        find: '۲۷۷',
-        replace: '۲۷۶',
+        find: '۲۸۶',
+        replace: '۲۸۵',
         all: true,
         expect: /اشاره به عدد/,
       },

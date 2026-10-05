@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { WholesaleForm } from "@/components/WholesaleForm";
 import { WebPageJsonLd } from "@/components/JsonLd";
+import { ContactFab } from "@/components/ContactFab";
 import { pageSocial } from "@/lib/social";
 
 // معادلِ frontend/wholesale.html — متن و فیلدها از همان صفحه برداشته شده‌اند.
@@ -105,6 +106,10 @@ export default function WholesalePage() {
           <WholesaleForm />
         </div>
       </div>
+
+      {/* دکمهٔ شناورِ تماس — همتای `a.fab` در wholesale.html؛ برای مشتریِ
+          عمده که معمولاً قبل از ثبتِ درخواست تماس می‌گیرد. */}
+      <ContactFab />
     </>
   );
 }
