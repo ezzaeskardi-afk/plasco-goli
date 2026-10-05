@@ -827,6 +827,33 @@ describeExpress("متنِ سبد، پرداخت و فیلترها بین Express
     );
   });
 
+  it("گزینهٔ «پیش‌فرض» نوارِ صفحهٔ اصلی روی ترتیبِ ویترین می‌نشیند، نه جدیدترین", () => {
+    // ریشهٔ رگرسیون: پیش‌تر مقدارِ گزینهٔ «پیش‌فرض» همان `default`ِ خام بود؛
+    // سرور آن را نمی‌شناخت و بی‌صدا به `newest` برمی‌گشت. Express با
+    // `SORT_MAP.default` (`main.js:28`) این گزینه را به `oldest` می‌بُرد —
+    // یعنی ترتیبِ اصلیِ ویترین (`id ASC`)، نه جدیدترین. این‌جا همان قرارداد
+    // قفل می‌شود و برچسب هم از منبعِ حقیقت (`index.html`) بیرون کشیده می‌شود.
+    const label = flat(readExpress(INDEX_HTML)).match(
+      /<option value="default">([^<]+)<\/option>/,
+    )?.[1];
+    expect(label, "گزینهٔ defaultِ index.html پیدا نشد").toBeTruthy();
+
+    const bar = flat(stripComments(readNext(NEXT_HOME_FILTER)));
+    // مقدارِ ناشناختهٔ `default` نباید برگردد.
+    expect(bar, "مقدارِ ناشناختهٔ `default` دوباره به سرور می‌رود").not.toMatch(
+      /value:\s*"default"/,
+    );
+    // باید همان برچسبِ Express پشتِ `oldest` بنشیند.
+    const mapped = bar.match(/value:\s*"oldest",\s*label:\s*"([^"]+)"/)?.[1];
+    expect(mapped, "گزینهٔ «پیش‌فرض» به `oldest` نگاشت نشده").toBe(label);
+
+    // صفحهٔ فهرست هم باید بتواند همین مقدار را نشان دهد؛ وگرنه select
+    // بی‌انتخاب می‌ماند و کاربر فکر می‌کند مرتب‌سازی اعمال نشده.
+    expect(flat(stripComments(readNext(NEXT_FILTER)))).toMatch(
+      /<option value="oldest">/,
+    );
+  });
+
   it("واگرایی‌هایی که بسته شدند، به سورسِ Next برنگشتند", () => {
     for (const file of NEXT_CORPUS) {
       const next = flat(stripComments(readNext(file)));

@@ -10,6 +10,32 @@
 // راه‌حل: کلیدهای قدیمی هم خوانده می‌شوند، ولی همهٔ لینک‌هایی که خودِ سایت
 // می‌سازد با نام‌های تازه ساخته می‌شوند تا یکدست بمانند.
 
+/**
+ * مقادیرِ مجازِ `sort` — عیناً همان فهرستی که بک‌اند می‌شناسد
+ * (`backend/routes/products.js:11`) به‌علاوهٔ `oldest` که نوارِ صفحهٔ اصلی
+ * برای «پیش‌فرض» می‌فرستد.
+ */
+export const SORT_VALUES = [
+  "newest",
+  "oldest",
+  "price-asc",
+  "price-desc",
+  "title",
+  "stock",
+] as const;
+
+const SORT_SET = new Set<string>(SORT_VALUES);
+
+/**
+ * Express مقدارِ ناشناختهٔ `sort` را بی‌صدا به `newest` برمی‌گرداند
+ * (`products.js:52`: `SORT_LABEL[u.get('sort')] ? u.get('sort') : 'newest'`).
+ * Next عیناً همان کار را می‌کند، فقط زودتر: مقدارِ نامعتبر را دور می‌ریزد تا
+ * اصلاً به API نرود؛ وگرنه سرور ۴۰۰ می‌دهد و فهرست *خالی* دیده می‌شود — یعنی
+ * مشتری فکر می‌کند فروشگاه خالی است، نه اینکه نشانی خراب بوده.
+ */
+const normSort = (v?: string): string | undefined =>
+  v !== undefined && SORT_SET.has(v) ? v : undefined;
+
 export type RawQuery = Record<string, string | string[] | undefined>;
 
 export interface ListingParams {
@@ -65,7 +91,7 @@ export function normalizeListingQuery(raw: RawQuery): ListingParams {
 
   return {
     page: Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1,
-    sort: get("sort"),
+    sort: normSort(get("sort")),
     category: get("category", "cat"),
     minPrice,
     maxPrice,

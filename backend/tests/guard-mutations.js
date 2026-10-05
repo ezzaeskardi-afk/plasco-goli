@@ -247,8 +247,8 @@ const GUARDS = [
       {
         label: 'جمعِ کلِ README از جمعِ اجزا جدا بیفتد',
         file: 'README.md',
-        find: '۱۳۵۹',
-        replace: '۱۳۵۸',
+        find: '۱۳۶۱',
+        replace: '۱۳۶۰',
         all: true,
         expect: /جمع/,
       },
@@ -628,8 +628,8 @@ const GUARDS = [
       {
         label: 'عددِ کلِ فرانت‌اند در README یک کم شود',
         file: 'README.md',
-        find: '۲۸۶',
-        replace: '۲۸۵',
+        find: '۲۸۸',
+        replace: '۲۸۷',
         all: true,
         expect: /اشاره به عدد/,
       },

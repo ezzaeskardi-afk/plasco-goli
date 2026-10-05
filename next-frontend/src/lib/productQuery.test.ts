@@ -53,6 +53,16 @@ describe("normalizeListingQuery — کلیدهای عصرِ Express هم خوا�
     expect(p.minPrice).toBeUndefined();
     expect(p.maxPrice).toBeUndefined();
   });
+
+  it("`sort` نامعتبر دور ریخته می‌شود، نه این‌که به API برود و ۴۰۰ بگیرد", () => {
+    // هم‌رفتار با `products.js:52` که مقدارِ نامعتبر را به 'newest' برمی‌گرداند.
+    expect(normalizeListingQuery({ sort: "default" }).sort).toBeUndefined();
+    expect(normalizeListingQuery({ sort: "چیزی" }).sort).toBeUndefined();
+    // مقادیرِ معتبر — از جمله «oldest»ی که نوارِ صفحهٔ اصلی می‌فرستد — دست‌نخورده می‌مانند.
+    for (const s of ["oldest", "newest", "price-asc", "price-desc", "title", "stock"]) {
+      expect(normalizeListingQuery({ sort: s }).sort).toBe(s);
+    }
+  });
 });
 
 describe("canonicalListingQuery — لینکی که خودِ سایت می‌سازد", () => {
