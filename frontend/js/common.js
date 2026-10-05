@@ -17,13 +17,23 @@ const PG = (function () {
   const NET_TIMEOUT = 20000;
 
   async function api(path, options = {}) {
-    const { timeout, ...fetchOpts } = options;
+    const { timeout, headers, ...fetchOpts } = options;
     let res;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeout || NET_TIMEOUT);
     try {
       res = await fetch(`/api${path}`, {
-        headers: { 'Content-Type': 'application/json' },
+        // هدرها ادغام می‌شوند، نه جایگزین.
+        //
+        // باگِ واقعی: قبلاً `...fetchOpts` بعد از هدرهای پیش‌فرض می‌آمد و هر
+        // فراخوانی که هدر خودش را می‌فرستاد، `Content-Type` را کامل حذف
+        // می‌کرد. checkout.js برای ثبت سفارش `Idempotency-Key` می‌فرستد؛
+        // نتیجه این بود که مرورگر بدنه را با `text/plain` می‌فرستاد،
+        // `express.json()` آن را پارس نمی‌کرد، `req.body` خالی می‌ماند و
+        // سرور به مشتری می‌گفت «آدرس معتبر انتخاب نشده» — در حالی که آدرس
+        // انتخاب شده و روی صفحه دیده می‌شود. یعنی *هیچ* سفارشی از فرانتِ
+        // Express ثبت نمی‌شد.
+        headers: { 'Content-Type': 'application/json', ...(headers || {}) },
         credentials: 'same-origin',
         signal: ctrl.signal,
         ...fetchOpts

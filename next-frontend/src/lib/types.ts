@@ -255,6 +255,16 @@ export interface Address {
   postalCode: string;
 }
 
+/** GET /api/addresses — بک‌اند فهرست را داخلِ پوشش می‌فرستد: `{addresses:[…]}` */
+export interface AddressesResponse {
+  addresses: Address[];
+}
+
+/** POST/PUT /api/addresses — تک‌آدرس هم داخلِ پوشش می‌آید: `{address:{…}}` */
+export interface AddressMutationResponse {
+  address: Address;
+}
+
 // ============================================================
 // سفارش
 // ============================================================

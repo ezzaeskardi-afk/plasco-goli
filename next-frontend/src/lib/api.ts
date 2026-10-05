@@ -164,6 +164,8 @@ import type {
   AuthMeResponse,
   HasPasswordResponse,
   Address,
+  AddressesResponse,
+  AddressMutationResponse,
   CreateOrderResponse,
   OrderDetailResponse,
   ReorderResponse,
@@ -447,17 +449,24 @@ export async function getSessions(): Promise<SessionsResponse> {
 // آدرس‌ها
 // ============================================================
 
+// اینجا و در createAddress/updateAddress، پوشش‌های بک‌اند باز می‌شوند.
+// backend/routes/addresses.js فهرست را `{addresses:[…]}` (خط ۳۸) و تک‌آدرس را
+// `{address:…}` (خط ۴۴) برمی‌گرداند؛ قبلاً همان پاسخِ خام با نوعِ Address[]
+// برگردانده می‌شد، پس در /checkout و /account روی شیءِ پوشش `.map`/`.id`
+// اجرا می‌شد و صفحه با خطای زمانِ اجرا می‌افتاد.
 export async function getAddresses(): Promise<Address[]> {
-  return fetcher<Address[]>("/api/addresses");
+  const data = await fetcher<AddressesResponse>("/api/addresses");
+  return data.addresses ?? [];
 }
 
 export async function createAddress(
   data: Omit<Address, "id" | "userId">,
 ): Promise<Address> {
-  return fetcher<Address>("/api/addresses", {
+  const res = await fetcher<AddressMutationResponse>("/api/addresses", {
     method: "POST",
     body: JSON.stringify(data),
   });
+  return res.address;
 }
 
 export async function deleteAddress(
@@ -471,10 +480,11 @@ export async function updateAddress(
   id: number,
   data: Omit<Address, "id" | "userId">,
 ): Promise<Address> {
-  return fetcher<Address>(`/api/addresses/${id}`, {
+  const res = await fetcher<AddressMutationResponse>(`/api/addresses/${id}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });
+  return res.address;
 }
 
 // ============================================================
