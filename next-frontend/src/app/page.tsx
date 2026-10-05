@@ -5,6 +5,10 @@ import { StarRow } from "@/components/StarRow";
 import { StoreJsonLd, WebSiteJsonLd, FAQPageJsonLd, ItemListJsonLd } from "@/components/JsonLd";
 import { OrderTrackingSection } from "@/components/home/OrderTracking";
 import { Icon, SpriteIcon, type IconName } from "@/components/Icon";
+import { Eyebrow } from "@/components/Eyebrow";
+import { Marquee } from "@/components/Marquee";
+import { ContactFab } from "@/components/ContactFab";
+import { HomeFilterBar } from "@/components/home/HomeFilterBar";
 import { HOME_FAQ } from "@/lib/faq";
 import { pageSocial } from "@/lib/social";
 import { RecentlyViewed } from "@/components/home/RecentlyViewed";
@@ -75,6 +79,21 @@ async function getHomepageData() {
 // کامپوننت‌های صفحه
 // ============================================================
 
+// چیپ‌های اعتمادِ هیرو — عیناً چهار قلمِ `index.html:477-482`
+const HERO_CHIPS: { icon: IconName; label: string }[] = [
+  { icon: "shield", label: "جنس درجه‌یک" },
+  { icon: "tag", label: "قیمت مناسب" },
+  { icon: "truck", label: "ارسال سریع" },
+  { icon: "check", label: "ضمانت اصالت کالا" },
+];
+
+// دو برچسبِ شناورِ روی قابِ تصاویرِ هیرو در Express (float-tag) — همان دو
+// جمله در متنِ صفحهٔ Express هست و باید در Next هم باشد.
+const HERO_FLOAT_TAGS: { icon: IconName; label: string }[] = [
+  { icon: "checkCircle", label: "کیفیت مطمئن" },
+  { icon: "truck", label: "ارسال همون‌روز" },
+];
+
 function HeroSection() {
   return (
     <section id="home" className="relative overflow-hidden py-16 md:py-24">
@@ -90,18 +109,29 @@ function HeroSection() {
       {/* `data-reveal` — همتای همان نشانه در index.html. دیده‌شدنش کار
           `ScrollFx` است؛ بدونِ آن این بخش نامرئی می‌ماند (globals.css). */}
       <div data-reveal="" className="relative mx-auto max-w-[1180px] px-6 text-center">
-        <h1 className="text-3xl md:text-5xl font-extrabold leading-tight mb-4">
-          <span className="text-teal">پلاسکو گلی</span>
-          <br />
-          <span className="text-ink">فروشگاه محصولات پلاستیکی</span>
+        {/* عیناً همان متنِ هیروی `index.html:210-218` — eyebrow، سرتیتر، لید،
+            دکمه‌ها و چیپ‌های اعتماد. پیش از این هیرو بازنویسی شده بود
+            («فروشگاه محصولات پلاستیکی») و هیچ‌کدام از جمله‌های Express را
+            نداشت؛ در گزارشِ برابری همین‌ها بدهیِ بازِ متن بودند. */}
+        <Eyebrow>فروشگاه محله‌ای، با اعتماد چند نسل</Eyebrow>
+        <h1
+          id="hero-title"
+          className="text-3xl md:text-5xl font-extrabold leading-tight mb-4"
+        >
+          هر چی خانه‌ی شما لازم داره،{" "}
+          <em className="not-italic" style={{ color: "var(--color-gold)" }}>
+            پلاستیکی و رنگی
+          </em>
+          ، همین‌جاست
         </h1>
-        <p className="text-sm md:text-base text-ink-soft max-w-lg mx-auto mb-6 leading-relaxed">
-          محصولات پلاستیکی با کیفیت — از جنس مرغوب، با ضمانت اصل بودن کالا و ارسال
-          سریع به سراسر کشور
+        <p className="text-sm md:text-base text-ink-soft max-w-xl mx-auto mb-6 leading-relaxed">
+          پلاسکو گلی سال‌هاست کنار خانواده‌های همین محله ایستاده؛ از تشت و صندلی
+          گرفته تا ظرف نگهداری، سبد و هر وسیله‌ی پلاستیکی که یک خانه برای زندگی
+          روزمره لازم دارد. جنس اصل، قیمت منصفانه، خرید آنلاین راحت.
         </p>
 
-        {/* دکمه‌های CTA */}
-        <div className="flex items-center justify-center gap-3">
+        {/* دکمه‌های CTA — متنِ دکمهٔ اصلی عیناً همان «مشاهده محصولات»ِ Express */}
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/products"
             className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
@@ -111,8 +141,8 @@ function HeroSection() {
               boxShadow: "var(--shadow-glow-teal)",
             }}
           >
-            مشاهدهٔ محصولات
-            <span className="text-lg">←</span>
+            <Icon name="cart" size={18} />
+            مشاهده محصولات
           </Link>
           <Link
             href="/wholesale"
@@ -125,6 +155,42 @@ function HeroSection() {
           >
             خرید عمده
           </Link>
+        </div>
+
+        {/* چیپ‌های اعتماد — چهار قلمِ `index.html:477-482` */}
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
+          {HERO_CHIPS.map((c) => (
+            <span
+              key={c.label}
+              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold"
+              style={{
+                background: "var(--color-surface)",
+                border: "1px solid var(--color-line)",
+                color: "var(--color-ink-soft)",
+              }}
+            >
+              <Icon name={c.icon} size={15} style={{ color: "var(--color-teal)" }} />
+              {c.label}
+            </span>
+          ))}
+        </div>
+
+        {/* دو برچسبِ شناورِ قابِ تصاویر در Express (float-tagها). این‌جا که هیرو
+            متنی است، زیرِ چیپ‌ها می‌آیند تا همان دو جمله هم در صفحه باشد. */}
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2.5">
+          {HERO_FLOAT_TAGS.map((c) => (
+            <span
+              key={c.label}
+              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold"
+              style={{
+                background: "var(--color-gold-tint)",
+                color: "var(--color-gold)",
+              }}
+            >
+              <Icon name={c.icon} size={15} />
+              {c.label}
+            </span>
+          ))}
         </div>
       </div>
     </section>
@@ -198,19 +264,38 @@ function BestSellersSection({ products }: { products: Product[] }) {
     // پایین موبایل، و ناظرِ کادرِ خوش‌آمد که وقتی مشتری این بخش را دید
     // تایمرِ ۲۵ ثانیه‌اش را مسلح می‌کند (lib/welcome.ts).
     <section id="products" className="mx-auto max-w-[1180px] px-6 pb-16">
-      <div data-reveal="" className="flex items-center justify-between mb-6">
-        <h2 className="text-xl md:text-2xl font-extrabold text-ink">
-          <span className="text-gold">★</span> پرفروش‌ترین‌ها
-        </h2>
-        <Link
-          href="/products"
-          className="text-sm font-medium text-teal hover:text-teal-dark transition-colors"
+      {/* سرتیتر عیناً مثلِ `index.html:290-294`: eyebrow «پرفروش‌ترین‌ها» +
+          سرتیتر + یک جملهٔ راهنما. پیش از این عنوانِ Next «پرفروش‌ترین‌ها»ی
+          کوتاه با یک ستاره بود و جملهٔ راهنما نداشت. */}
+      <div data-reveal="" className="mx-auto mb-6 max-w-[640px] text-center">
+        <Eyebrow>پرفروش‌ترین‌ها</Eyebrow>
+        <h2
+          id="products-title"
+          className="text-xl md:text-2xl font-extrabold text-ink"
         >
-          همهٔ محصولات ←
-        </Link>
+          محصولاتی که هر خانه یک بار نیاز پیدا می‌کند
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-ink-soft">
+          محصول موردنظرتون رو به سبد اضافه کنید و در چند قدم خرید رو تموم کنید.
+        </p>
       </div>
+      <HomeFilterBar />
       <div data-reveal="">
         <ProductCardGrid products={products} />
+      </div>
+      {/* راهِ رسیدن به فهرستِ کامل — همتای `.products-cta` در index.html:328-338 */}
+      <div className="mt-9 flex flex-col items-center gap-3">
+        <Link
+          href="/products"
+          className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold transition-colors"
+          style={{ border: "1.5px solid var(--color-line-strong)", color: "var(--color-ink)" }}
+        >
+          <Icon name="package" size={18} />
+          مشاهده‌ی همه‌ی محصولات
+        </Link>
+        <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
+          فیلترِ دسته‌بندی، محدوده‌ی قیمت و مرتب‌سازی — همه در یک صفحه
+        </p>
       </div>
     </section>
   );
@@ -276,22 +361,6 @@ function FeaturesSection() {
         ))}
       </div>
     </section>
-  );
-}
-
-/** برچسبِ کوچکِ طلاییِ بالای عنوانِ بخش‌ها — همتای `span.eyebrow`. */
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="mb-3 inline-flex items-center gap-2 text-[11.5px] font-extrabold tracking-wider"
-      style={{ color: "var(--color-gold)" }}
-    >
-      <span
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ background: "var(--color-gold)" }}
-      />
-      {children}
-    </span>
   );
 }
 
@@ -552,14 +621,18 @@ function TestimonialsSection({
 }: {
   reviews: { id: number; rating: number; body: string; userName: string; isBuyer: boolean }[];
 }) {
-  // خالی = مخفی؛ ستونِ تعریفِ خالی اعتماد نمی‌سازد
-  if (!reviews.length) return null;
+  // خالی = پنهان؛ ستونِ تعریفِ خالی اعتماد نمی‌سازد. ولی برخلافِ قبل، سرفصلِ
+  // بخش در HTMLِ اولیه می‌ماند (با hidden) — عیناً همان کاری که
+  // `#testiStrip[hidden]` در index.html می‌کرد. اگر بدونِ داده کلاً رندر
+  // نمی‌شد، متنِ این بخش فقط وقتی در گزارشِ برابری پیدا می‌شد که دیتابیس
+  // تصادفاً دیدگاه داشت — یعنی گارد به داده وابسته می‌شد.
+  const hasReviews = reviews.length > 0;
 
   return (
-    <section className="mx-auto max-w-[1180px] px-6 pb-16">
+    <section hidden={!hasReviews} className="mx-auto max-w-[1180px] px-6 pb-16">
       {/* سرتیتر عیناً مثل index.html:403-410 — یک eyebrow + h2 + یک جملهٔ
           شفاف که این‌ها تبلیغ نیستند، دیدگاه‌های ثبت‌شدهٔ زیر محصولات‌اند. */}
-      <div data-reveal="" className="mb-6">
+      <div data-reveal="" className="mb-6 text-center">
         {/* نقطه‌ی طلاییِ Express یک spanِ CSSی است، نه کاراکتر؛ اگر «●» را
             متن بگذاریم در متنِ رندرشده ظاهر می‌شود و Express نداردش. */}
         <Eyebrow>نظر مشتری‌ها</Eyebrow>
@@ -573,6 +646,7 @@ function TestimonialsSection({
           این‌ها دیدگاه‌های ثبت‌شده زیر خود محصولات‌اند؛ نه متن تبلیغاتی.
         </p>
       </div>
+      {hasReviews && (
       <div data-reveal="" className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {reviews.map((r) => (
           <figure
@@ -600,6 +674,7 @@ function TestimonialsSection({
           </figure>
         ))}
       </div>
+      )}
     </section>
   );
 }
@@ -620,24 +695,29 @@ export default async function HomePage() {
           نشانش می‌دهد (همتای initShopBar در Express). نمایشش در هیرو هم یعنی
           همان متن دو بار در یک صفحه — و در صفحه‌های دیگر صفر بار. */}
       {/* ترتیب عیناً همان ترتیبِ index.html نسخهٔ Express است:
-          هیرو → نوارِ دسته‌ها → محصولات → اخیراً دیده‌شده → بنرِ تخفیف →
-          چرا پلاسکو گلی → حرفِ مشتری‌ها → درباره → سوالات متداول →
-          پیگیری سفارش → تماس. سه بخشِ آخر (about/faq/contact) و «چرا پلاسکو
-          گلی» تا امروز در Next نبودند. */}
+          هیرو → نوارِ متحرکِ اعتماد → دسته‌ها → محصولات → اخیراً دیده‌شده →
+          بنرِ تخفیف → چرا پلاسکو گلی → حرفِ مشتری‌ها → درباره → سوالات متداول
+          → پیگیری سفارش → تماس. */}
       <HeroSection />
+      <Marquee />
       <CategoryStrip categories={categories} />
       <BestSellersSection products={products} />
       <RecentlyViewed />
-      {/* بنرِ کد تخفیف — فقط وقتی فروشگاه بنرِ فعالی دارد */}
-      {shopInfo?.promoText && (
-        <PromoBanner text={shopInfo.promoText} code={shopInfo.promoCode || ""} />
-      )}
+      {/* بنرِ کد تخفیف — عیناً همتای `#promoStrip` در index.html: پوسته‌اش
+          همیشه در HTML هست (با hidden وقتی بنرِ فعالی نیست) و متن/کد از
+          تنظیماتِ فروشگاه می‌آید. اگر کلاً رندر نمی‌شد، متنِ بنر در
+          HTMLِ اولیه نبود و گاردِ زنده به داشتنِ بنر در دیتابیس وابسته
+          می‌شد. */}
+      <PromoBanner text={shopInfo?.promoText || ""} code={shopInfo?.promoCode || ""} />
       <FeaturesSection />
       <TestimonialsSection reviews={recentReviews} />
       <AboutSection />
       <FaqSection />
       <OrderTrackingSection />
       <ContactSection />
+      {/* دکمهٔ شناورِ تماس — فقط در همین چهار صفحه (index/products/product/
+          wholesale) که Express داشت؛ عمداً در layout نیست. */}
+      <ContactFab />
     </>
   );
 }

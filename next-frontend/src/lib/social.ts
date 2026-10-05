@@ -51,7 +51,14 @@ export interface SocialOptions {
    * توضیحِ og را بگذار».
    */
   twitterDescription?: string | null;
-  type?: "website" | "article";
+  /**
+   * نوعِ og. `null` یعنی «این تگ را این‌جا نساز»: صفحهٔ محصول خودش
+   * `og:type=product` را به‌صورت یک تگِ واقعی می‌سازد، و اگر این‌جا هم
+   * `website` بیاید، تگِ اشتباه **اول** می‌افتد و کارتِ اشتراک‌گذاری نوعِ
+   * درست را از دست می‌دهد (خزنده و پیام‌رسان‌ها اولین تگ را می‌خوانند).
+   * Express هم روی صفحهٔ محصول فقط `product` را داشت، نه یک `website`ِ اضافه.
+   */
+  type?: "website" | "article" | null;
   /** کارتِ توییتر؛ پیش‌فرض: عکس دارد → summary_large_image، ندارد → summary */
   card?: "summary" | "summary_large_image";
   /** عکسِ اشتراک‌گذاری؛ پیش‌فرض لوگوی فروشگاه */

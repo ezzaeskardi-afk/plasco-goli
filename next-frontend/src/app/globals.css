@@ -992,3 +992,103 @@
   .auth-back { transition: none; }
 }
 
+/* ============================================================
+   دکمه‌ی شناورِ تماس و نوارِ متحرکِ اعتماد — همتای style.css نسخه‌ی Express
+   ============================================================
+   هر دو این‌ها تا امروز در Next **اصلاً وجود نداشتند** و در گزارشِ برابری
+   به‌عنوان بدهیِ بازِ کاربرمحور ثبت شده بودند: مشتریِ Next نه راهِ
+   یک‌کلیکیِ تماس داشت (چهار صفحه‌ی index/products/product/wholesale در
+   Express آن را داشتند و Next در هیچ‌کدام)، و نه نوارِ متحرکِ شش‌وعده‌ای
+   که بینِ هیرو و دسته‌بندی‌ها می‌نشست.
+
+   مقادیر عیناً از `frontend/css/style.css` (‏.fab:۱۰۰۹ و .marquee:۴۳۸)
+   ترجمه شده‌اند — فقط نامِ متغیرها با `@theme` این پروژه یکی شده است.
+   قاعده‌ی `body.has-cart-bar .fab` عمداً نیامده: آن کلاس مخصوصِ نوارِ
+   سبدِ Express است و معادلی در Next ندارد.
+   ============================================================ */
+
+/* ---------- دکمه‌ی شناورِ تماس ---------- */
+.fab {
+  position: fixed;
+  bottom: 26px;
+  left: 26px;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #25e3c4, var(--color-teal-dark));
+  color: #04211b;
+  padding: 14px 20px;
+  border-radius: 999px;
+  box-shadow: var(--shadow-glow-teal);
+  font-weight: 800;
+  font-size: 14px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.fab svg {
+  width: 20px;
+  height: 20px;
+}
+.fab:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 24px 54px -14px rgba(37, 214, 176, 0.6);
+}
+/* روی موبایل بالای نوارِ پایین بنشیند (همان ۸۴pxِ .to-top) */
+@media (max-width: 900px) {
+  .fab {
+    bottom: 84px;
+  }
+}
+/* صفحه‌ی کوچک: برچسب می‌رود و دکمه دایره‌ای می‌شود تا جلوی محتوا را نگیرد */
+@media (max-width: 640px) {
+  .fab span.fab-label {
+    display: none;
+  }
+  .fab {
+    padding: 14px;
+  }
+}
+
+/* ---------- نوارِ متحرکِ اعتماد ---------- */
+.marquee {
+  overflow: hidden;
+  border-block: 1px solid var(--color-line);
+  background: rgba(237, 246, 241, 0.02);
+  padding: 15px 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 36s linear infinite;
+}
+.marquee-track > span {
+  display: flex;
+  align-items: center;
+  gap: 44px;
+  padding-inline-start: 44px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+}
+.marquee-track b {
+  color: var(--color-gold);
+  font-weight: 400;
+  font-size: 12px;
+}
+@keyframes marquee {
+  to {
+    transform: translateX(50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fab {
+    transition: none;
+  }
+  .marquee-track {
+    animation: none;
+  }
+}
+

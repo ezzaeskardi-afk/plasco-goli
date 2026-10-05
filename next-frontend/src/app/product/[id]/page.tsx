@@ -5,6 +5,8 @@ import { ProductDetail } from "@/components/ProductDetail";
 import { ProductReviews } from "@/components/ProductReviews";
 import { ProductCardGrid } from "@/components/ProductCard";
 import { RecentlyViewed } from "@/components/home/RecentlyViewed";
+import { ContactFab } from "@/components/ContactFab";
+import { Eyebrow } from "@/components/Eyebrow";
 import { ProductJsonLd, BreadcrumbJsonLd } from "@/components/JsonLd";
 import { pageSocial } from "@/lib/social";
 import { publicImagePath } from "@/lib/site";
@@ -95,6 +97,13 @@ export async function generateMetadata({
     // را خودش اضافه می‌کند.
     title: `${product.title} | خرید با قیمت ${priceFa} تومان`,
     description,
+    // کانونیکالِ سرورساید — همان چیزی که Express روی این مسیر تزریق می‌کرد
+    // (`server.js` روی `/product/:id`: `<link rel=canonical href=${base}/product/${id}>`).
+    // نبودنش یعنی هفتاد و چند صفحه‌ی محصولِ این فروشگاه هیچ آدرسِ مرجعی به
+    // گوگل اعلام نمی‌کردند و نسخه‌های پارامتری/قدیمیِ همان صفحه می‌توانستند
+    // به‌عنوان صفحهٔ جداگانه ایندکس شوند. مسیر نسبی است و ریشه‌اش از
+    // `metadataBase` می‌آید — همان دامنه‌ای که Express در canonical می‌گذاشت.
+    alternates: { canonical: `/product/${product.id}` },
     // عیناً همان تگ‌هایی که Express سرور-ساید تزریق می‌کرد: og:type=product،
     // og:site_name، og:url، og:image:alt و کارتِ twitterِ مخصوصِ محصول. قبل
     // از این، لینکِ محصول در واتساپ/تلگرام با عنوان و **لوگو**ی عمومیِ سایت
@@ -103,6 +112,10 @@ export async function generateMetadata({
       path: `/product/${product.id}`,
       title: brandedTitle,
       description,
+      // `og:type` این‌جا ساخته نمی‌شود — تگِ `product` را همین زیر، به‌صورت
+      // یک تگِ واقعی می‌گذاریم (توضیحش در `lib/social.ts`). Express هم
+      // روی صفحهٔ محصول فقط یک `og:type=product` داشت.
+      type: null,
       card: product.image ? "summary_large_image" : "summary",
       image: product.image ? publicImagePath(product.image) : undefined,
       imageAlt: brandedTitle,
@@ -222,9 +235,14 @@ export default async function ProductPage({ params }: ProductPageProps) {
             می‌ماند — بدتر از نداشتنِ انیمیشن. */}
         {related.length > 0 && (
           <section data-reveal="" className="mt-16">
-            <h2 className="text-xl font-extrabold text-ink mb-6">
-              محصولات مرتبط
-            </h2>
+            {/* سرتیتر عیناً مثل `#pdRelatedWrap` در product.html:206-212:
+                برچسبِ کوچکِ «از همین دسته» بالای عنوان. */}
+            <div className="mb-6">
+              <Eyebrow>از همین دسته</Eyebrow>
+              <h2 className="text-xl font-extrabold text-ink">
+                محصولات مرتبط
+              </h2>
+            </div>
             <ProductCardGrid products={related.slice(0, 5)} />
           </section>
         )}
@@ -234,6 +252,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <RecentlyViewed exceptId={product.id} />
         </div>
       </div>
+
+      {/* دکمهٔ شناورِ تماس — در Express فقط چهار صفحه داشت، از جمله همین
+          صفحهٔ محصول (product.html:263). */}
+      <ContactFab />
     </>
   );
 }

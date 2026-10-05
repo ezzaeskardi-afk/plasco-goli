@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { trackOrder, ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { Eyebrow } from "@/components/Eyebrow";
 import type { Order } from "@/lib/types";
 
 // ============================================================
@@ -151,36 +152,55 @@ export function OrderTrackingSection() {
     // `id="track"` لازم است: پاورقی و منوی موبایل با `/#track` به همین بخش
     // لینک می‌دهند (همتای `#track` در index.html نسخه‌ی Express).
     <section id="track" className="mx-auto max-w-[1180px] px-6 pb-16 scroll-mt-28">
-      <div className="rounded-[26px] p-6 md:p-8" style={{ background: "var(--color-surface)" }}>
-        <h2 className="text-xl md:text-2xl font-extrabold text-ink mb-2">
-          پیگیری سفارش
+      <div
+        data-reveal=""
+        className="rounded-[26px] p-6 md:p-8"
+        style={{ background: "var(--color-surface)" }}
+      >
+        {/* سرتیتر، لید، برچسب‌ها و راهنما عیناً از index.html:424-456 —
+            پیش از این متنِ Next بازنویسی شده بود («پیگیری سفارش» و «بدون
+            ورود…») و هیچ‌کدام از جمله‌های Express را نداشت؛ در گزارشِ برابری
+            همین‌ها بدهیِ بازِ متن بودند. */}
+        <Eyebrow>پیگیری سفارش</Eyebrow>
+        <h2 id="track-title" className="text-xl md:text-2xl font-extrabold text-ink mb-2">
+          سفارشم کجاست؟
         </h2>
         <p className="text-xs text-ink-soft mb-5 leading-relaxed">
-          بدون ورود — فقط شماره‌ی سفارش و موبایلی که با آن خرید کرده‌اید.
+          شماره‌ی سفارش و موبایلی که باهاش خرید کردید را بزنید — لازم نیست وارد حساب شوید.
         </p>
 
-        <form onSubmit={submit} className="flex flex-wrap gap-2 items-center">
-          <input
-            type="text"
-            inputMode="numeric"
-            value={orderId}
-            onChange={(e) => setOrderId(e.target.value)}
-            placeholder="شماره سفارش"
-            aria-label="شماره سفارش"
-            className="rounded-full px-4 py-2.5 text-sm outline-none w-full sm:w-44"
-            style={inputStyle}
-          />
-          <input
-            type="tel"
-            inputMode="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-            aria-label="شماره موبایل"
-            dir="ltr"
-            className="rounded-full px-4 py-2.5 text-sm outline-none w-full sm:w-48 text-right"
-            style={inputStyle}
-          />
+        <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1.5 w-full sm:w-44">
+            <span className="text-[11px] font-bold" style={{ color: "var(--color-ink-soft)" }}>
+              شماره سفارش
+            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={orderId}
+              onChange={(e) => setOrderId(e.target.value)}
+              placeholder="مثلاً ۱۲۳"
+              aria-label="شماره سفارش"
+              className="rounded-full px-4 py-2.5 text-sm outline-none w-full"
+              style={inputStyle}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 w-full sm:w-48">
+            <span className="text-[11px] font-bold" style={{ color: "var(--color-ink-soft)" }}>
+              شماره موبایل
+            </span>
+            <input
+              type="tel"
+              inputMode="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="۰۹۱۲۳۴۵۶۷۸۹"
+              aria-label="شماره موبایل"
+              dir="ltr"
+              className="rounded-full px-4 py-2.5 text-sm outline-none w-full text-right"
+              style={inputStyle}
+            />
+          </label>
           <button
             type="submit"
             disabled={busy}
@@ -190,6 +210,11 @@ export function OrderTrackingSection() {
             {busy ? "…" : "پیگیری"}
           </button>
         </form>
+
+        {/* راهنمای پیدا کردنِ شماره — عیناً جملهٔ `.track-hint` در Express */}
+        <p className="mt-3 text-[11px] leading-relaxed" style={{ color: "var(--color-ink-dim)" }}>
+          شماره‌ی سفارش را در پیامک تأیید خرید یا صفحه‌ی «سفارش‌های من» می‌بینید.
+        </p>
 
         {order && <TrackingTimeline order={order} />}
       </div>

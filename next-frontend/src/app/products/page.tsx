@@ -5,6 +5,7 @@ import { getProducts, getFacets } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
 import { FilterBar } from "@/components/FilterBar";
 import { CollectionPageJsonLd } from "@/components/JsonLd";
+import { ContactFab } from "@/components/ContactFab";
 import {
   normalizeListingQuery,
   canonicalListingQuery,
@@ -432,6 +433,10 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
           searchParams={current}
         />
       </div>
+
+      {/* دکمهٔ شناورِ تماس — همتای `a.fab` در products.html؛ در Express مشتریِ
+          همین صفحه یک لینکِ یک‌کلیکی به فروشگاه داشت. */}
+      <ContactFab />
     </>
   );
 }

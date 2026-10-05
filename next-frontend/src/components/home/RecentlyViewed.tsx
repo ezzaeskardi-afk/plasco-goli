@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getProductsByIds } from "@/lib/api";
 import { getRecentIds } from "@/lib/recent";
 import { ProductCardGrid } from "@/components/ProductCard";
+import { Eyebrow } from "@/components/Eyebrow";
 import type { Product } from "@/lib/types";
 
 // ============================================================
@@ -38,13 +39,32 @@ export function RecentlyViewed({ exceptId }: { exceptId?: number }) {
     };
   }, [exceptId]);
 
-  if (!checked || products.length === 0) return null;
+  // تا داده نیامده، بخش **پنهان** است (نه حذف‌شده): سرفصلش در HTMLِ اولیه
+  // می‌ماند — عیناً همان `#recentWrap[hidden]` در index.html:342 که تا وقتی
+  // چیزی برای نشان‌دادن نبود پنهان می‌ماند. اگر کلاً رندر نمی‌شد، متنِ این
+  // بخش در گزارشِ برابری فقط وقتی پیدا می‌شد که مرورگر مشتری چیزی دیده باشد.
+  if (!checked || products.length === 0) {
+    return (
+      <section hidden className="mx-auto max-w-[1180px] px-6 pb-16">
+        <div className="mb-6">
+          <Eyebrow>ادامه‌ی گشت‌وگذار</Eyebrow>
+          <h2 className="text-xl md:text-2xl font-extrabold text-ink">
+            اخیراً دیده‌اید
+          </h2>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="mx-auto max-w-[1180px] px-6 pb-16">
-      <h2 className="text-xl md:text-2xl font-extrabold text-ink mb-6">
-        <span className="text-teal">↺</span> اخیراً دیده‌اید
-      </h2>
+      {/* سرتیتر عیناً مثل `#recentWrap` در index.html:344-347 */}
+      <div className="mb-6">
+        <Eyebrow>ادامه‌ی گشت‌وگذار</Eyebrow>
+        <h2 className="text-xl md:text-2xl font-extrabold text-ink">
+          اخیراً دیده‌اید
+        </h2>
+      </div>
       <ProductCardGrid products={products} />
     </section>
   );

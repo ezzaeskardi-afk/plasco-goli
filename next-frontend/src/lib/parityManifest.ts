@@ -127,16 +127,13 @@ const WHY = {
     "کامپوننتِ کلاینت این متن را بعد از hydrate (و اغلب بعد از پاسخِ API) می‌سازد؛ جمله‌ها در سورسِ Next هستند و گاردهای منبع قفلشان کرده‌اند، ولی در HTMLِ اولیه نمی‌آیند.",
   clientLoading:
     "حالتِ بارگذاری/خالی: رندرِ اولیه عمداً جای‌نگه‌دار نشان می‌دهد تا داده برسد؛ Express همان متن را ثابت در HTML داشت.",
-  heroOpen:
-    "هیروی صفحهٔ اصلی در مهاجرت بازنویسی شد و هیچ‌کدام از متن‌های Express را ندارد (سرتیتر، لید، دکمه‌ها، چیپ‌های اعتماد). متنِ غایب همین‌جا فهرست شده — تصمیم/اصلاحش بدهیِ باز است.",
-  tickerOpen:
-    "نوارِ متحرکِ اعتمادِ Express (شش جمله) در Next نیامده؛ از آن‌ها فقط «ارسال سریع به سراسر کشور» در نوارِ بالای هدر هست. جایگزینش (feature-grid) متنِ کوتاه‌تری دارد.",
-  homeCopyOpen:
-    "متنِ این بخش در Next بازنویسی شده (یا بخش اصلاً نیامده) و واژه‌به‌واژه با Express یکی نیست — بدهیِ بازِ متن.",
-  homeClient:
-    "بخش در Next هست ولی کلاینتی/شرطی رندر می‌شود (escape: بدونِ داده مخفی می‌شود)، پس در HTMLِ اولیه نیست؛ عینِ متن در سورس با گارد قفل شده.",
-  contactOpen:
-    "بخشِ «تماس با فروشگاه»ی Express (سرفصل و کارتِ تماس) در Next با «راه‌های ارتباطی» عوض شده و واژه‌های Express را ندارد — بدهیِ باز.",
+  // ↳ چه شد «heroOpen/tickerOpen/homeCopyOpen/homeClient/contactOpen»؟
+  //   همه پرداخت شدند: هیرو، نوارِ متحرکِ اعتماد، سرفصل/فیلترهای بخشِ محصولات،
+  //   پیگیریِ سفارش، «پیشنهاد ویژه»، «حرفِ مشتری‌ها» و دکمهٔ شناورِ «تماس با
+  //   فروشگاه» عیناً در Next پیاده شده‌اند و مانیفست این صفحه حالا `misses:
+  //   []` دارد. نگهبانِ تازه جایش این است: `copyParity.test.ts` جمله‌به‌جمله
+  //   قفل می‌کند که همین متن‌ها بمانند، و کفِ پوششِ متنِ همین صفحه هر افتِ
+  //   دیگری را می‌گیرد.
   socialLayout:
     "تگ‌های اجتماعیِ سطحِ layout در Next این صفحه‌ها را هم پوشش می‌دهند؛ Express روی این صفحه‌ها og/twitter نداشت. بهبودِ افزوده، نه از دست رفتن.",
   canonicalLegacy:
@@ -151,10 +148,6 @@ const WHY = {
     "این مسیرِ تازه فقط در Next وجود دارد (Express نسخهٔ .html را داشت)؛ برای ناشناس محافظت‌شده است.",
   productTitle:
     "عنوانِ تب را در Express خودِ اسکریپتِ کلاینت با قالبِ «| خرید با قیمت … تومان» (product.js:373) جایگزین می‌کرد؛ Next همان قالبِ دیده‌شدهٔ کاربر را مستقیم در متا می‌گذارد (گاردِ seoParity قالب را قفل کرده).",
-  productCanonical:
-    "Express روی صفحهٔ محصول کانونیکالِ سرورساید تزریق می‌کرد، Next ندارد — بدهیِ بازِ SEO روی پرارزش‌ترین صفحه‌های فروشگاه.",
-  productOgType:
-    "Express برای صفحهٔ محصول og:type=product می‌گذاشت، Next=website — بدهیِ باز (کارتِ اشتراک‌گذاری نامِ نوعِ درست را ندارد).",
   offlineHome:
     "دو نسخهٔ offline.html عمداً فقط در یک لینک فرق دارند: Express به /index.html و Next به / (توضیحش داخلِ خودِ فایلِ Next نوشته شده)؛ متنِ صفحه یکی است.",
   goneLegacy:
@@ -163,7 +156,7 @@ const WHY = {
     "محصولِ ناموجود در هر دو ۴۱۰ می‌دهد: Express با صفحهٔ product-gone.html و Next با middleware + صفحهٔ product-gone (گاردش در legacyParity/seoParity هست).",
   staticAsset: "داراییِ استاتیکِ مشترک؛ هر دو ۲۰۰ می‌دهند.",
   adminGate:
-    "پنلِ مدیریت فقط در Next وجود دارد و برای کاربرِ ناشناس ۳۰۷ به /login می‌رود؛ در Express معادلی نداشت (این probe فقط Next را می‌سنجد).",
+    "پنلِ مدیریت فقط در Next وجود دارد و برای کاربرِ ناشناس ۳۰۷ به /login می‌رود. در Express صفحه‌ای برای پنل نیست، ولی از این پس /admin (و زیرمسیرهایش) را با ۳۰۲ به همان مسیر روی SITE_URL می‌فرستد تا لینکِ «پنل مدیریت» در صفحهٔ حساب به ۴۰۴ نخورد.",
   errorBoundary:
     "Express صفحهٔ ۵۰۰ را از هندلرِ خطای سرور سرو می‌کرد؛ Next با مرزِ خطا (error.tsx و global-error.tsx + دکمهٔ تلاشِ دوباره). چون خطای ۵۰۰ را نمی‌توان زنده تحریک کرد، فقط ساختار و فایل‌ها سنجیده می‌شوند.",
 } as const;
@@ -194,237 +187,14 @@ export const PARITY_PAGES: ParityPage[] = [
     express: { url: "/index.html", status: 200 },
     next: { url: "/", status: 200 },
     mode: "server",
-    // ۶۹.۷٪ اندازه‌گیری شد؛ کف برای گرفتنِ افت است نه قفل‌کردنِ عدد.
-    textFloor: 0.65,
-    misses: [
-      // ── هیرو (بازنویسیِ کامل) ─────────────────────────────────
-      {
-        needle: "با اعتماد چند نسل",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "هر چی خانه‌ی شما لازم داره",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "پلاستیکی و رنگی",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "پلاسکو گلی سال‌هاست کنار خانواده‌های همین محله ایستاده",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "سبد و هر وسیله‌ی پلاستیکی که یک خانه برای زندگی روزمره لازم دارد",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "از تشت و صندلی گرفته تا ظرف نگهداری",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "خرید آنلاین راحت",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "مشاهده محصولات",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "جنس درجه‌یک",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "قیمت مناسب",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "کیفیت مطمئن",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      {
-        needle: "ارسال همون‌روز",
-        state: "open",
-        reason: WHY.heroOpen,
-        source: "static",
-      },
-      // ── نوارِ متحرکِ اعتماد (index.html:260) ──────────────────
-      {
-        needle: "ضمانت اصالت کالا",
-        state: "open",
-        reason: WHY.tickerOpen,
-        source: "static",
-      },
-      {
-        needle: "پرداخت امن زرین‌پال",
-        state: "open",
-        reason: WHY.tickerOpen,
-        source: "static",
-      },
-      {
-        needle: "۷ روز مهلت مرجوعی",
-        state: "open",
-        reason: WHY.tickerOpen,
-        source: "static",
-      },
-      // ── بخشِ محصولات و فیلترهای صفحهٔ اصلی ───────────────────
-      {
-        needle: "محصولاتی که هر خانه یک بار نیاز پیدا می‌کند",
-        state: "open",
-        reason: WHY.homeCopyOpen,
-        source: "static",
-      },
-      {
-        needle: "محصول موردنظرتون رو به سبد اضافه کنید",
-        state: "open",
-        reason: WHY.homeCopyOpen,
-        source: "static",
-      },
-      {
-        needle: "مشاهده‌ی همه‌ی محصولات",
-        state: "open",
-        reason: WHY.homeCopyOpen,
-        source: "static",
-      },
-      {
-        needle: "فیلترِ دسته‌بندی",
-        state: "open",
-        reason: WHY.homeCopyOpen,
-        source: "static",
-      },
-      {
-        // سرِ مارک‌آپ بینِ «مرتب‌سازی» و «همه» یک خط‌تیره دارد و استخراجِ
-        // جمله آن را می‌اندازد؛ همین تکه برای پوششِ همان جمله کافی است.
-        needle: "محدوده‌ی قیمت و مرتب‌سازی",
-        state: "open",
-        reason: WHY.homeCopyOpen,
-        source: "static",
-      },
-      {
-        needle: "حروف الفبا",
-        state: "open",
-        reason: WHY.homeCopyOpen,
-        source: "static",
-      },
-      {
-        needle: "محدوده قیمت",
-        state: "open",
-        reason: WHY.homeCopyOpen,
-        source: "static",
-      },
-      {
-        needle: "ادامه‌ی گشت‌وگذار",
-        state: "open",
-        reason: WHY.homeCopyOpen,
-        source: "static",
-      },
-      {
-        needle: "پیشنهاد ویژه",
-        state: "open",
-        reason: WHY.homeCopyOpen,
-        source: "static",
-      },
-      // ── بخش‌های کلاینتی/شرطی که در Next هستند ────────────────
-      {
-        needle: "اخیراً دیده‌اید",
-        state: "accepted",
-        reason: WHY.homeClient,
-        source: "static",
-      },
-      {
-        needle: "سفارشم کجاست",
-        state: "accepted",
-        reason: WHY.homeClient,
-        source: "static",
-      },
-      {
-        needle: "شماره‌ی سفارش و موبایلی که باهاش خرید کردید را بزنید",
-        state: "accepted",
-        reason: WHY.homeClient,
-        source: "static",
-      },
-      {
-        needle: "شماره سفارش",
-        state: "accepted",
-        reason: WHY.homeClient,
-        source: "static",
-      },
-      {
-        needle: "شماره‌ی سفارش را در پیامک تأیید خرید یا صفحه‌ی",
-        state: "accepted",
-        reason: WHY.homeClient,
-        source: "static",
-      },
-      {
-        needle: "سفارش‌های من",
-        state: "accepted",
-        reason: WHY.homeClient,
-        source: "static",
-      },
-      {
-        needle: "کد تخفیف",
-        state: "accepted",
-        reason: WHY.homeClient,
-        source: "static",
-      },
-      // ── حرفِ مشتری‌ها: بدونِ دیدگاهِ تأییدشده عمداً مخفی است ──
-      {
-        needle: "نظر مشتری‌ها",
-        state: "accepted",
-        reason:
-          "بخشِ دیدگاه‌ها در Next بدونِ دیدگاهِ تأییدشده رندر نمی‌شود (کامنتِ خودِ کد: ستونِ تعریفِ خالی اعتماد نمی‌سازد)؛ در دیتابیسِ محلیِ فعلی دیدگاهِ تأییدشده‌ای برای رندر نیست.",
-        source: "static",
-      },
-      {
-        needle: "حرف مشتری‌های واقعی پلاسکو گلی",
-        state: "accepted",
-        reason:
-          "عنوانِ بخشِ دیدگاه‌هاست و همراهِ خودِ بخش (بدونِ داده) مخفی می‌شود؛ متنش در سورس عیناً هست.",
-        source: "static",
-      },
-      {
-        needle: "این‌ها دیدگاه‌های ثبت‌شده زیر خود محصولات‌اند",
-        state: "accepted",
-        reason:
-          "توضیحِ زیرِ عنوانِ بخشِ دیدگاه‌هاست و همراهِ خودِ بخش (بدونِ داده) مخفی می‌شود.",
-        source: "static",
-      },
-      {
-        needle: "نه متن تبلیغاتی",
-        state: "accepted",
-        reason: "ادامهٔ همان جملهٔ بخشِ دیدگاه‌هاست؛ بدونِ داده رندر نمی‌شود.",
-        source: "static",
-      },
-      // ── پوسته ────────────────────────────────────────────────
-      {
-        needle: "تماس با فروشگاه",
-        state: "open",
-        reason: WHY.contactOpen,
-        source: "static",
-      },
-    ],
+    // ۱۰۰٪ اندازه‌گیری شد (هیرو، نوارِ متحرک، فیلترها، پیگیری، پیشنهاد ویژه،
+    // حرفِ مشتری‌ها و دکمهٔ شناور همه عیناً پیاده شدند)؛ کف برای گرفتنِ افت
+    // است نه قفل‌کردنِ عدد.
+    textFloor: 0.95,
+    // هیچ بدهیِ متنی نماند: هر جمله‌ی Expressِ این صفحه در Next هست (فهرستِ
+    // بلندِ قبلی همین‌جا بود و یکی‌یکی پرداخت شد). از این پس افتِ متن را کفِ
+    // پوشش می‌گیرد و *وجودِ عینِ جمله‌ها* را `src/app/copyParity.test.ts`.
+    misses: [],
     meta: [],
     probes: [
       {
@@ -470,12 +240,6 @@ export const PARITY_PAGES: ParityPage[] = [
           "در Next این دکمه داخلِ حالتِ خالی رندر می‌شود (Express آن را در نوارِ کنارِ فیلترها داشت و تا فعال‌شدنِ فیلتری مخفی بود)؛ در HTMLِ پرِ فیلتر دیده نمی‌شود. متنش در سورس عیناً همان «پاک کردن همه‌ی فیلترها»ی products.html:197 است — این واژه همین امروز با همین گارد از «پاک کردن فیلترها» اصلاح شد.",
         source: "static",
       },
-      {
-        needle: "تماس با فروشگاه",
-        state: "open",
-        reason: WHY.contactOpen,
-        source: "static",
-      },
     ],
     meta: [
       {
@@ -515,10 +279,16 @@ export const PARITY_PAGES: ParityPage[] = [
     textFloor: 0.53,
     misses: [
       {
+        // این جمله متنِ *داخلِ* `<title>`ِ سرورسایدِ Express است (عنوانِ کاملِ
+        // محصول + « | پلاسکو گلی»؛ استخراج‌کنندهٔ جمله‌ها متنِ داخلِ title را
+        // هم می‌خواند). خودِ Express در مرورگر همین عنوان را با قالبِ
+        // «| خرید با قیمت … تومان» جایگزین می‌کرد (product.js:373) و Next
+        // همان قالبِ *دیده‌شدهٔ کاربر* را مستقیم می‌گذارد — یعنی آنچه مشتری
+        // روی تب می‌بیند یکسان است و این تفاوت فقط مربوط به عنوانِ
+        // میان‌مرحله‌ایِ سرور است. همان پذیرشی که در متادیتای title هست.
         needle: "سطل شیاردار درب چوبی ۳ لیتر پلاسکو گلی",
-        state: "open",
-        reason:
-          "عنوانِ همین محصول است که Express سرورساید در تگ‌های متا/og تزریق می‌کند (متنِ پرصفحه سمتِ کلاینت می‌آید)؛ Next در متنِ ابتداییِ صفحه عنوانِ خام را ندارد — بخشی از همان بدهیِ متادیتای محصول.",
+        state: "accepted",
+        reason: WHY.productTitle,
         source: "data",
       },
       {
@@ -546,62 +316,6 @@ export const PARITY_PAGES: ParityPage[] = [
         reason: WHY.clientRender,
         source: "static",
       },
-      {
-        needle: "داخل شهر همان روز",
-        state: "accepted",
-        reason: WHY.clientRender,
-        source: "static",
-      },
-      {
-        needle: "ضمانت اصالت کالا",
-        state: "open",
-        reason:
-          "ردیفِ اعتمادِ product.html:171 (چهار قلم) در ProductDetail نیامده؛ متنِ غایب همین‌جا فهرست شده — بدهیِ باز.",
-        source: "static",
-      },
-      {
-        needle: "۷ روز مهلت مرجوعی",
-        state: "open",
-        reason: "همان ردیفِ اعتمادِ product.html:171 — بدهیِ باز.",
-        source: "static",
-      },
-      {
-        needle: "پرداخت امن زرین‌پال",
-        state: "open",
-        reason: "همان ردیفِ اعتمادِ product.html:171 — بدهیِ باز.",
-        source: "static",
-      },
-      {
-        needle: "نظر کسانی که این جنس را خریده‌اند",
-        state: "accepted",
-        reason: WHY.clientRender,
-        source: "static",
-      },
-      {
-        needle: "از همین دسته",
-        state: "open",
-        reason:
-          "بلوکِ «از همین دسته»ی Express در ProductDetail نیامده — بدهیِ بازِ متن/قابلیت.",
-        source: "static",
-      },
-      {
-        needle: "ادامه‌ی گشت‌وگذار",
-        state: "open",
-        reason: "همان بلوکِ «از همین دسته»/بازگشت به فهرست — بدهیِ باز.",
-        source: "static",
-      },
-      {
-        needle: "اخیراً دیده‌اید",
-        state: "accepted",
-        reason: WHY.homeClient,
-        source: "static",
-      },
-      {
-        needle: "تماس با فروشگاه",
-        state: "open",
-        reason: WHY.contactOpen,
-        source: "static",
-      },
       // دسته‌های Express در کشوی موبایل/فوتر فهرست شده‌اند؛ در Next فقط دستهٔ
       // خودِ محصول روی صفحه می‌آید و بقیه سمتِ کلاینت از API. «ظروف نگهداری»
       // این‌جا نیست چون همان دستهٔ محصولِ نمونه است و روی صفحه می‌آید.
@@ -609,8 +323,6 @@ export const PARITY_PAGES: ParityPage[] = [
     ],
     meta: [
       { field: "title", state: "accepted", reason: WHY.productTitle },
-      { field: "canonical", state: "open", reason: WHY.productCanonical },
-      { field: "og:type", state: "open", reason: WHY.productOgType },
     ],
     probes: [
       {
@@ -1057,13 +769,6 @@ export const PARITY_PAGES: ParityPage[] = [
     mode: "server",
     textFloor: 0.89,
     misses: [
-      {
-        needle: "لغو و مرجوعی",
-        state: "open",
-        reason:
-          "سرفصلِ Express «لغو و مرجوعی» است و Next «لغو سفارش و مرجوعی» نوشته (terms/page.tsx)؛ محتوا هست ولی عنوان واژه‌به‌واژه یکی نیست — بدهیِ بازِ متن.",
-        source: "static",
-      },
       ...CATEGORY_NEEDLES,
     ],
     meta: [
@@ -1095,12 +800,6 @@ export const PARITY_PAGES: ParityPage[] = [
     mode: "server",
     textFloor: 0.94,
     misses: [
-      {
-        needle: "تماس با فروشگاه",
-        state: "open",
-        reason: WHY.contactOpen,
-        source: "static",
-      },
     ],
     meta: [
       { field: "robots", state: "accepted", reason: WHY.robotsEnhance },
@@ -1281,7 +980,7 @@ export const STORE_PROBES: Probe[] = [
   {
     id: "admin-gate",
     url: "/admin",
-    express: 404,
+    express: 302,
     next: 307,
     axis: "capability",
     state: "accepted",
