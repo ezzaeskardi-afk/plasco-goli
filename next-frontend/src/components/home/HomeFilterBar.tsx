@@ -24,24 +24,35 @@ function toEnDigits(s: string): string {
     .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
 }
 
+// مقدارِ گزینه‌ها همان مقداری است که صفحهٔ فهرست/بک‌اند می‌شناسد، نه نامِ
+// گزینه در Express. Express هم دقیقاً همین را با `SORT_MAP` می‌کرد
+// (`main.js:27`): گزینهٔ `default` را به `oldest` نگاشت می‌کرد تا «پیش‌فرض»
+// روی ترتیبِ اصلیِ ویترین (`id ASC`) بنشیند؛ نگاشت را این‌جا مستقیم در خودِ
+// مقادیر گذاشته‌ایم تا هیچ لایهٔ واسطی مقدارِ ناشناخته به سرور نفرستد.
 const SORTS = [
-  { value: "default", label: "پیش‌فرض" },
+  // «پیش‌فرض» = ترتیبِ اصلیِ ویترین (`oldest` → `id ASC`) — هم‌رفتار با
+  // `SORT_MAP.default` در `main.js:28` و `SORT_SQL.oldest` در `db.js:797`.
+  { value: "oldest", label: "پیش‌فرض" },
   { value: "price-asc", label: "ارزان‌ترین" },
   { value: "price-desc", label: "گران‌ترین" },
   { value: "newest", label: "جدیدترین" },
-  // «حروف الفبا» — عیناً برچسبِ `<option value="name">` در index.html:305
+  // «حروف الفبا» — عیناً برچسبِ `<option value="name">` در index.html:305 که
+  // `SORT_MAP.name` آن را به `title` نگاشت می‌کرد.
   { value: "title", label: "حروف الفبا" },
 ];
 
 export function HomeFilterBar() {
   const router = useRouter();
-  const [sort, setSort] = useState("default");
+  // مقدارِ آغازین همان «پیش‌فرض» است؛ پس select از همان اول «پیش‌فرض» را
+  // نشان می‌دهد — عیناً انتخابِ اولیهٔ sortSelect در index.html.
+  const [sort, setSort] = useState("oldest");
   const [minInput, setMinInput] = useState("");
   const [maxInput, setMaxInput] = useState("");
 
   function go(nextSort: string, minStr: string, maxStr: string) {
     const sp = new URLSearchParams();
-    // `newest` پیش‌فرضِ صفحه‌ی فهرست است؛ نبردنش یعنی نشانیِ تمیزتر
+    // مقادیرِ SORTS همین حالا مقادیرِ پذیرفتهٔ صفحهٔ فهرست‌اند؛ فقط `newest`
+    // را نمی‌بریم چون خودش پیش‌فرضِ صفحهٔ فهرست است و نشانی را تمیز نگه می‌دارد.
     if (nextSort && nextSort !== "newest") sp.set("sort", nextSort);
     let min = parseInt(toEnDigits(minStr).replace(/\D/g, ""), 10);
     let max = parseInt(toEnDigits(maxStr).replace(/\D/g, ""), 10);

@@ -122,6 +122,15 @@ export function FilterBar({
           className="rounded-full px-3 py-1.5 text-xs font-medium outline-none appearance-none cursor-pointer"
           style={inputStyle}
         >
+          {/* «پیش‌فرض» فقط وقتی حاضر می‌شود که کاربر با همین مقدار از نوارِ
+              صفحهٔ اصلی آمده باشد (نوارِ «پیش‌فرض» → `sort=oldest`، ترتیبِ
+              اصلیِ ویترین). عمداً همیشه رندر نمی‌شود تا فهرستِ گزینه‌های
+              صفحهٔ فهرست در حالتِ عادی عیناً همان پنج گزینهٔ products.html
+              بماند. برچسبِ «پیش‌فرض» هم واژهٔ تازه‌ای نیست؛ همان برچسبِ گزینهٔ
+              اصلیِ index.html است. */}
+          {currentSort === "oldest" && (
+            <option value="oldest">پیش‌فرض</option>
+          )}
           <option value="newest">جدیدترین</option>
           <option value="price-asc">ارزان‌ترین</option>
           <option value="price-desc">گران‌ترین</option>
