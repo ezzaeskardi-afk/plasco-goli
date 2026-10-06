@@ -457,6 +457,15 @@ const STORE_CLAIMS: Claim[] = [
     re: /<a href="#products" class="btn btn-primary">\s*<svg><use href="#i-cart"\/><\/svg> ([^<]+)/,
     to: NEXT_HOME,
   },
+  {
+    // دکمهٔ دومِ هیرو. قبلاً در Next «خرید عمده» بود و چون همان متن در
+    // ناوبریِ همین صفحه هم می‌آمد، نگهبانِ پوشش گم‌شدنش را نمی‌دید؛ این
+    // ادعا متنش را مستقیم از `index.html` می‌کشد و به همان فایل می‌بندد.
+    what: "دکمهٔ دومِ هیرو (ورود / ثبت‌نام)",
+    from: INDEX_HTML,
+    re: /<a href="login\.html" class="btn btn-outline" data-auth-link="text">\s*<svg><use href="#i-user"\/><\/svg> <span data-auth-label>([^<]+)<\/span>/,
+    to: NEXT_HOME,
+  },
   ...HERO_CHIPS.map(([icon, label]) => ({
     what: `چیپِ اعتماد «${label}»`,
     from: INDEX_HTML,

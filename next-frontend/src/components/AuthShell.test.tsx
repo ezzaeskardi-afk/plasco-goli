@@ -161,4 +161,41 @@ describe("پنهان‌کردنِ چارچوبِ فروشگاه در مسیره�
     );
     expect(container.textContent).toBe("هدر");
   });
+
+  // ---------- پنلِ مدیریت ----------
+  // این دو آزمون برای چیزی است که یک‌بار کاربر دیده بود: هدرِ فروشگاه (با
+  // جستجو، سبد و نوارِ مشتریان) بالای نوارِ پنل در `/admin/system`. حالتِ
+  // درست سنجیده می‌شود ولی مرزِ آن هم سنجیده می‌شود، وگرنه «/admin* را بگیر»
+  // می‌تواند به «هر چیزی که با admin شروع می‌شود» تبدیل شود و صفحه‌ای مثل
+  // `/administer` — که اگر روزی اضافه شود — بی‌دلیل لخت رندر شود.
+  it("در هر مسیری زیرِ /admin هدر و پاورقی را رندر نمی‌کند", async () => {
+    // سه مسیرِ متفاوت و هر کدام در ریشه‌ی خودش: یک ریشه دوباره استفاده شود،
+    // نتیجه‌ی سنجیده‌شده می‌تواند باقی‌ماندهٔ رندرِ قبلی باشد، نه رندرِ جاری.
+    for (const path of ["/admin", "/admin/system", "/admin/orders"]) {
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      const r = createRoot(host);
+      pathname = path;
+      await act(async () => {
+        r.render(
+          <HideOnStandalone>
+            <p>هدر</p>
+          </HideOnStandalone>,
+        );
+      });
+      expect(host.textContent, path).toBe("");
+      await act(async () => r.unmount());
+      host.remove();
+    }
+  });
+
+  it("مسیری که فقط با رشته‌ی «admin» شروع می‌شود، پنل نیست", async () => {
+    pathname = "/administer";
+    await render(
+      <HideOnStandalone>
+        <p>هدر</p>
+      </HideOnStandalone>,
+    );
+    expect(container.textContent).toBe("هدر");
+  });
 });
