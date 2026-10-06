@@ -201,7 +201,13 @@ export function ErrorBox({
   return (
     <div
       className="rounded-[18px] p-4 text-sm flex items-center justify-between gap-4"
-      style={{ background: "var(--color-coral-tint)", color: "var(--color-coral)" }}
+      style={{
+        background: "var(--color-coral-tint)",
+        color: "var(--color-coral)",
+        // نوارِ نازکِ هم‌رنگ: کادرِ قرمزِ بی‌حاشیه روی پس‌زمینه‌ی تیره تقریباً
+        // محو می‌شود، و این کادر باید در نگاهِ اول دیده شود، نه خوانده شود.
+        border: "1px solid rgba(255, 106, 77, 0.34)",
+      }}
       role="alert"
     >
       <span>{message}</span>
@@ -273,13 +279,20 @@ export function StatCard({
   return (
     <div
       className="rounded-[18px] p-4"
-      style={{ background: "var(--color-surface)", border: "1px solid var(--color-line)" }}
+      style={{
+        backgroundColor: "var(--color-surface)",
+        // هالهٔ رنگِ همان عدد، از گوشهٔ بالا (همان‌جایی که چشم اول می‌رود). چهار
+        // کارتِ پهلوی هم با رنگ‌های متفاوت، بدونِ این هاله یک مستطیلِ یکنواخت‌اند؛
+        // با هاله، ردیف بدونِ خواندنِ عدد هم تفکیک می‌شود.
+        backgroundImage: `radial-gradient(130% 120% at 100% 0%, ${TONE_STYLE[tone].background}, transparent 72%)`,
+        border: "1px solid var(--color-line)",
+      }}
     >
       <div className="text-[11px] mb-1.5" style={{ color: "var(--color-ink-dim)" }}>
         {label}
       </div>
       <div
-        className="text-lg font-extrabold leading-tight"
+        className="text-xl font-extrabold leading-tight tabular-nums"
         style={{ color: TONE_STYLE[tone].color }}
       >
         {value}
@@ -313,15 +326,32 @@ export function Panel({
       // بود. با `min-w-0` آیتمِ گرید به عرضِ ترک برمی‌گردد و اسکرولِ افقیِ
       // داخلش کارِ خودش را می‌کند.
       className="rounded-[18px] p-4 min-w-0"
-      style={{ background: "var(--color-surface)", border: "1px solid var(--color-line)" }}
+      style={{
+        backgroundColor: "var(--color-surface)",
+        // نورِ ملایمی از بالا: کارت به‌جای یک لکه‌ی تیره، یک سطحِ روشنِ رو به
+        // بالا خوانده می‌شود. در تمِ تیره تفاوتِ «کارت» و «زمینه» فقط همین است.
+        backgroundImage:
+          "linear-gradient(180deg, rgba(237, 246, 241, 0.04), rgba(237, 246, 241, 0) 140px)",
+        border: "1px solid var(--color-line)",
+        boxShadow: "0 22px 44px -42px rgba(0, 0, 0, 0.95)",
+      }}
     >
       {/* `flex-wrap` هم همین دلیل را دارد: سرستون روی موبایل ممکن است عملِ
           پهن داشته باشد (۴ دکمه‌ی بازه + دکمه‌ی خروجی) و بدونِ شکستن، از
           کادر بیرون می‌زد. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <h2 className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>
-          {title}
-        </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3.5">
+        <div className="flex items-center gap-2">
+          {/* نشانکِ رنگی سرستون — همان نقشِ خطِ کنارِ عنوان در مجلات: چشم
+              می‌فهمد تیتر از کجا شروع می‌شود، بدونِ تغییری در فونت. */}
+          <span
+            className="h-4 w-[3px] shrink-0 rounded-full"
+            style={{ background: "var(--color-teal)" }}
+            aria-hidden="true"
+          />
+          <h2 className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>
+            {title}
+          </h2>
+        </div>
         {action}
       </div>
       {children}
@@ -357,7 +387,11 @@ export function Btn({
       // `min-h-10` یعنی ۴۰ پیکسل روی موبایل. استانداردِ لمسی ۴۴ است، ولی
       // ۴۰ همان جایی است که «اشتباهی نخورد» را می‌دهد بدونِ اینکه دکمه‌ها
       // روی دسکتاپ چاق شوند؛ `sm:min-h-0` ارتفاع را به حالتِ قبلی برمی‌گرداند.
-      className={`rounded-full px-4 py-2 text-xs font-bold transition-opacity disabled:cursor-not-allowed disabled:opacity-50 min-h-10 sm:min-h-0 sm:px-3.5 sm:py-1.5 ${className}`}
+      // `transition` روی همه‌ی ویژگی‌هاست نه فقط `opacity`: هاور هم روشنایی
+      // (`brightness-110`) و هم یک پیکسل بلندشدن دارد، و کلیک یک جمع‌شدنِ
+      // کوچک — همان بازخوردی که در نسخه‌ی Express با `transform` روی دکمه‌ها
+      // بود و در این پنل جا افتاده بود. `active:` روی موبایل هم کار می‌کند.
+      className={`rounded-full px-4 py-2 text-xs font-bold transition duration-200 hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 min-h-10 sm:min-h-0 sm:px-3.5 sm:py-1.5 ${className}`}
       style={{ background: style.background, color: style.color }}
     >
       {children}

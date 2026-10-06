@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { CrmContent } from "@/components/CrmContent";
+import { AdminPage } from "@/components/admin/PageHead";
 import type { Metadata } from "next";
 
 // `robots` عمداً اینجا نیست: `app/admin/layout.tsx` برای هر صفحه‌ی زیرِ /admin
@@ -13,10 +14,11 @@ export const metadata: Metadata = {
 
 export default function CrmPage() {
   return (
-    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-extrabold text-ink mb-6">
-        مدیریت ارتباط با مشتری (CRM)
-      </h1>
+    <AdminPage
+      sectionKey="crm"
+      title="مدیریت ارتباط با مشتری (CRM)"
+      desc="امتیازِ RFM هر مشتری، سگمنت‌های هوشمند، یادداشت و پیگیری."
+    >
 
       {/*
         مرزِ Suspense لازم است، نه تزئینی: داخلِ CrmContent از
@@ -44,6 +46,6 @@ export default function CrmPage() {
       >
         <CrmContent />
       </Suspense>
-    </div>
+    </AdminPage>
   );
 }

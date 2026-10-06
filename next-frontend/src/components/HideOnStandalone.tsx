@@ -25,10 +25,36 @@ import type { ReactNode } from "react";
 /** مسیرهایی که چارچوبِ فروشگاه در آن‌ها نمایش داده نمی‌شود. */
 const STANDALONE_ROUTES = new Set(["/login"]);
 
+// ============================================================
+// پنلِ مدیریت هم تمام‌صفحه است
+// ============================================================
+// چرا: هدرِ فروشگاه یعنی جستجو، سبد، «دسته‌بندی کالا» و نوارِ اعتماد؛ «نوارِ
+// مشتریان» یعنی همان نوارِ زیرِ هدر. هیچ‌کدام کارِ کسی که داخلِ پنل است را
+// راه نمی‌اندازند، ولی هر سه بالای صفحه جا می‌گیرند — یعنی مدیر برای رسیدن به
+// بخشِ بعدیِ پنل باید از رویِ چارچوبِ فروشگاه رد شود. در تصویرِ `/admin/system`
+// هدرِ فروشگاه دقیقاً همین‌جا بود: بالای نوارِ پنل، بی‌هیچ ربطی به کارِ مدیر.
+//
+// به‌جایش یک دکمه‌ی «بازگشت به صفحه سایت» در نوارِ پنل (`AdminTopBar`) هست؛
+// پس راهِ برگشت به فروشگاه بسته نمی‌شود، فقط جابه‌جا می‌شود.
+//
+// تفاوتش با `STANDALONE_ROUTES`: آن‌جا مسیر **دقیق** مهم است (`/login` ≠ `/login/x`)،
+// این‌جا **پیشوند**: هر مسیری زیرِ `/admin` — هر ۱۳ بخش، صفحه‌ی «دسترسی
+// ندارید» و هر صفحه‌ای که فردا اضافه شود. `=== prefix` هم لازم است تا خودِ
+// `/admin` (که با `/` ادامه نمی‌یابد) از دست نرود.
+const STANDALONE_PREFIXES = ["/admin"];
+
+/** آیا این مسیر باید بدونِ چارچوبِ فروشگاه رندر شود؟ */
+export function isStandalonePath(pathname: string): boolean {
+  if (STANDALONE_ROUTES.has(pathname)) return true;
+  return STANDALONE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 export function HideOnStandalone({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  if (STANDALONE_ROUTES.has(pathname)) return null;
+  if (isStandalonePath(pathname)) return null;
   return <>{children}</>;
 }
 
-export { STANDALONE_ROUTES };
+export { STANDALONE_ROUTES, STANDALONE_PREFIXES };

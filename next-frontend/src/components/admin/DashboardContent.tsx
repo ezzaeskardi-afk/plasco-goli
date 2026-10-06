@@ -106,21 +106,32 @@ export function DashboardContent() {
         }
       >
         {/* نمودارِ میله‌ای با div — نه کتابخانه. پروژه هیچ کتابخانه‌ی نمودار
-            ندارد و برای ۱۴ عدد، آوردنِ ۱۰۰ کیلوبایت وابستگی توجیه ندارد. */}
+            ندارد و برای ۱۴ عدد، آوردنِ ۱۰۰ کیلوبایت وابستگی توجیه ندارد.
+
+            ⚠️ سه لایه‌ی `div` اینجا تصادفی نیست: ارتفاعِ میله به‌صورت «درصد»
+            داده می‌شود و درصد فقط وقتی معنا دارد که والدش ارتفاعِ **قطعی**
+            داشته باشد. قبلاً میله مستقیم داخلِ ستونِ `flex flex-col` بود و آن
+            ستون با `items-end` ارتفاعش به اندازه‌ی محتوا بود (نامعین)، پس
+            مرورگر `2%` را صفر حساب می‌کرد. نتیجه: نمودارِ خالی — یک کادرِ سبزِ
+            بی‌میله (اندازه‌گیری شد: ۱۴ میله، همه صفر پیکسل). حالا ستون
+            `h-full` (قطعی، ۱۲۸ پیکسل) و میله داخلِ ناحیه‌ای با `flex-1` است؛
+            پس درصد به ارتفاعِ واقعیِ ناحیه بسته می‌شود. */}
         <div className="flex items-end justify-between gap-1 h-32" role="img"
              aria-label="نمودار فروش ۱۴ روز گذشته">
           {data.series.map((p) => {
             const h = Math.round((p.sales / maxSales) * 100);
             return (
-              <div key={p.day} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-                <div
-                  className="w-full rounded-t-md transition-all"
-                  style={{
-                    height: `${Math.max(p.sales > 0 ? 6 : 2, h)}%`,
-                    background: p.sales > 0 ? "var(--color-teal)" : "var(--color-line-strong)",
-                  }}
-                  title={`${p.day} — ${toman(p.sales)} (${faNum(p.orders)} سفارش)`}
-                />
+              <div key={p.day} className="h-full min-w-0 flex-1 flex flex-col items-center gap-1">
+                <div className="flex w-full flex-1 items-end">
+                  <div
+                    className="w-full rounded-t-md transition-all"
+                    style={{
+                      height: `${Math.max(p.sales > 0 ? 6 : 2, h)}%`,
+                      background: p.sales > 0 ? "var(--color-teal)" : "var(--color-line-strong)",
+                    }}
+                    title={`${p.day} — ${toman(p.sales)} (${faNum(p.orders)} سفارش)`}
+                  />
+                </div>
                 <span className="text-[9px] truncate w-full text-center"
                       style={{ color: "var(--color-ink-dim)" }}>
                   {p.day.slice(8)}

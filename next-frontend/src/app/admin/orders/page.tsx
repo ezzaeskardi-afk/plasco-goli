@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { OrdersContent } from "@/components/admin/OrdersContent";
+import { AdminPage } from "@/components/admin/PageHead";
 
 // ============================================================
 // `/admin/orders` — سفارش‌ها
@@ -16,9 +17,11 @@ export const metadata: Metadata = {
 
 export default function AdminOrdersPage() {
   return (
-    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-extrabold text-ink mb-6">سفارش‌ها</h1>
+    <AdminPage
+      sectionKey="orders"
+      desc="جستجو و فیلترِ سفارش‌ها، تغییرِ وضعیت، کدِ رهگیری، یادداشتِ داخلی، لغو و تأییدِ مرجوعی."
+    >
       <OrdersContent />
-    </div>
+    </AdminPage>
   );
 }

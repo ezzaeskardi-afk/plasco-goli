@@ -447,7 +447,7 @@ polasco-goli/
 │       │   ├── socialParity.test.ts ← ۸ آزمونِ متادیتای اشتراک‌گذاری (og/twitter) و تگ‌های قیمتِ صفحه‌ی محصول در برابر Express
 │       │   ├── copyParity.test.ts   ← ۱۰ آزمونِ نگهبانِ متنِ کاربرمحور: سبد/پرداخت/فیلترها به‌علاوه‌ی صفحه‌ی اصلی، صفحه‌ی محصول، قوانین و فروشِ عمده — هر رشته باید عیناً همان چیزی بماند که `frontend/` می‌نویسد
 │       │   ├── parityManifest.test.ts ← ۸ آزمونِ ساختاریِ مانیفستِ برابریِ فروشگاه: پوششِ کاملِ صفحه‌ها و فایل‌ها، دلیلِ اجباریِ هر واگرایی، needleهای مرده
-│       ├── components/        ← ۳۷ کامپوننت + ۹ آزمون + ۴ کامپوننتِ صفحه اصلی + ۱۳ فایلِ محتوای پنل
+│       ├── components/        ← ۳۸ کامپوننت + ۹ آزمون + ۴ کامپوننتِ صفحه اصلی + ۱۳ فایلِ محتوای پنل
 │       │   ├── Header.tsx / Footer.tsx / AdminNav.tsx / Toast.tsx
 │       │   ├── ProductCard.tsx / ProductDetail.tsx / ProductReviews.tsx / StarRow.tsx
 │       │   ├── AccountContent.tsx / CartContent.tsx / CheckoutContent.tsx / CrmContent.tsx
