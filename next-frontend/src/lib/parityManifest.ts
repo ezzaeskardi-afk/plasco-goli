@@ -209,8 +209,17 @@ export const PARITY_PAGES: ParityPage[] = [
     ],
     files: {
       express: ["index.html", "js/common.js", "js/main.js"],
+      // کامپوننت‌های هیرو/نواری که در همین کار ساخته شدند و بخشی از صفحهٔ
+      // اصلی‌اند: نوارِ متحرک (`Marquee.tsx`)، برچسبِ کوچکِ سرتیترها
+      // (`Eyebrow.tsx`)، دکمهٔ شناورِ تماس و نوارِ فیلتر/مرتب‌سازیِ بخشِ
+      // محصولات. پیش از این در فهرست نبودند — یعنی صفحه‌ای که متنش ۱۰۰٪ بود
+      // ولی بخشی از فایل‌های سازنده‌اش اعلام نشده بودند.
       next: [
         "src/app/page.tsx",
+        "src/components/Eyebrow.tsx",
+        "src/components/Marquee.tsx",
+        "src/components/ContactFab.tsx",
+        "src/components/home/HomeFilterBar.tsx",
         "src/components/home/PromoBanner.tsx",
         "src/components/home/RecentlyViewed.tsx",
         "src/components/home/OrderTracking.tsx",

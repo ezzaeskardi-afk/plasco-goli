@@ -130,7 +130,8 @@ function HeroSection() {
           روزمره لازم دارد. جنس اصل، قیمت منصفانه، خرید آنلاین راحت.
         </p>
 
-        {/* دکمه‌های CTA — متنِ دکمهٔ اصلی عیناً همان «مشاهده محصولات»ِ Express */}
+        {/* دکمه‌های CTA — هر دو عیناً همان‌های هیروی Express (`index.html:222-232`):
+            «مشاهده محصولات» (primary) و «ورود / ثبت‌نام» (outline). */}
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/products"
@@ -144,16 +145,22 @@ function HeroSection() {
             <Icon name="cart" size={18} />
             مشاهده محصولات
           </Link>
+          {/* دکمهٔ دوم — عیناً `<a class="btn btn-outline" href="login.html">`
+              در `index.html:229-231`: آیکونِ کاربر + «ورود / ثبت‌نام». پیش از
+              این «خرید عمده» بود که در هیروی Express وجود ندارد (فقط در
+              ناوبری) و چون همان متن روی همین صفحه جای دیگری هم می‌آمد، از
+              چشمِ نگهبانِ پوشش پنهان می‌ماند؛ حالا `copyParity` قفلش می‌کند. */}
           <Link
-            href="/wholesale"
+            href="/login"
             className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
             style={{
               background: "transparent",
-              color: "var(--color-gold)",
-              border: "1.5px solid var(--color-gold)",
+              color: "var(--color-ink)",
+              border: "1.5px solid var(--color-line-control)",
             }}
           >
-            خرید عمده
+            <Icon name="user" size={18} />
+            ورود / ثبت‌نام
           </Link>
         </div>
 
