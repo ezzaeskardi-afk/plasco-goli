@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { WholesaleContent } from "@/components/admin/WholesaleContent";
+import { AdminPage } from "@/components/admin/PageHead";
 
 // ============================================================
 // `/admin/wholesale` — درخواست‌های خرید عمده (B2B)
@@ -20,13 +21,12 @@ export const metadata: Metadata = {
 
 export default function AdminWholesalePage() {
   return (
-    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-extrabold text-ink mb-2">درخواست‌های خرید عمده</h1>
-      <p className="text-xs mb-6" style={{ color: "var(--color-ink-dim)" }}>
-        صفِ تماسِ مشتریانِ عمده. وضعیت هر درخواست را جلو ببر تا معلوم باشد چه
-        کاری مانده و چه کاری انجام شده است.
-      </p>
+    <AdminPage
+      sectionKey="wholesale"
+      title="درخواست‌های خرید عمده"
+      desc="صفِ تماسِ مشتریانِ عمده. وضعیت هر درخواست را جلو ببر تا معلوم باشد چه کاری مانده و چه کاری انجام شده است."
+    >
       <WholesaleContent />
-    </div>
+    </AdminPage>
   );
 }

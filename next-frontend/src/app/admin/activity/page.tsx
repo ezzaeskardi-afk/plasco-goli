@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ActivityContent } from "@/components/admin/ActivityContent";
+import { AdminPage } from "@/components/admin/PageHead";
 
 // ============================================================
 // `/admin/activity` — دفتر رویدادها
@@ -20,13 +21,12 @@ export const metadata: Metadata = {
 
 export default function AdminActivityPage() {
   return (
-    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-extrabold text-ink mb-2">دفتر رویدادها</h1>
-      <p className="text-xs mb-6" style={{ color: "var(--color-ink-dim)" }}>
-        تازه‌ترین کارهای انجام‌شده در پنل: تغییر وضعیت سفارش، ویرایش کالا،
-        تنظیمات، ورود و خروج مدیران. ورودهای ناموفق با رنگ قرمز مشخص می‌شوند.
-      </p>
+    <AdminPage
+      sectionKey="log"
+      title="دفتر رویدادها"
+      desc="تازه‌ترین کارهای انجام‌شده در پنل: تغییر وضعیت سفارش، ویرایش کالا، تنظیمات، ورود و خروج مدیران. ورودهای ناموفق با رنگ قرمز مشخص می‌شوند."
+    >
       <ActivityContent />
-    </div>
+    </AdminPage>
   );
 }

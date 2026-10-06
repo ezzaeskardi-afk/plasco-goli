@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SystemContent } from "@/components/admin/SystemContent";
+import { AdminPage } from "@/components/admin/PageHead";
 
 // ============================================================
 // `/admin/system` — وضعیت سیستم
@@ -25,13 +26,11 @@ export const metadata: Metadata = {
 
 export default function AdminSystemPage() {
   return (
-    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-extrabold text-ink mb-2">وضعیت سیستم</h1>
-      <p className="text-xs mb-6" style={{ color: "var(--color-ink-dim)" }}>
-        سلامت سرور و دیتابیس، بکاپ‌ها و خطاهای هفت روزِ اخیر. این صفحه هر دقیقه
-        خودش تازه می‌شود.
-      </p>
+    <AdminPage
+      sectionKey="system"
+      desc="سلامت سرور و دیتابیس، بکاپ‌ها و خطاهای هفت روزِ اخیر. این صفحه هر دقیقه خودش تازه می‌شود."
+    >
       <SystemContent />
-    </div>
+    </AdminPage>
   );
 }

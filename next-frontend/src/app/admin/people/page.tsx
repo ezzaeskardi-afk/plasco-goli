@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PeopleContent } from "@/components/admin/PeopleContent";
+import { AdminPage } from "@/components/admin/PageHead";
 
 // ============================================================
 // `/admin/people` — مشتری‌ها
@@ -22,9 +23,11 @@ export const metadata: Metadata = {
 
 export default function AdminPeoplePage() {
   return (
-    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-extrabold text-ink mb-6">مشتری‌ها</h1>
+    <AdminPage
+      sectionKey="people"
+      desc="فهرستِ مشتریان با آمارِ خرید؛ جستجو، فیلتر، صفحه‌بندی و تعیینِ نقشِ کارمند."
+    >
       <PeopleContent />
-    </div>
+    </AdminPage>
   );
 }

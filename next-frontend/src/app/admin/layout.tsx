@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { AdminNav } from "@/components/AdminNav";
+import { AdminTopBar } from "@/components/AdminTopBar";
 import { ADMIN_SECTIONS, PENDING_SECTIONS, READY_SECTIONS } from "@/lib/adminSections";
 import {
   NoAccess,
@@ -26,6 +27,25 @@ import {
 // دوباره `robots` بنویسد، `follow: false` بی‌صدا از دست می‌رود. به همین دلیل
 // `admin/crm/page.tsx` دیگر `robots` خودش را ندارد. صفحه‌های تازه هم نباید
 // داشته باشند — فقط `title`.
+//
+// ============================================================
+// چارچوبِ فروشگاه اینجا نیست
+// ============================================================
+// هدرِ فروشگاه (با جستجو، سبد، «دسته‌بندی کالا» و نوارِ مشتریان) و پاورقی‌اش
+// در `app/layout.tsx` ریشه رندر می‌شوند و هیچ layoutِ تودرتویی نمی‌تواند
+// برشان دارد. آن‌ها را `HideOnStandalone` برای هر مسیرِ `/admin` پنهان می‌کند
+// (کلیدواژه‌اش همان `STANDALONE_PREFIXES`). به‌جایشان همین پوسته دو چیز
+// می‌گذارد: برند + دکمه‌ی «بازگشت به صفحه سایت» (`AdminTopBar`) و نوارِ
+// بخش‌ها (`AdminNav`) — پس راهِ برگشت به فروشگاه بسته نمی‌شود، فقط از
+// «چهارده لینکِ خرید» به «یک دکمه» کاهش پیدا می‌کند.
+//
+// این دو با هم یک نوارِ `sticky` می‌سازند: در صفحه‌های بلندِ پنل (سفارش‌ها،
+// وضعیت سیستم، رویدادها) بخشِ جاری و راهِ برگشت همیشه در دسترس می‌مانند و
+// مدیر برای عوض‌کردنِ بخش نباید تا بالای صفحه اسکرول کند.
+//
+// `z-40` است و نه بیشتر: لینکِ «رفتن به محتوای اصلی» در `globals.css`
+// `z-index: 999` دارد و باید بالای این نوار بیفتد، وگرنه کاربرِ کیبورد
+// با Tab چیزی می‌بیند که زیرِ هدر پنهان است.
 //
 // ============================================================
 // دروازه‌ی نمایشیِ پنل
@@ -64,15 +84,40 @@ export default async function AdminLayout({
   if (access === "none") {
     return (
       <div style={{ background: "var(--color-cream)", minHeight: "60vh" }}>
+        {/* نوارِ بالای پنل عمداً اینجا هم هست — ولی نوارِ بخش‌ها **نیست**.
+            فرقشان مهم است: `AdminTopBar` هیچ بخشی را وعده نمی‌دهد (برند + دکمهٔ
+            برگشت به فروشگاه + شماره‌ی حساب)، پس همان ایرادِ قبلی را برنمی‌گرداند
+            («نوار هفت تب نشان می‌داد و هر تب یک کادرِ ۴۰۳»). و از آن مهم‌تر:
+            حالا که هدرِ فروشگاه در `/admin` پنهان است، بدونِ این نوار کاربرِ
+            بدونِ‌دسترسی هیچ راهی به بیرونِ این صفحه نداشت. */}
+        <AdminTopBar role={role} phone={phone} />
         <NoAccess role={role} phone={phone} />
       </div>
     );
   }
 
   return (
-    <div style={{ background: "var(--color-cream)" }}>
-      <AdminNav role={role} />
-      {children}
+    <div
+      className="flex min-h-screen flex-col"
+      style={{ background: "var(--color-cream)" }}
+    >
+      <header
+        className="sticky top-0 z-40 border-b backdrop-blur-md"
+        style={{
+          borderColor: "var(--color-line)",
+          // شیشه‌ای و کمی تیره‌تر از بدنه: وقتی محتوای پنل زیرِ نوار اسکرول
+          // می‌شود، متنِ محتوا از پشتش خوانده نشود ولی معلوم باشد چیزی آنجاست.
+          background: "linear-gradient(180deg, rgba(18,31,26,.94), rgba(11,20,17,.9))",
+        }}
+      >
+        {/* هر دو ردیف خودشان `mx-auto max-w-[1180px]` دارند — پس خطِ جداکننده‌ی
+            زیرِ نوار (`border-t` روی خودِ `AdminNav`) عرضِ کامل را می‌گیرد و
+            محتوا در ستونِ ۱۱۸۰ می‌ماند، هم‌ترازِ بدنه‌ی صفحه. */}
+        <AdminTopBar role={role} phone={phone} />
+        <AdminNav role={role} />
+      </header>
+
+      <div className="flex-1">{children}</div>
 
       {/* پانویسِ وضعیتِ مهاجرت.
 

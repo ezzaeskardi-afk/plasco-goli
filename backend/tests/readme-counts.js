@@ -102,8 +102,14 @@ const derived = {
 };
 
 // نماهای پنل از تنها منبعِ حقیقت (`adminSections.ts`) شمرده می‌شوند
+//
+// ⚠️ پایانِ آرایه در آن فایل `] as const satisfies readonly AdminSection[];`
+// است، نه `];`. الگوی قبلی به `\n];` گره خورده بود و با اضافه‌شدنِ آن تأییدِ
+// نوعی، **بی‌صدا** هیچ چیزی پیدا نمی‌کرد: عددِ ۱۳ به ۰ تبدیل می‌شد و نگهبان
+// «۱۳ نما» را با «۰» می‌سنجید. حالا بعد از `]` هر چیزی تا اولین `;` همان خط
+// پذیرفته می‌شود — هم شکلِ امروز، هم `];` فردا.
 const sectionsSrc = fs.readFileSync(path.join(ROOT, 'next-frontend', 'src', 'lib', 'adminSections.ts'), 'utf8');
-const arr = sectionsSrc.match(/ADMIN_SECTIONS[^=]*=\s*\[([\s\S]*?)\n\];/);
+const arr = sectionsSrc.match(/ADMIN_SECTIONS[^=]*=\s*\[([\s\S]*?)\n\][^\n]*;/);
 derived.views = arr ? (arr[1].match(/key:\s*"[a-z-]+"/g) || []).length : 0;
 
 const compDir = path.join(ROOT, 'next-frontend', 'src', 'components');
@@ -113,7 +119,11 @@ for (const f of fs.readdirSync(compDir)) {
   else derived.comp.plain++;
 }
 derived.comp.home = fs.readdirSync(path.join(compDir, 'home')).filter((f) => f.endsWith('.tsx')).length;
-const SHARED_PANEL = new Set(['AdminBits.tsx', 'NoAccess.tsx']);
+// «اجزای مشترک» در برابر «محتوای نماها». `PageHead` هم مثل `AdminBits` هیچ
+// محتوایی ندارد — یک قالبِ سرصفحه است که هر ۱۳ نما استفاده‌اش می‌کنند — پس
+// جزو همان ۱۳ نمی‌شود، وگرنه عددِ «۱۳ فایلِ محتوای پنل» با «۱۳ نمای پنل»
+// یکی نمی‌ماند و هر خواننده‌ی README فکر می‌کند نمای چهاردهمی اضافه شده.
+const SHARED_PANEL = new Set(['AdminBits.tsx', 'NoAccess.tsx', 'PageHead.tsx']);
 derived.comp.panel = fs.readdirSync(path.join(compDir, 'admin'))
   .filter((f) => f.endsWith('.tsx') && !f.includes('.test.') && !SHARED_PANEL.has(f)).length;
 

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { StockContent } from "@/components/admin/StockContent";
+import { AdminPage } from "@/components/admin/PageHead";
 
 // ============================================================
 // `/admin/stock` — انبار و کالا
@@ -17,9 +18,11 @@ export const metadata: Metadata = {
 
 export default function AdminStockPage() {
   return (
-    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-extrabold text-ink mb-6">انبار و کالا</h1>
+    <AdminPage
+      sectionKey="stock"
+      desc="ویرایشِ قیمت و موجودی، انتشار و برداشتنِ کالا، عملیاتِ گروهی، و کالاهایی که مشتری‌ها می‌خواهند ولی موجود نیستند."
+    >
       <StockContent />
-    </div>
+    </AdminPage>
   );
 }

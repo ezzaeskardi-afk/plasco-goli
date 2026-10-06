@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DashboardContent } from "@/components/admin/DashboardContent";
+import { AdminPage } from "@/components/admin/PageHead";
 
 // ============================================================
 // `/admin` — داشبورد
@@ -24,9 +25,12 @@ export const metadata: Metadata = {
 
 export default function AdminDashboardPage() {
   return (
-    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-extrabold text-ink mb-6">داشبورد</h1>
+    <AdminPage
+      sectionKey="dash"
+      title="داشبورد"
+      desc="فروشِ امروز و بازه‌های ۷ و ۳۰ روزه، کارهای بازِ فروشگاه، نمودارِ ۱۴ روزِ گذشته و کالاهایی که رو به اتمام‌اند."
+    >
       <DashboardContent />
-    </div>
+    </AdminPage>
   );
 }

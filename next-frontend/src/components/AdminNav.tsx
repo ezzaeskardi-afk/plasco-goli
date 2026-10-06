@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ADMIN_SECTIONS } from "@/lib/adminSections";
+import { Icon } from "@/components/Icon";
+import { ADMIN_SECTIONS, type AdminSection } from "@/lib/adminSections";
 import type { PanelRole } from "@/components/admin/NoAccess";
 
 // ============================================================
@@ -37,7 +38,10 @@ import type { PanelRole } from "@/components/admin/NoAccess";
 // هدر یک راهنمای نمایشی است، نه مرزِ امنیتی؛ و فرضِ اشتباه در جهتِ «همه را
 // نشان بده» بدترین نتیجه‌اش یک کادرِ ۴۰۳ است، ولی جهتِ مخالف یعنی مدیرِ واقعی
 // نوارِ خودش را نمی‌بیند و دنبالِ باگ می‌گردد.
-function sectionsFor(role: PanelRole) {
+// نوعِ بازگشتی `readonly` است چون منبعش (`ADMIN_SECTIONS`) با `as const`
+// ساخته می‌شود — و درست هم همین است: نوار نباید هیچ‌وقت فهرستِ بخش‌ها را
+// دست‌کاری کند، فقط بخواند.
+function sectionsFor(role: PanelRole): readonly AdminSection[] {
   if (role !== "staff") return ADMIN_SECTIONS;
   return ADMIN_SECTIONS.filter((s) => s.href === "/admin/orders");
 }
@@ -52,31 +56,30 @@ function sectionsFor(role: PanelRole) {
 // موبایل یعنی «تنظیمات کجاست؟» و چهار بار کشیدنِ انگشت.
 //
 // حالا روی موبایل: نوار فقط **بخشِ جاری** را نشان می‌دهد و یک دکمه‌ی «بخش‌ها»
-// فهرستِ کامل را در یک شبکه‌ی دوستونه باز می‌کند. هیچ بخشی پنهان نمی‌ماند و
-// هر ردیف ۴۴ پیکسل ارتفاع دارد.
+// فهرستِ کامل را در یک شبکه‌ی دوستونه باز می‌کند. هیچ بخشی پنهان نمی‌ماند.
+// (ارتفاعِ هر ردیف از ۴۴ به ۴۸ رسید چون آیکون هم داخلش آمد.)
 //
 // ============================================================
 // دسکتاپ هم سرریز بود — فقط کسی اندازه‌اش را نگرفته بود
 // ============================================================
 // نوارِ دسکتاپ `max-w-[1180px]` است و ۱۳ بخش، با پدینگِ ۱۲ پیکسلیِ هر طرف،
-// می‌شود ۱۲۴۲ پیکسل؛ به‌علاوه‌ی ۴۸ پیکسل فاصله‌ها (۱۲ درز × ۴) و ۴۸ پیکسل
+// می‌شد ۱۲۴۲ پیکسل؛ به‌علاوه‌ی ۴۸ پیکسل فاصله‌ها (۱۲ درز × ۴) و ۴۸ پیکسل
 // پدینگِ خودِ نوار = **۱۳۳۶ پیکسل**. یعنی ۱۵۶ پیکسل بیشتر از ظرف.
 //
 // آن نوار `overflow-x-auto` داشت، پس «کار می‌کرد» — ولی بخشِ سیزدهم
 // («وضعیت سیستم»، در RTL سمتِ چپ) بیرون از کادر می‌افتاد و بدونِ اسکرولِ
-// افقی دیده نمی‌شد؛ و هیچ نشانه‌ای هم نبود که این نوار اسکرول می‌شود. یعنی
-// همان بیماریِ موبایل، فقط با علامت‌های خفیف‌تر.
+// افقی دیده نمی‌شد؛ و هیچ نشانه‌ای هم نبود که این نوار اسکرول می‌شود.
 //
-// دو تغییر، و هر دو اندازه‌گیری شده: پدینگِ ردیف‌ها ۱۲→۸ و فاصله‌ها ۴→۲
-// پیکسل شد و فونت یک پله کوچک‌تر (۱۳ پیکسل) تا هر ۱۳ بخش داخلِ همان ۱۱۸۰
-// جا شود؛ و `overflow-x-auto` جایش را به `flex-wrap` داد. حالا اگر روزی یک
-// بخشِ چهاردهم اضافه شود یا پنجره باریک‌تر از آن باشد، نوار **می‌شکند** نه
-// اینکه ببرد. اسکرولِ افقی دیگر جایی ندارد که بخشی را پنهان کند.
+// سه تغییر، و همه اندازه‌گیری‌شده: پدینگِ ردیف‌ها ۱۲→۸ پیکسل، فونت یک پله
+// کوچک‌تر (۱۳ پیکسل)، و `overflow-x-auto` جایش را به `flex-wrap` داد. حالا اگر
+// روزی یک بخشِ چهاردهم اضافه شود یا پنجره باریک‌تر از آن باشد، نوار **می‌شکند**
+// نه اینکه ببرد.
 //
-// عددِ ۱۳۳۶ بالا وضعِ **قبل** از این اصلاح است. با تمام‌شدنِ مهاجرت یک تغییرِ
-// دیگر هم آمد: چهار بخشِ باقی‌مانده که برچسبِ «Express» داشتند تبدیل به لینکِ
-// کوتاه‌تر شدند، پس ردیف از آن عدد هم باریک‌تر است. با این حال `flex-wrap`
-// می‌ماند: این اندازه‌گیری روی یک پنجره و یک فونت است، نه یک تضمین.
+// ⚠️ همین اندازه‌گیری یعنی دسکتاپ **بیرونِ حاشیه‌ی امن نیست**: شکاف بین ۱۱۸۰
+// و مجموعِ بخش‌ها حدود ۲۰۰ پیکسل است. پس آیکون‌ها عمداً فقط در فهرستِ موبایل
+// آمدند — آیکونِ ۱۴ پیکسلی با فاصله‌اش، ضربدرِ ۱۳، حدود ۲۳۴ پیکسل است و نوار
+// را به ردیفِ دوم می‌شکند. برای تشخیصِ بصری، همان قرصِ توپُرِ بخشِ جاری کافی
+// است (و در RTL، بخشِ جاری با رنگِ خودش از بقیه جدا می‌شود).
 export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -92,29 +95,39 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
     sections.find((s) => s.href !== null && isActive(s.href)) ?? sections[0];
 
   return (
-    <nav
-      aria-label="بخش‌های پنل مدیریت"
-      className="border-b"
-      style={{
-        background: "var(--color-surface)",
-        borderColor: "var(--color-line)",
-      }}
-    >
+    <nav aria-label="بخش‌های پنل مدیریت" className="border-t" style={{ borderColor: "var(--color-line)" }}>
       {/* ---------- موبایل: بخشِ جاری + دکمه‌ی فهرست ---------- */}
       <div className="lg:hidden">
-        <div className="mx-auto flex max-w-[1180px] items-center gap-2 px-4 py-2">
-          <span
-            className="text-sm font-bold whitespace-nowrap"
-            style={{ color: "var(--color-teal)" }}
-          >
-            {current?.label ?? "پنل"}
-          </span>
+        {/* `py-1.5` و نه `py-2`: این نوار با `sticky` بالای صفحه می‌ماند و
+            روی موبایل هر پیکسلِ ارتفاعش از دیدِ محتوا کم می‌کند. ارتفاعِ خود
+            دکمه‌ها دست‌نخورده است (۴۰ پیکسل، همان اندازه‌ی لمسی). */}
+        <div className="mx-auto flex max-w-[1180px] items-center gap-2 px-4 py-1.5">
+          {current && (
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-[9px]"
+                style={{
+                  background: "var(--color-teal-tint)",
+                  color: "var(--color-teal)",
+                }}
+                aria-hidden="true"
+              >
+                <Icon name={current.icon} size={13} />
+              </span>
+              <span
+                className="truncate text-sm font-bold"
+                style={{ color: "var(--color-teal)" }}
+              >
+                {current.label}
+              </span>
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-controls="admin-section-menu"
-            className="mr-auto flex min-h-10 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold whitespace-nowrap"
+            className="mr-auto flex min-h-10 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-xs font-bold whitespace-nowrap"
             style={{
               background: open ? "var(--color-teal-tint)" : "var(--color-surface-2)",
               color: open ? "var(--color-teal)" : "var(--color-ink-soft)",
@@ -122,9 +135,12 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
             }}
           >
             بخش‌ها
-            <span className="text-[10px]" aria-hidden="true">
-              {open ? "▲" : "▼"}
-            </span>
+            <Icon
+              name="chevronDown"
+              size={13}
+              className="transition-transform duration-200"
+              style={{ transform: open ? "rotate(180deg)" : undefined }}
+            />
           </button>
         </div>
 
@@ -141,16 +157,17 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
                     <span
                       aria-disabled="true"
                       title={`«${section.label}» هنوز به نسخه‌ی Next منتقل نشده — فعلاً از پنل Express استفاده کنید`}
-                      className="flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-xs font-medium"
+                      className="flex min-h-12 items-center gap-2 rounded-xl px-3 text-xs font-medium"
                       style={{
                         background: "var(--color-surface-2)",
                         color: "var(--color-ink-dim)",
                         opacity: 0.7,
                       }}
                     >
+                      <Icon name={section.icon} size={15} />
                       {section.label}
                       <span
-                        className="rounded-full px-1.5 py-px text-[9px] font-bold"
+                        className="mr-auto rounded-full px-1.5 py-px text-[9px] font-bold"
                         style={{
                           background: "var(--color-gold-tint)",
                           color: "var(--color-gold)",
@@ -170,12 +187,13 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
                     href={section.href}
                     onClick={() => setOpen(false)}
                     aria-current={active ? "page" : undefined}
-                    className="flex min-h-11 items-center rounded-xl px-3 text-xs font-bold"
+                    className="flex min-h-12 items-center gap-2 rounded-xl px-3 text-xs font-bold"
                     style={
                       active
                         ? {
                             background: "var(--color-teal-tint)",
                             color: "var(--color-teal)",
+                            boxShadow: "inset 0 0 0 1px rgba(37, 214, 176, 0.35)",
                           }
                         : {
                             background: "var(--color-surface-2)",
@@ -183,6 +201,7 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
                           }
                     }
                   >
+                    <Icon name={section.icon} size={15} />
                     {section.label}
                   </Link>
                 </li>
@@ -209,7 +228,7 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
       </div>
 
       {/* ---------- دسکتاپ: نوارِ افقی ---------- */}
-      <ul className="mx-auto hidden max-w-[1180px] flex-wrap items-center gap-0.5 px-6 py-2 text-[13px] lg:flex">
+      <ul className="mx-auto hidden max-w-[1180px] flex-wrap items-center gap-1 px-6 py-1.5 text-[13px] lg:flex">
         {sections.map((section) => {
           if (section.href === null) {
             return (
@@ -217,7 +236,7 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
                 <span
                   aria-disabled="true"
                   title={`«${section.label}» هنوز به نسخه‌ی Next منتقل نشده — فعلاً از پنل Express استفاده کنید`}
-                  className="flex shrink-0 cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 font-medium"
+                  className="flex shrink-0 cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-1.5 font-medium"
                   style={{ color: "var(--color-ink-dim)", opacity: 0.6 }}
                 >
                   {section.label}
@@ -242,12 +261,18 @@ export function AdminNav({ role = "unknown" }: { role?: PanelRole }) {
               <Link
                 href={section.href}
                 aria-current={active ? "page" : undefined}
-                className="block shrink-0 whitespace-nowrap rounded-lg px-2 py-2 font-medium transition-colors"
+                // رنگِ حالتِ فعال **درون‌خطی** است، پس کلاس‌های `hover:` رویش
+                // اثر نمی‌کنند — یعنی بخشِ جاری با هاور بی‌دلیل تغییر نمی‌کند و
+                // فقط بقیه واکنش می‌دهند. این عمدی است.
+                className="block shrink-0 whitespace-nowrap rounded-full px-2 py-1.5 font-medium transition-colors hover:bg-surface-2 hover:text-ink"
                 style={
                   active
                     ? {
-                        background: "var(--color-teal-tint)",
-                        color: "var(--color-teal)",
+                        background:
+                          "linear-gradient(135deg, var(--color-teal), var(--color-teal-dark))",
+                        color: "#04211B",
+                        fontWeight: 800,
+                        boxShadow: "0 10px 22px -16px rgba(37, 214, 176, 0.9)",
                       }
                     : { color: "var(--color-ink-soft)" }
                 }

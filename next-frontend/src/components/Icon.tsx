@@ -77,6 +77,48 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </>
   ),
+  // ---------- آیکون‌های پنلِ مدیریت ----------
+  // همان مسیرهای `i-dashboard`/`i-chart`/`i-settings`/`i-alert`/`i-history`
+  // در `public/assets/icons.svg` — نویسه‌به‌نویسه، فقط با نام‌گذاریِ camelCase
+  // (اسپرایت `stroke-linecap` دارد، JSX `strokeLinecap`).
+  //
+  // چرا کپی و نه `<use>`: اسپرایت در زمانِ اجرا با `IconSprite` تزریق می‌شود و
+  // تا رسیدنش آیکونِ خالی دیده می‌شود؛ نوارِ پنل نباید به آن مسابقه ببازد.
+  dashboard: (
+    <>
+      <rect x="3" y="3" width="8" height="8" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="13" y="3" width="8" height="5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="13" y="10" width="8" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="3" y="13" width="8" height="8" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </>
+  ),
+  chart: (
+    <>
+      <path d="M4 20V4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M4 20h16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M8 16v-4M12 16V8M16 16v-6M20 16v-9" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </>
+  ),
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 3v2.4M12 18.6V21M4.2 7.5l2.1 1.2M17.7 15.3l2.1 1.2M4.2 16.5l2.1-1.2M17.7 8.7l2.1-1.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </>
+  ),
+  alert: (
+    <>
+      <path d="M12 3l10 18H2z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M12 10v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="12" cy="17" r="1" fill="currentColor" />
+    </>
+  ),
+  history: (
+    <>
+      <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M3.2 3.6v3.8h3.8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 7.6V12l3.2 2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
   shield: (
     <>
       <path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />

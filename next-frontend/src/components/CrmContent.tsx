@@ -384,15 +384,21 @@ export function CrmContent() {
                   const maxRev = Math.max(...revenue.map((r) => r.revenue), 1);
                   const h = (m.revenue / maxRev) * 100;
                   return (
-                    <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+                    <div key={m.month} className="h-full flex-1 flex flex-col items-center gap-1">
                       <span className="text-[9px] text-ink-dim">{toFa(m.revenue / 1000000)}M</span>
-                      <div
-                        className="w-full rounded-t-md transition-all min-h-[2px]"
-                        style={{
-                          height: `${Math.max(h, 2)}%`,
-                          background: "var(--color-teal)",
-                        }}
-                      />
+                      {/* ناحیه‌ی میله با ارتفاعِ قطعی (`flex-1`): ارتفاعِ میله
+                          «درصد» است و درصد فقط با والدِ قطعی حساب می‌شود —
+                          بدونِ این لایه، هر ۱۲ میله صفر پیکسل می‌شدند (همان
+                          ایرادی که در نمودارِ ۱۴ روزِ داشبورد بود). */}
+                      <div className="flex w-full flex-1 items-end">
+                        <div
+                          className="w-full rounded-t-md transition-all min-h-[2px]"
+                          style={{
+                            height: `${Math.max(h, 2)}%`,
+                            background: "var(--color-teal)",
+                          }}
+                        />
+                      </div>
                       <span className="text-[9px] text-ink-dim rotate-45 origin-right">{m.label}</span>
                     </div>
                   );
