@@ -70,6 +70,7 @@ const ACTION_FA: Record<string, string> = {
   staff_revoke: "گرفتن نقش کارمند",
   login_ok: "ورود به پنل",
   login_failed: "ورود ناموفق به پنل",
+  otp_code_burned: "سوختن کد ورود با پیامک",
   // عمده‌فروشی — در نسخه‌ی Express ترجمه نشده بود
   wholesale_status: "وضعیت درخواست عمده",
   wholesale_delete: "حذف درخواست عمده",
@@ -95,11 +96,13 @@ const ACTION_FA: Record<string, string> = {
  * (`product_unpublish`, `settings_update`, `wholesale_delete`).
  *
  * `login_failed` عمداً قرمز است: تنها سطری در کلِ دفتر است که محتمل است کارِ
- * خودِ مدیر **نباشد**.
+ * خودِ مدیر **نباشد**. `otp_code_burned` هم برای همین قرمز است: کسی پنج بار
+ * پشتِ سرِ هم کدِ پیامکیِ یک شماره را غلط زده و پنجره‌ی کد سوخته.
  */
 const ACTION_TONE: Record<string, "bad" | "warn"> = {
   order_cancel: "bad",
   product_delete: "bad",
+  otp_code_burned: "bad",
   product_zeroed: "warn",
   product_bulk: "warn",
   settings_update: "warn",

@@ -95,6 +95,16 @@ function safeEqual(a, b) {
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 
+// ارقامِ فارسی برای عددهایی که **کاربر** می‌بیند.
+//
+// صفحه‌ی ورود (در هر دو فروشگاه) همه‌ی عددهایش فارسی است — «۱ شماره، ۲ کد،
+// ۳ نام» — و یک «4» لاتین وسطِ جمله‌ی خطا هم‌قواره نیست، در حالی که عددِ
+// ماشین‌خوان (`remaining`/`retryAfter`) باید لاتین بماند تا فرانت با
+// `Number()` بخواند و نگهبان هم بتواند مساوی‌بودنش را بسنجد.
+function faDigits(n) {
+  return String(n).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+}
+
 // challenge token یک‌بارمصرف — جلوی ربات‌هایی که مستقیم POST می‌زنند را می‌گیرد
 // client باید اول GET /otp/challenge بزند، token بگیرد، و آن را با درخواست OTP بفرستد
 //
@@ -157,7 +167,7 @@ router.post('/otp/request', otpIpLimiter, validate({
   // فاصله‌ی الزامی بین دو پیامک (جلوی بمباران پیامکی یک شماره)
   if (existing && now - existing.last_sent_at < RESEND_COOLDOWN_MS) {
     const wait = Math.ceil((RESEND_COOLDOWN_MS - (now - existing.last_sent_at)) / 1000);
-    return res.status(429).json({ error: `کد قبلاً ارسال شده؛ ${wait} ثانیه دیگر دوباره تلاش کنید`, retryAfter: wait });
+    return res.status(429).json({ error: `کد قبلاً ارسال شده؛ ${faDigits(wait)} ثانیه دیگر دوباره تلاش کنید`, retryAfter: wait });
   }
 
   // سقف روزانه برای هر شماره (هزینه‌ی پنل پیامک را نگه می‌دارد)
@@ -208,13 +218,38 @@ router.post('/otp/verify', otpVerifyLimiter, validate({
 
   // شمارش تلاش قبل از مقایسه — brute force با ری‌استارت هم پاک نمی‌شود چون در DB است
   otp.bumpAttempts.run(phone);
-  if (record.attempts + 1 > MAX_ATTEMPTS) {
+  // «شماره‌ی همین تلاش» یک‌جا حساب می‌شود تا دروازه، عددِ باقی‌مانده، و
+  // سوختنِ کد هر سه از یک عدد بخوانند. اگر هر کدام جداگانه حساب می‌کردند،
+  // یک آف‌بای‌وان (مثلاً «+۲» در یکی از آن سه) بی‌صدا به کاربر عددِ نادرست
+  // می‌داد و هیچ نگهبانی هم نمی‌گرفت.
+  const attemptsUsed = record.attempts + 1;
+  if (attemptsUsed > MAX_ATTEMPTS) {
     otp.del.run(phone);
+    // رویدادِ امنیتیِ «سوختنِ کد». چرا ثبت می‌شود: این تنها حالتی است که
+    // پنجره‌ی کد به‌کل می‌سوزد و کاربرِ واقعی باید از صفر شروع کند. کسی که
+    // پنج بار پشتِ سرِ هم کد را غلط زده، محتمل است کارِ صاحبِ شماره نباشد —
+    // و بدونِ این سطر، پنل هیچ‌وقت نمی‌فهمید کسی دارد کدِ یک حساب را حدس می‌زند.
+    // برای همه‌ی شماره‌ها ثبت می‌شود (نه فقط مدیر/کارمند، برخلافِ رمز عبور):
+    // اینجا هزینه‌ی نویز یک سطر در هر دو دقیقه است، ولی اطلاعاتش — «هدف
+    // کدام حساب بود» — با هیچ چیزِ دیگری به دست نمی‌آید.
+    logAdminAction(null, 'otp_code_burned', maskPhone(phone), clientFingerprint(req));
+    log.warn('OTP code burned after max attempts', { phone: maskPhone(phone), ip: req.ip });
     return res.status(429).json({ error: 'تعداد تلاش زیاد بود، دوباره درخواست کد بدید' });
   }
 
   if (!code || !safeEqual(hashCode(code), record.code_hash)) {
-    return res.status(400).json({ error: 'کد وارد شده اشتباه است' });
+    // گفتنِ «۴ تلاش مانده» عمدی است — همان دلیلی که در مسیرِ رمز عبور پایین
+    // نوشته شده: کاربرِ واقعی می‌فهمد چند شانس دارد و کِی باید کدِ تازه
+    // بگیرد، و مهاجم هم چیزی یاد نمی‌گیرد که با شمردنِ خودش نمی‌دانست.
+    // بدونِ این عدد، کاربرِ عجول تا آخرین تلاش ادامه می‌دهد، کدش می‌سوزد و
+    // باید از صفر شروع کند — و تا آن لحظه هیچ‌وقت نفهمیده بود چقدر نزدیک بود.
+    const remaining = Math.max(0, MAX_ATTEMPTS - attemptsUsed);
+    return res.status(400).json({
+      error: remaining > 0
+        ? `کد وارد شده اشتباه است؛ ${faDigits(remaining)} تلاش دیگر مانده`
+        : 'کد وارد شده اشتباه است؛ این آخرین تلاش بود — یک اشتباهِ دیگر و باید کد تازه بگیرید',
+      remaining
+    });
   }
 
   otp.del.run(phone);
