@@ -190,6 +190,52 @@ const GUARDS = [
     ],
   },
   {
+    name: 'otp-attempt-cap',
+    scope: 'backend',
+    title: 'مرزِ پنج‌تاییِ کدِ پیامکی + پیامِ باقی‌مانده + ردِ امنیتیِ سوختن',
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/otp-attempt-cap.js'] },
+    mutations: [
+      {
+        label: 'شمارشِ تلاش یک واحد جلو بیفتد (عددِ باقی‌مانده دروغ می‌شود)',
+        file: 'backend/routes/auth.js',
+        find: 'const attemptsUsed = record.attempts + 1;',
+        replace: 'const attemptsUsed = record.attempts + 2;',
+        expect: /تلاشِ اول روی ردیفِ تازه/,
+      },
+      {
+        label: 'مرز از `>` به `>=` برگردد (تلاشِ پنجمِ کاربر بی‌دلیل قربانی شود)',
+        file: 'backend/routes/auth.js',
+        find: 'if (attemptsUsed > MAX_ATTEMPTS) {',
+        replace: 'if (attemptsUsed >= MAX_ATTEMPTS) {',
+        expect: /دروازه یکتاست/,
+      },
+      {
+        label: 'عددِ باقی‌مانده از جمله‌ی کاربر حذف شود (فقط فیلدِ ماشین‌خوان بماند)',
+        file: 'backend/routes/auth.js',
+        find: '? `کد وارد شده اشتباه است؛ ${faDigits(remaining)} تلاش دیگر مانده`',
+        replace: "? 'کد وارد شده اشتباه است'",
+        expect: /فیلد و هم داخلِ جمله/,
+      },
+      {
+        // این جهش عمداً از چشمِ نیمه‌ی ایستا پنهان است: امضای `logAdminAction`
+        // دست‌نخورده می‌ماند و فقط حسابِ خودِ `clientFingerprint` خراب می‌شود.
+        // فقط آزمونِ زنده می‌تواند ببیند که سطرِ دفتر بی‌اثرِ انگشت مانده است.
+        label: 'اثرِ انگشتِ درخواست خالی برگردد (تنها آزمونِ زنده می‌گیرد)',
+        file: 'backend/routes/auth.js',
+        find: "return `IP ${req.ip || '?'} — ${br} روی ${os}`;",
+        replace: "return `IP ${req.ip || '?'} — ${os}`;",
+        expect: /اثرِ انگشتِ مهاجم/,
+      },
+      {
+        label: 'رویدادِ امنیتیِ سوختن دیگر در دفتر ثبت نشود',
+        file: 'backend/routes/auth.js',
+        find: "logAdminAction(null, 'otp_code_burned', maskPhone(phone), clientFingerprint(req));",
+        replace: 'void 0;',
+        expect: /otp_code_burned/,
+      },
+    ],
+  },
+  {
     name: 'secrets',
     scope: 'backend',
     title: 'مرزِ راز: هیچ رازی در frontend و .env.example نمی‌ماند',
