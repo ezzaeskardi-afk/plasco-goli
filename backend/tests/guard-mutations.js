@@ -49,6 +49,7 @@
      node tests/guard-mutations.js --scope=all        # همه
      node tests/guard-mutations.js --only=panel       # فقط نگهبان‌هایی که نامشان این را دارد
      node tests/guard-mutations.js --list             # فهرستِ نگهبان‌ها و جهش‌ها بدونِ اجرا
+     node tests/guard-mutations.js --self-test      # خودآزمونِ لنگرهای مشتق‌شده‌ی README
 
    `live` هر دو سرور را می‌خواهد: Express روی ۳۰۰۰ و Next روی ۳۰۰۱. اگر بالا
    نباشند، با پیامِ روشن رد می‌شود — نه اینکه بی‌صدا رد شود.
@@ -91,6 +92,141 @@ if (!SCOPES[SCOPE]) {
   process.exit(2);
 }
 const ACTIVE_SCOPES = new Set(SCOPES[SCOPE]);
+// ============================================================
+// لنگرهای README: از خودِ README خوانده می‌شوند
+// ============================================================
+// چرا: عددهای README با هر تغییرِ تعدادِ آزمون‌ها عوض می‌شوند. تا امروز لنگرِ
+// جهشِ همین عددها **ثابت** بود («۱۳۶۳»، «۲۹۰») و با اولین تغییرِ عدد، خودِ
+// هارنس می‌شکست: پیامش «لنگر پیدا نشد» بود، یعنی نگهبان به‌جای گرفتنِ خطا
+// خودش خراب می‌شد و آدم دنبالِ ایرادِ کد می‌رفت — یک‌بار هم همین شد.
+//
+// حالا عدد را از خودِ README می‌خوانیم: هر چه آن‌جا باشد همان را جهش می‌دهیم.
+// اگر الگو پیدا نشد، **بلند** و با پیامِ روشن می‌شکند (کدِ خروج ۲) و می‌گوید
+// کدام الگو و چه چیزی انتظار می‌رفت — نه اینکه ته‌ی اجرا معلوم شود.
+const README_PATH = path.join(ROOT, 'README.md');
+
+const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+const faToEn = (s) => [...s].map((c) => FA_DIGITS.indexOf(c)).join('');
+const enToFa = (n) => [...String(n)].map((c) => FA_DIGITS[Number(c)]).join('');
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// بدونِ خروج از پروسه برمی‌گرداند، تا خودآزمون هم بتواند همین منطق را روی
+// متنِ ساختگی بیازماید — وگرنه «با تغییرِ عدد نمی‌شکند» یک ادعای بی‌شاهد است.
+function deriveReadmeAnchor({ pattern, src, findFrom = (n) => enToFa(n), replaceFrom = (n) => enToFa(n - 1) }) {
+  const m = src.match(pattern);
+  if (!m) return { ok: false, why: 'الگو در متن پیدا نشد' };
+  const n = Number(faToEn(m[1]));
+  if (!Number.isInteger(n) || n < 2) return { ok: false, why: `عددِ «${m[1]}» معنی ندارد` };
+
+  const find = findFrom(n);
+  const replace = replaceFrom(n);
+  if (find === replace) return { ok: false, why: 'جایگزین با لنگر یکی است' };
+
+  // با `all: true` رشته همه‌جا عوض می‌شود، پس لنگر نباید به عددِ دیگری چسبیده
+  // باشد وگرنه عددِ بی‌گناهِ دیگری هم خراب می‌شود («۲۹۰» داخلِ «۱۲۹۰»).
+  const lead = /[۰-۹]/.test(find[0]) ? '(?<![۰-۹])' : '';
+  const tail = /[۰-۹]/.test(find[find.length - 1]) ? '(?![۰-۹])' : '';
+  const bound = (src.match(new RegExp(lead + escapeRe(find) + tail, 'g')) || []).length;
+  const loose = countOccurrences(src, find);
+  if (bound !== loose) {
+    return { ok: false, why: `لنگرِ «${find}» به عددِ دیگری چسبیده (${loose} تطبیق، ${bound} مستقل)` };
+  }
+  return { ok: true, anchor: { find, replace, value: n, occurrences: bound } };
+}
+
+function readmeAnchor(spec) {
+  const r = deriveReadmeAnchor({ pattern: spec.pattern, src: README_SRC, findFrom: spec.findFrom, replaceFrom: spec.replaceFrom });
+  if (r.ok) return r.anchor;
+  console.error('');
+  console.error(`✖ لنگرِ README خوانده نشد: ${spec.what}`);
+  console.error(`   الگو: ${spec.pattern}`);
+  console.error(`   دلیل: ${r.why}`);
+  if (spec.hint) console.error(`   ${spec.hint}`);
+  console.error('   یعنی متنِ README عوض شده. یا همان الگو را این‌جا به‌روز کن، یا اگر آن');
+  console.error('   عدد دیگر در README نیست این جهش را بازنویسی کن — ولی بی‌صدا رد نشو.');
+  process.exit(2);
+}
+
+// ---------- خودآزمونِ همین منطق ----------
+// با متنِ ساختگی می‌سنجیم که (الف) عددِ جابه‌جاشده دنبال می‌شود و (ب) الگوی
+// غایب بلند رد می‌شود. بدونِ این، سازوکارِ تازه خودش می‌تواند دامِ بعدی شود.
+function runAnchorSelfTest() {
+  const cases = [];
+  const check = (label, cond, detail) => cases.push({ label, cond, detail });
+  const zwnj = '\u200c';
+  const kasra = '\u0650';
+  const TOTAL = /\*\*([۰-۹]+) تست خودکار/;
+
+  const t1 = deriveReadmeAnchor({ pattern: TOTAL, src: '> وضعیت: **۱۳۶۳ تست خودکار، همه سبز**' });
+  check('عددِ جمع از خطِ وضعیت خوانده می‌شود', t1.ok && t1.anchor.value === 1363, JSON.stringify(t1.anchor || t1.why));
+  check('و یکی کم می‌شود تا با جمعِ اجزا نخواند', t1.ok && t1.anchor.replace === '۱۳۶۲', t1.ok ? t1.anchor.replace : '');
+
+  // قلبِ ماجرا: عدد را جابه‌جا کن؛ لنگر باید با آن بیاید، نه اینکه بشکند.
+  const t2 = deriveReadmeAnchor({ pattern: TOTAL, src: '> وضعیت: **۱۴۰۰ تست خودکار، همه سبز**' });
+  check('عددِ جابه‌جاشده هم دنبال می‌شود', t2.ok && t2.anchor.value === 1400 && t2.anchor.replace === '۱۳۹۹', JSON.stringify(t2.anchor || t2.why));
+
+  const t3 = deriveReadmeAnchor({ pattern: TOTAL, src: 'خطی که هیچ عددی ندارد' });
+  check('الگویِ غایب بلند رد می‌شود', t3.ok === false && /پیدا نشد/.test(t3.why || ''), JSON.stringify(t3));
+
+  const t4 = deriveReadmeAnchor({
+    pattern: new RegExp('([۰-۹]+) آزمون' + kasra + ' فرانت' + zwnj + 'اند'),
+    src: '… + ۲۹۰ آزمون' + kasra + ' فرانت' + zwnj + 'اند (…)',
+  });
+  check('شمارشِ فرانت‌اند با کسره و نیم‌فاصله خوانده می‌شود', t4.ok && t4.anchor.value === 290, JSON.stringify(t4.anchor || t4.why));
+
+  const t5 = deriveReadmeAnchor({
+    pattern: /([۰-۹]+) تایش/,
+    src: 'npm test  # ۲۰ تایش رفتارِ صفحه',
+    findFrom: (n) => enToFa(n) + ' تایش',
+    replaceFrom: (n) => enToFa(n - 1) + ' تایش',
+  });
+  check('ادعای «N تایش» با کلمه‌اش خوانده می‌شود', t5.ok && t5.anchor.find === '۲۰ تایش' && t5.anchor.replace === '۱۹ تایش', JSON.stringify(t5.anchor || t5.why));
+
+  const t6 = deriveReadmeAnchor({ pattern: TOTAL, src: '**۱۳۶۳ تست خودکار … و آن یکی ۱۳۶۳۴' });
+  check('لنگرِ چسبیده به عددِ دیگر رد می‌شود', t6.ok === false && /چسبیده/.test(t6.why || ''), JSON.stringify(t6));
+
+  console.log('\nخودآزمونِ لنگرهای README:');
+  let pass = 0;
+  for (const c of cases) {
+    if (c.cond) pass++;
+    console.log(`  ${c.cond ? '✔' : '✖'} ${c.label}${c.cond ? '' : '   ← ' + c.detail}`);
+  }
+  console.log('');
+  if (pass === cases.length) { console.log(`SUCCESS: ${pass} خودآزمون گذشت`); process.exit(0); }
+  console.error(`FAILURE: ${cases.length - pass} از ${cases.length} خودآزمون رد شد`);
+  process.exit(1);
+}
+
+// خودآزمون عمداً **پیش از** خواندنِ READMEِ واقعی است: به آن وابسته نیست.
+if (argv.includes('--self-test')) runAnchorSelfTest();
+
+if (!fs.existsSync(README_PATH)) {
+  console.error('✖ README.md پیدا نشد — لنگرهای جهش از خودِ آن خوانده می‌شوند.');
+  process.exit(2);
+}
+const README_SRC = fs.readFileSync(README_PATH, 'utf8');
+
+// سه لنگرِ README که تا امروز دستی به‌روز می‌شدند.
+const README_ANCHORS = {
+  total: readmeAnchor({
+    what: 'جمعِ کلِ تست‌ها در خطِ وضعیت',
+    pattern: /\*\*([۰-۹]+) تست خودکار/,
+    hint: 'خطِ وضعیت باید «**N تست خودکار» داشته باشد.',
+  }),
+  frontend: readmeAnchor({
+    what: 'شمارشِ آزمون‌های فرانت‌اند',
+    pattern: /([۰-۹]+) آزمون\u0650 فرانت\u200cاند/,
+    hint: 'خطِ وضعیت باید «N آزمونِ فرانت‌اند» داشته باشد.',
+  }),
+  suiteNote: readmeAnchor({
+    what: 'ادعای «N تایش» در کامنتِ دستورِ npm test',
+    pattern: /([۰-۹]+) تایش/,
+    hint: 'کامنتِ دستورِ «npm test» باید «N تایش» داشته باشد.',
+    findFrom: (n) => enToFa(n) + ' تایش',
+    replaceFrom: (n) => enToFa(n - 1) + ' تایش',
+  }),
+};
+
 
 // ============================================================
 // ۱) رجیستریِ نگهبان‌ها و جهش‌ها
@@ -293,11 +429,10 @@ const GUARDS = [
       {
         label: 'جمعِ کلِ README از جمعِ اجزا جدا بیفتد',
         file: 'README.md',
-        // عددِ کلِ خطِ وضعیت. با هر تغییرِ تعدادِ آزمون‌ها این عدد عوض می‌شود
-        // و باید همین‌جا هم به‌روز شود — وگرنه لنگر پیدا نمی‌شود و خودِ همین
-        // جهش‌آزمایی قرمز می‌شود (که شد: از ۱۳۶۱ به ۱۳۶۳).
-        find: '۱۳۶۳',
-        replace: '۱۳۶۲',
+        // عدد از خودِ README خوانده می‌شود (`README_ANCHORS.total`)
+        derived: 'جمعِ کلِ تست‌ها',
+        find: README_ANCHORS.total.find,
+        replace: README_ANCHORS.total.replace,
         all: true,
         expect: /جمع/,
       },
@@ -677,16 +812,18 @@ const GUARDS = [
       {
         label: 'عددِ کلِ فرانت‌اند در README یک کم شود',
         file: 'README.md',
-        find: '۲۹۰',
-        replace: '۲۸۹',
+        derived: 'شمارشِ فرانت‌اند',
+        find: README_ANCHORS.frontend.find,
+        replace: README_ANCHORS.frontend.replace,
         all: true,
         expect: /اشاره به عدد/,
       },
       {
         label: 'ادعای «N تایش» صفحه‌ی نتیجه‌ی سفارش غلط شود',
         file: 'README.md',
-        find: '۲۰ تایش',
-        replace: '۱۹ تایش',
+        derived: 'ادعای «N تایش»',
+        find: README_ANCHORS.suiteNote.find,
+        replace: README_ANCHORS.suiteNote.replace,
         expect: /تایش/,
       },
       {
@@ -1006,7 +1143,10 @@ async function main() {
   if (LIST) {
     for (const g of selected) {
       console.log(`\n${g.name}  [${g.scope}]  ${g.title}`);
-      for (const m of g.mutations) console.log(`   • ${m.label}`);
+      for (const m of g.mutations) {
+        console.log(`   • ${m.label}`);
+        if (m.derived) console.log(`     ↳ لنگرِ زنده: «${m.find}» → «${m.replace}»`);
+      }
     }
     console.log(`\n${selected.length} نگهبان، ${selected.reduce((a, g) => a + g.mutations.length, 0)} جهش`);
     return;
