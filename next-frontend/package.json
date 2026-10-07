@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:readme-counts": "node scripts/check-readme-counts.mjs",
     "test:watch": "vitest",
-    "parity:storefront": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/parity-storefront.mjs"
+    "parity:storefront": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/parity-storefront.mjs",
+    "static-paths:live": "node scripts/static-paths-live.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.1",

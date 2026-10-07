@@ -256,6 +256,71 @@ jobs:
             exit 1
           fi
 
+      # ---------- مسیرهای ثابتِ PWA، روی سرورِ واقعی و بدونِ بک‌اند ----------
+      # `src/app/internalLinks.test.ts` همین مسیرها را ایستا می‌سنجد (فایل در
+      # `public/` هست؟ مسیری در App Router دارد؟) و خودش صریحاً می‌گوید چرا
+      # سرور بالا نمی‌آورد. ولی «فایل روی دیسک هست» ثابت نمی‌کند «سرورِ
+      # ساخته‌شده ۲۰۰ می‌دهد» — و شاهدش همان پنج rewrite‌ای است که تا چندی پیش
+      # `/sw.js` و `/manifest.webmanifest` و `/assets/*` و `/offline.html` را
+      # از `frontend/`ِ Express سرو می‌کردند: با برداشتنشان هیچ‌چیز این مسیرها
+      # را روی سرورِ واقعی نمی‌سنجید.
+      #
+      # چرا بدونِ بک‌اند: اگر API بالا باشد، مسیرها می‌توانند از پروکسی سیر
+      # شوند و سنجش همان چیزی را که ادعا می‌کند نسنجد. پس اول بک‌اندِ stepِ
+      # بیلد را می‌خوابانیم و *خودِ اسکریپت هم* پیش‌شرط را دوباره می‌سنجد؛
+      # سبزِ خالی از سنجیده‌شد جدا می‌ماند.
+      # و چه چیزی *داخلِ* سنجش است: فهرستِ دستی (مانیفست، سرویس‌ورکر،
+      # صفحهِ آفلاین، security.txt، آیکون‌های layout، اسپرایتِ icons.svg و
+      # robots/sitemap) به‌علاوهِ دو چیزی که از خودِ سورس خوانده می‌شوند تا
+      # از قلم نیفتند: آیکون‌های مانیفست و پنج فونتِ woff2 اعلام‌شده در globals.css.
+      # صفر تا از هر کدام = کدِ خروج ۲، تا پوشش هیچ‌وقت بی‌صدا کوچک نشود.
+      - name: Static and PWA paths on a live Next (no backend)
+        run: |
+          set -euo pipefail
+
+          # بک‌اندِ stepِ بیلد را بخوابان و مطمئن شو واقعاً خوابیده.
+          if command -v lsof > /dev/null 2>&1; then
+            lsof -ti:3000 | xargs -r kill || true
+          fi
+          for _ in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1 || break
+            sleep 0.5
+          done
+          if curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
+            echo '::error::backend is still up - this check must run without it'
+            exit 1
+          fi
+
+          # آماده‌بودن با «هر وضعیتِ HTTP» سنجیده می‌شود، نه با ۲۰۰ روی یک
+          # مسیرِ ثابت: خودِ آن مسیرها موضوعِ سنجش‌اند و اگر یکی‌شان خراب شده
+          # باشد، این حلقه فقط ۶۰ ثانیه هدر می‌دهد و بعد هم نمی‌گوید مشکل
+          # «سرور بالا نیامد» بود یا «مسیر خراب شد». مسیرِ __readiness__ هیچ‌وقت
+          # ۲۰۰ نمی‌دهد و مهم هم نیست: ۴۰۴ هم ثابت می‌کند پروسه گوش می‌دهد.
+          next_up() {
+            local code
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/__readiness__ || true)
+            [ "$code" != "000" ]
+          }
+
+          # Next روی همان بیلدی که همین حالا ساخته شد بالا می‌آید.
+          if ! next_up; then
+            ( npm run start > /tmp/next-static-paths.log 2>&1 & )
+          fi
+          ready=0
+          for _ in $(seq 1 60); do
+            if next_up; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" != "1" ]; then
+            echo '::error::Next did not start - the static path check cannot run'
+            tail -50 /tmp/next-static-paths.log 2>/dev/null || true
+            exit 1
+          fi
+          npm run static-paths:live
+
+          # بک‌اند را برای stepهای بعد (برابریِ زنده) برنمی‌گردانیم: خودِ آن‌ها
+          # الگوی «اگر ۳۰۰۰ پاسخ نداد، بالا بیاور» را دارند.
+
       # ---------- برابریِ زنده، با جهش ----------
       # اجراکننده‌ی زنده سرورِ واقعی می‌خواهد؛ بک‌اند ممکن است از stepِ بیلد زنده
       # مانده باشد و اگر نه خودمان بالا می‌آوریم. Next هم با `next start` روی همان
