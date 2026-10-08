@@ -480,6 +480,47 @@ const GUARDS = [
       },
     ],
   },
+  {
+    name: 'service-worker-strategy',
+    scope: 'backend',
+    title: 'صفحه‌ی کاربرِ برگشته هرگز کهنه نباشد (تازه‌سازیِ پس‌زمینه)',
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/service-worker-strategy.js'] },
+    mutations: [
+      {
+        // همان رگرسیونی که این نگهبان برای گرفتنش نوشته شده: یک کپیِ کهنه که
+        // بی‌سروصدا جلوتر از شبکه می‌نشیند.
+        label: 'کش-اول جای شبکه بنشیند (کپیِ کهنه به کاربر برسد)',
+        file: 'frontend/sw.js',
+        find: '  return fetch(req, { cache: \'no-cache\' })',
+        replace:
+          '  return caches.open(PAGE_CACHE).then((c) => c.match(req.url)).then((hit) => hit || fetch(req))',
+        expect: /تازه/,
+      },
+      {
+        label: 'درخواستِ ناوبری بدونِ `no-cache` برود (واسطه می‌تواند پاسخِ کهنه بدهد)',
+        file: 'frontend/sw.js',
+        // عبارتِ کد، نه شکلِ داخلِ کامنت — وگرنه لنگر یکتا نیست (هر دو را
+        // شمرده می‌شود) و جهش بی‌دلیل می‌شکند.
+        find: "return fetch(req, { cache: 'no-cache' })",
+        replace: 'return fetch(req)',
+        expect: /no-cache/,
+      },
+      {
+        label: 'تازه‌سازیِ پس‌زمینه حذف شود (کپیِ کش همیشه کهنه می‌ماند)',
+        file: 'frontend/sw.js',
+        find: '      cachePageInBackground(req, res);\n',
+        replace: '',
+        expect: /پس‌زمینه/,
+      },
+      {
+        label: 'نسخه‌ی کشِ صفحه‌ها جدا از کشِ دارایی‌ها بامپ شود',
+        file: 'frontend/sw.js',
+        find: "const PAGE_CACHE = 'pg-pages-v9';",
+        replace: "const PAGE_CACHE = 'pg-pages-v8';",
+        expect: /نسخه/,
+      },
+    ],
+  },
 
   // ----------------------------------------------------------
   // نگهبان‌های Vitest (منبع را عوض می‌کنیم، نگهبان باید قرمز شود)
