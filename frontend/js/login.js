@@ -149,6 +149,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // «زمان پایان» ذخیره می‌شود نه «ثانیه‌ی مانده» — پس رفرش شمارش را خراب نمی‌کند.
   const STATE_KEY = 'pg_otp_state';
 
+  // مهلتِ ارسال مجدد وقتی سرور هیچ عددی نگوید. همتای
+  // `FALLBACK_RESEND_SECONDS` در `next-frontend/src/components/LoginForm.tsx`.
+  const FALLBACK_RESEND_SECONDS = 30;
+
   function saveState(st) {
     try { localStorage.setItem(STATE_KEY, JSON.stringify(st)); } catch (e) { /* حالت خصوصی مرورگر */ }
   }
@@ -245,7 +249,11 @@ document.addEventListener('DOMContentLoaded', () => {
       method: 'POST',
       body: JSON.stringify({ phone, challenge: token })
     });
-    const retry = Number(res.retryAfter) || 30;
+    // مهلتِ واقعیِ سرور (`retryAfter`، به ثانیه). عددِ پشتیبان فقط وقتی می‌آید
+    // که سرور عددی نگوید؛ و باید عیناً همان پشتیبانِ فروشگاهِ Next باشد،
+    // وگرنه با اولین پاسخِ بدونِ عدد، دو فروشگاه دو چیزِ متفاوت نشان می‌دهند
+    // (نگهبانِ tests/otp-resend-window.js همین مساوی‌بودن را می‌سنجد).
+    const retry = Number(res.retryAfter) || FALLBACK_RESEND_SECONDS;
     const ttl = Number(res.expiresIn) || 120;
     saveState({
       phone,

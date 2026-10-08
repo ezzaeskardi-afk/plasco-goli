@@ -323,6 +323,42 @@ const GUARDS = [
         replace: 'localStorage.setItem(RESEND_KEY, JSON.stringify({ until }))',
         expect: /کدام شماره/,
       },
+      {
+        // همان باگی که همین امروز بسته شد: پنجره‌ی Next با عددِ هاردکد باز شود.
+        label: 'پنجرهٔ Next دوباره عددِ هاردکد بگیرد (نه مهلتِ سرور)',
+        file: 'next-frontend/src/components/LoginForm.tsx',
+        find: 'const res = await requestOtp(phone.trim(), ch.token);\n      startCooldown(serverResendSeconds(res));',
+        replace: 'await requestOtp(phone.trim(), ch.token);\n      startCooldown(30);',
+        expect: /هاردکد/,
+      },
+      {
+        // و همان باگِ دیگر: سرور در ۴۲۹ مهلتِ کامل بدهد به‌جای باقی‌مانده —
+        // یعنی عددی که کاربر می‌شمارد با عددی که سرور اعمال می‌کند یکی نباشد.
+        label: 'سرور در ۴۲۹ مهلتِ کامل بدهد، نه مهلتِ باقی‌مانده',
+        file: 'backend/routes/auth.js',
+        find: 'retryAfter: wait });',
+        replace: 'retryAfter: Math.ceil(RESEND_COOLDOWN_MS / 1000) });',
+        expect: /باقی/,
+      },
+      {
+        label: 'پشتیبانِ Express از پشتیبانِ Next جدا شود',
+        file: 'frontend/js/login.js',
+        find: 'const FALLBACK_RESEND_SECONDS = 30;',
+        replace: 'const FALLBACK_RESEND_SECONDS = 60;',
+        expect: /پشتیبان/,
+      },
+      {
+        // این جهش عمداً از چشمِ نیمه‌ی ایستا پنهان است: عبارتِ `wait`
+        // دست‌نخورده می‌ماند و فقط مُهرِ زمانیِ نوشته‌شده به دیتابیس عقب
+        // می‌افتد. نتیجه‌اش یک باگِ واقعی است — قیدِ فاصله‌ی دو پیامک دور زده
+        // می‌شود و هر دو درخواست ۲۰۰ می‌گیرند (آزارِ پیامکی با هزینه‌ی مغازه).
+        // فقط آزمونِ زنده می‌تواند ببیند که مُهرِ دیسک با لحظه‌ی درخواست نمی‌خواند.
+        label: 'مُهرِ last_sent_at در دیتابیس یک دقیقه عقب نوشته شود (تنها آزمونِ زنده می‌گیرد)',
+        file: 'backend/routes/auth.js',
+        find: 'code_hash: hashCode(code), expires_at: now + OTP_TTL_MS, now, day',
+        replace: 'code_hash: hashCode(code), expires_at: now + OTP_TTL_MS, now: now - 60000, day',
+        expect: /مُهرِ زمانی/,
+      },
     ],
   },
   {
