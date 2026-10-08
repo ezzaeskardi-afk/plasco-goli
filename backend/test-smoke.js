@@ -1076,7 +1076,7 @@ function shutdown(code) {
     // یعنی تست به جای محافظت، جلوی کار درست را می‌گرفت. حالا جارَقه است:
     // نسخه فقط اجازه دارد جلو برود. اگر sw.js را بامپ کردی، این کف را هم
     // همراهش ببر بالا تا عقب‌گرد گرفته شود.
-    const SW_MIN_VERSION = 3;
+    const SW_MIN_VERSION = 9;
     const swVer = Number((swSrc.match(/pg-static-v(\d+)/) || [])[1] || 0);
     check(`V10 PWA: نسخه‌ی کش سرویس‌ورکر حداقل v${SW_MIN_VERSION} است`,
       swVer >= SW_MIN_VERSION, `الان v${swVer}`);

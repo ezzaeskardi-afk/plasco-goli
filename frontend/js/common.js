@@ -873,7 +873,9 @@ const PG = (function () {
     initBottomNav();
     initShopBar();
 
-    // PWA: سایت قابل نصب روی گوشی می‌شود؛ سرویس‌ورکر فقط فونت/آیکون کش می‌کند
+    // PWA: سایت قابل نصب روی گوشی می‌شود. سرویس‌ورکر صفحه‌ها را «تازه از شبکه»
+    // می‌گیرد و فقط در پس‌زمینه کپی می‌گذارد (برای وقتی که شبکه نیست)؛ فونت و
+    // آیکون هم مثلِ قبل cache-first هستند.
     if ('serviceWorker' in navigator && !location.pathname.startsWith('/admin')) {
       navigator.serviceWorker.register('/sw.js').catch(() => { /* اختیاری است */ });
     }
