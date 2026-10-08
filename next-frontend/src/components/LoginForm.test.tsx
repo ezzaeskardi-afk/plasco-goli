@@ -318,6 +318,90 @@ describe("ثانیه‌شمارِ ارسال مجدد، رفرش‌ناپذیر 
   });
 });
 
+// ============================================================
+// مهلتِ ارسال مجدد = همان عددی که سرور می‌دهد
+// ============================================================
+// پیش از این، این کامپوننت `startCooldown(30)` را دو بار هاردکد کرده بود و
+// `retryAfter` سرور را نمی‌خواند (حتی فیلدش در نوعِ `OtpRequestResponse` نبود).
+// یعنی عددی که مشتری می‌شمرد و عددی که سرور اعمال می‌کرد از هم جدا بودند: با
+// تغییرِ مهلتِ سرور، دکمه یا زودتر از موعد باز می‌شد (سرور ۴۲۹) یا دیرتر
+// (مشتری بی‌دلیل منتظر می‌ماند). چهار حالت زیر همان چهار مسیر است.
+describe("شمارش در هر مسیر از خودِ سرور خوانده می‌شود، نه از ۳۰ ثانیه‌ی حدسی", () => {
+  it("عددی که سرور می‌دهد عیناً همان چیزی است که کاربر می‌شمارد", async () => {
+    vi.mocked(requestOtp).mockResolvedValueOnce({ ok: true, retryAfter: 12 });
+
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+
+    // نه ۳۰ ثانیه‌ی هاردکدِ قبلی — همان ۱۲ ثانیه‌ی سرور
+    expect(buttonLabels()).toContain("ارسال مجدد کد (12 ثانیه)");
+
+    // و سرِ همان وقتِ سرور باز می‌شود (نه دیرتر): ۱۲ ثانیه، نه ۳۰
+    await advance(12_000);
+    expect(buttonLabels()).toContain("ارسال مجدد کد");
+
+    localStorage.clear();
+  });
+
+  it("مهلتِ بلندتر از ۳۰ هم همان است که سرور گفته (سقفی روی عدد نیست)", async () => {
+    vi.mocked(requestOtp).mockResolvedValueOnce({ ok: true, retryAfter: 45 });
+
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+
+    expect(buttonLabels()).toContain("ارسال مجدد کد (45 ثانیه)");
+    await advance(12_000);
+    expect(buttonLabels()).toContain("ارسال مجدد کد (33 ثانیه)");
+
+    localStorage.clear();
+  });
+
+  it("سرور مهلتِ کوتاه‌تری داد (۴۲۹)؟ شمارش خودش را کوتاه می‌کند", async () => {
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm(); // پنجره با پشتیبانِ ۳۰ باز می‌شود (سرور عددی نگفت)
+    expect(buttonLabels()).toContain("ارسال مجدد کد (30 ثانیه)");
+
+    await advance(30_000); // پنجره تمام شد و دکمه باز است
+    expect(buttonLabels()).toContain("ارسال مجدد کد");
+
+    // سرور مهلتِ باقی‌مانده را در بدنه می‌فرستد؛ همان عددی که باید دیده شود.
+    const stale = new ApiError(429, "کد قبلاً ارسال شده؛ ۷ ثانیه دیگر دوباره تلاش کنید");
+    stale.retryAfter = 7;
+    vi.mocked(requestOtp).mockRejectedValueOnce(stale);
+
+    await click(buttonOf("ارسال مجدد کد"));
+
+    // نه پنجره‌ی تازه‌ی ۳۰ ثانیه (که با سرور نمی‌خواند)، نه قفلِ بی‌پایان —
+    // دقیقاً همان ۷ ثانیه‌ی سرور.
+    expect(buttonLabels()).toContain("ارسال مجدد کد (7 ثانیه)");
+    expect(bodyOf()).toContain("کد قبلاً ارسال شده");
+
+    localStorage.clear();
+  });
+
+  it("۴۲۹ در مرحله‌ی شماره هم کاربر را به مرحله‌ی کد می‌برد — با مهلتِ سرور", async () => {
+    // همتای فروشگاهِ Express: وقتی سرور می‌گوید کدِ قبلی هنوز معتبر است و
+    // مهلتِ باقی‌مانده را هم می‌دهد، کاربر باید به همان مرحله‌ی کد برود و
+    // عددِ سرور را ببیند، نه اینکه پیامِ خطا بخورد و پنجره‌ی جعلیِ ۳۰ بگیرد.
+    const alreadySent = new ApiError(429, "کد قبلاً ارسال شده؛ ۹ ثانیه دیگر دوباره تلاش کنید");
+    alreadySent.retryAfter = 9;
+    vi.mocked(requestOtp).mockRejectedValueOnce(alreadySent);
+
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+
+    expect(container.querySelectorAll("input[type=text]").length).toBe(5);
+    expect(bodyOf()).toContain("کد قبلی هنوز معتبر است؛ همان را وارد کنید");
+    expect(buttonLabels()).toContain("ارسال مجدد کد (9 ثانیه)");
+
+    localStorage.clear();
+  });
+});
+
 describe("بعد از ورود، ناوبری هیچ‌وقت معلّق نمی‌ماند", () => {
   it("اگر انتقال شروع نشود، همان آدرس با ناوبریِ کاملِ مرورگر باز می‌شود", async () => {
     await mount();

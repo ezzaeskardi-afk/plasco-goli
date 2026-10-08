@@ -38,6 +38,16 @@ export class ApiError extends Error {
    * می‌گوید و مستقیم به یک خطِ لاگ می‌رسیم، نه بین صدها درخواستِ آن دقیقه.
    */
   ref: string | null = null;
+  /**
+   * مهلتِ باقی‌مانده‌ی «ارسال مجدد»، به ثانیه — وقتی سرور ۴۲۹ می‌دهد و می‌گوید
+   * کدِ قبلی هنوز معتبر است. همتای `err.data.retryAfter` در
+   * `frontend/js/login.js`.
+   *
+   * چرا لازم است: بدونِ این عدد، فرانتِ Next فقط می‌دانست «۴۲۹ شد» و
+   * نمی‌دانست سرور چه مهلتی می‌دهد؛ پس شمارشِ خودش را (۳۰ ثانیه، هاردکد)
+   * نگه می‌داشت — دکمه‌ای که هم می‌توانست بی‌دلیل قفل بماند و هم زودتر باز شود.
+   */
+  retryAfter?: number;
 }
 
 // سقفِ انتظار برای پاسخ سرور — هم‌عدلِ `NET_TIMEOUT` در common.js نسخه‌ی
@@ -118,12 +128,17 @@ async function fetcher<T>(
         error?: string;
         ref?: string;
         reason?: string;
+        retryAfter?: number;
       };
       const err = new ApiError(
         res.status,
         data.error || statusMessage(res.status),
         data.reason,
       );
+      // مهلتِ واقعیِ سرور را رد نمی‌کنیم: مصرف‌کننده (LoginForm) با همین عدد
+      // شمارشش را کوک می‌کند، وگرنه ناچار است «۳۰ ثانیه» را حدس بزند.
+      const wait = Number(data.retryAfter);
+      if (Number.isFinite(wait) && wait > 0) err.retryAfter = wait;
       // خطای واقعیِ سرور (نه ایرادِ ورودیِ کاربر) کدِ پیگیری دارد.
       if (res.status >= 500 && data.ref) {
         err.ref = data.ref;

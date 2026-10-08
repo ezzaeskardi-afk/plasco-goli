@@ -207,7 +207,19 @@ export interface ChallengeResponse {
 export interface OtpRequestResponse {
   ok: boolean;
   message?: string;
-  cooldown?: number;
+  /**
+   * مهلتِ ارسال مجدد، به **ثانیه** — همان عددی که سرور به‌عنوانِ مهلتِ واقعی
+   * اعلام می‌کند (`retryAfter` در `backend/routes/auth.js`).
+   *
+   * این فیلد تنها منبعِ حقیقتِ شمارشِ فرانت است: پیش از این اینجا نبود و
+   * کامپوننت ناچار بود `30` را هاردکد کند، یعنی با اولین تغییرِ مهلتِ سرور،
+   * عددی که کاربر می‌دید با عددی که سرور می‌شناخت یکی نبود.
+   */
+  retryAfter?: number;
+  /** عمرِ خودِ کد، به ثانیه — همتای `expiresIn`ِ سمتِ سرور. */
+  expiresIn?: number;
+  /** روشِ ارسالِ پیامک (`sms` / `dev`)، فقط برای تشخیص. */
+  mode?: string;
 }
 
 export interface OtpVerifyResponse {

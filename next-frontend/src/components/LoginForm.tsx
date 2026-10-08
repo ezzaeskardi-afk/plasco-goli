@@ -23,6 +23,30 @@ type Step = "phone" | "otp" | "password" | "name";
  */
 export const NAV_FALLBACK_MS = 4000;
 
+/**
+ * مهلتِ ارسال مجدد وقتی سرور هیچ عددی نگوید، به ثانیه.
+ *
+ * عدد فقط یک *پشتیبان* است: مسیرِ اصلی همیشه `retryAfter`ِ سرور است. همتای
+ * `FALLBACK_RESEND_SECONDS` در `frontend/js/login.js` — نگهبانِ
+ * `tests/otp-resend-window.js` مساوی‌بودنِ همین دو عدد را می‌سنجد، چون اگر
+ * یکی ۳۰ باشد و دیگری ۶۰، با *اولین* پاسخِ بدونِ عدد، دو فروشگاه دو چیزِ
+ * متفاوت نشان می‌دهند.
+ */
+export const FALLBACK_RESEND_SECONDS = 30;
+
+/**
+ * مهلتِ واقعیِ ارسال مجدد از پاسخِ سرور (`retryAfter`، به ثانیه).
+ *
+ * چرا در یک تابع: عددِ مهلت قبلاً در دو نقطه `startCooldown(30)` نوشته شده بود
+ * (هاردکد)، یعنی عددی که کاربر می‌شمرد و عددی که سرور اعمال می‌کرد از هم جدا
+ * بودند. هر جا پنجره‌ای باز می‌شود، از همین یک راه می‌گذرد.
+ */
+function serverResendSeconds(res: { retryAfter?: number }): number {
+  const seconds = Number(res?.retryAfter);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds;
+  return FALLBACK_RESEND_SECONDS;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -180,15 +204,29 @@ export function LoginForm() {
       const ch = await getChallenge();
 
       // درخواست کد
-      await requestOtp(trimmed, ch.token);
+      const res = await requestOtp(trimmed, ch.token);
       setStep("otp");
       setOtpDigits(["", "", "", "", ""]);
       setOtpError("");
-      startCooldown(30);
+      // مهلت از خودِ سرور، نه ۳۰ ثانیه‌ی حدسی
+      startCooldown(serverResendSeconds(res));
       // فوکوس اولین باکس
       setTimeout(() => otpRefs.current[0]?.focus(), 100);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "خطا در ارسال کد");
+      // ۴۲۹ یعنی کدِ قبلی هنوز معتبر است و سرور مهلتِ باقی‌مانده را هم گفته؛
+      // عیناً همان کاری که فروشگاهِ Express می‌کند: به همان مرحله‌ی کد می‌رویم
+      // و شمارش را با عددِ *سرور* کوک می‌کنیم. با ۳۰ ثانیه‌ی تازه، عددِ
+      // روی صفحه با عددی که سرور اعمال می‌کند یکی نبود.
+      const wait = err instanceof ApiError ? Number(err.retryAfter) : NaN;
+      if (Number.isFinite(wait) && wait > 0) {
+        setStep("otp");
+        setOtpDigits(["", "", "", "", ""]);
+        startCooldown(wait);
+        setOtpError("کد قبلی هنوز معتبر است؛ همان را وارد کنید");
+        setTimeout(() => otpRefs.current[0]?.focus(), 100);
+      } else {
+        setError(err instanceof ApiError ? err.message : "خطا در ارسال کد");
+      }
     } finally {
       setLoading(false);
     }
@@ -200,22 +238,28 @@ export function LoginForm() {
     setLoading(true);
     try {
       const ch = await getChallenge();
-      await requestOtp(phone.trim(), ch.token);
-      startCooldown(30);
+      const res = await requestOtp(phone.trim(), ch.token);
+      startCooldown(serverResendSeconds(res));
       setOtpError("");
     } catch (err) {
-      // ۴۲۹ = کد قبلی هنوز معتبر است؛ پیامِ سرور همین را می‌گوید و
-      // شمارش معکوس هم باید سر جایش بماند (login.js:415).
-      setOtpError(err instanceof ApiError ? err.message : "خطا");
-      if (!(err instanceof ApiError && err.status === 429)) {
-        try {
-          localStorage.removeItem(`pg_otp_resend_${phone.trim()}`);
-        } catch {
-          // بی‌اهمیت
-        }
+      // ۴۲۹ = کدِ قبلی هنوز معتبر است. پیامِ سرور همین را می‌گوید و مهلتِ
+      // واقعیِ باقی‌مانده را هم می‌آورد؛ پس شمارش با «عددِ سرور» کوک می‌شود —
+      // همتای `login.js` که همان `retryAfter` را می‌خواند. اگر سرور مهلتِ
+      // کوتاه‌تری داده باشد، همین‌جا کوتاه می‌شویم و دکمه سرِ وقتِ سرور باز
+      // می‌شود، نه دیرتر.
+      const wait = err instanceof ApiError ? Number(err.retryAfter) : NaN;
+      if (Number.isFinite(wait) && wait > 0) {
+        startCooldown(wait);
+      } else if (!(err instanceof ApiError && err.status === 429)) {
+        // خطای واقعی (نه «هنوز معتبر است»): پنجره بسته نمی‌ماند، وگرنه مشتری
+        // بی‌دلیل پشتِ دکمه‌ی قفل گیر می‌کند. کلیدِ درست پاک می‌شود؛ قبلاً
+        // اینجا `pg_otp_resend_<شماره>` پاک می‌شد که هیچ‌وقت نوشته نمی‌شد و
+        // مهلتِ کهنه بعد از رفرش دوباره برمی‌گشت.
+        clearCooldown();
         setCooldownUntil(0);
         setCooldown(0);
       }
+      setOtpError(err instanceof ApiError ? err.message : "خطا");
     } finally {
       setLoading(false);
     }
