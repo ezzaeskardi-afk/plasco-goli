@@ -1,14 +1,27 @@
 // static-compress.js — فشرده‌سازی فایل‌های متنی (CSS/JS/SVG/HTML) قبل از ارسال
 //
-// چرا: style.css حدود ۶۵ کیلوبایت است و با gzip به ~۱۴ کیلوبایت می‌رسد؛ یعنی
-// صفحه‌ی اول روی اینترنت موبایل چند برابر سریع‌تر باز می‌شود.
+// چرا: style.css امروز حدود ۱۷۰ کیلوبایت است و با brotli به ~۳۶ کیلوبایت
+// می‌رسد (سنجشِ زندهٔ همین ماشین)؛ یعنی صفحه‌ی اول روی اینترنت موبایل چند
+// برابر سریع‌تر باز می‌شود.
 //
-// چطور: نتیجه‌ی فشرده‌سازی هر فایل در حافظه کش می‌شود و کلید کش «زمان آخرین
-// تغییر فایل» است. پس اگر شما style.css را ویرایش کنید، همان درخواست بعدی
-// نسخه‌ی تازه را می‌بیند — نیازی به ری‌استارت یا مرحله‌ی build نیست.
+// چطور: نتیجه‌ی فشرده‌سازی هر فایل در حافظه کش می‌شود و اعتبارِ کش با
+// **اثرِ انگشتِ محتوا** سنجیده می‌شود، نه با (mtime، size). پس اگر شما
+// style.css را ویرایش کنید، همان درخواست بعدی نسخه‌ی تازه را می‌بیند —
+// نیازی به ری‌استارت یا مرحله‌ی build نیست.
 //
-// بدون هیچ پکیج اضافه‌ای؛ فقط zlib خودِ Node.
+// چرا محتوا و نه mtime: کلیدِ قبلی `(mtimeMs, size)` بود و یک تغییرِ بایتی
+// که mtime و اندازه را دست نمی‌زد (restore از بکاپ با حفظِ timestamp، کپی با
+// `cp -p`، یا ادیتی که در همان میلی‌ثانیه بنشیند) **بی‌صدا** بدنه‌ی کهنه را
+// تا ابد زنده نگه می‌داشت؛ سرور ۲۰۰ می‌داد ولی بایت‌ها مالِ قبل بودند. این را
+// سنجشِ زنده‌ی `scripts/static-paths-live.mjs` گرفت (بدنه با دیسک یکی نبود،
+// با آن‌که اندازه به‌ظاهر برابر بود). حالا برای هر درخواست فایل خوانده و
+// ۶۴ بیتِ اولِ sha1‌اش حساب می‌شود؛ اندازه‌گیریِ همین ماشین: خواندن + هشِ
+// style.css (~۱۷۰KB) حدود ۰٫۱۵ms، در برابر ~۳٫۸ms فشرده‌سازیِ brotli q6
+// (و ~۲٫۷ms برای gzip) که همچنان کش‌شده می‌ماند.
+//
+// بدون هیچ پکیج اضافه‌ای؛ فقط zlib و crypto خودِ Node.
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -20,7 +33,23 @@ const TEXT_EXT = /\.(css|js|mjs|svg|json|xml|txt|map|html)$/i;
 // زیر یک کیلوبایت ارزش سربار فشرده‌سازی را ندارد
 const MIN_SIZE = 1024;
 
-const cache = new Map(); // `${file}|${encoding}` → { mtimeMs, size, buf }
+// `${file}|${encoding}` → { hash, buf } — `hash` اثرِ انگشتِ محتوایی است که
+// `buf` از آن ساخته شده؛ همین است که «تازه است یا نه» را تعیین می‌کند.
+const cache = new Map();
+
+// ۶۴ بیتِ اولِ sha1 برای هویتِ محتوای یک فایلِ استاتیک بیش از کافی است
+// (تصادمِ تصادفی در این مقیاس عملاً ناممکن است) و هم‌زمان ETag را کوتاه نگه
+// می‌دارد. خودِ sha1 را موتورِ native حساب می‌کند، پس هزینه‌اش چشمگیر نیست.
+function contentHash(buf) {
+  return crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16);
+}
+
+// شمارنده‌های تست: ثابت می‌کنند بارِ دومِ همان محتوا واقعاً از کش می‌آید
+// (یعنی رفعِ باگ، کش را بی‌اثر نکرده) و تغییرِ بایت واقعاً یک بارِ فشرده‌سازیِ
+// تازه هزینه می‌دهد.
+let fileHits = 0;
+let fileMisses = 0;
+const fileCacheStats = () => ({ entries: cache.size, hits: fileHits, misses: fileMisses });
 
 function compressBuffer(buf, encoding) {
   return encoding === 'br'
@@ -87,18 +116,37 @@ function staticCompress(rootDir) {
     try { st = fs.statSync(full); } catch (e) { return next(); } // فایل نیست → بگذار static یا 404 کارش را بکند
     if (!st.isFile() || st.size < MIN_SIZE) return next();
 
+    // محتوا خوانده می‌شود، نه فقط stat: (mtime، size) می‌تواند با تغییرِ بایت
+    // ثابت بماند و آن‌وقت کش بدنه‌ی کهنه را بی‌صدا سرو می‌کند. mtime فقط برای
+    // هدرِ Last-Modified می‌ماند و ستونِ اعتبارِ کش نیست.
+    //
+    // هزینه‌ی این خواندن+هش (اندازه‌گیری‌شده: ~۰٫۱۵ms برای ~۱۷۰KB) در برابر
+    // فشرده‌سازیِ ~۳٫۸ms ای که کش می‌شود عملاً هیچ است؛ سرِ همین معامله است
+    // که «کشِ سریع ولی دروغین» به «کشِ درست» تبدیل می‌شود.
+    let raw;
+    try { raw = fs.readFileSync(full); } catch (e) { return next(); }
+    if (raw.length < MIN_SIZE) return next();
+
     const key = `${full}|${encoding}`;
+    const hash = contentHash(raw);
     let hit = cache.get(key);
-    if (!hit || hit.mtimeMs !== st.mtimeMs || hit.size !== st.size) {
+    if (!hit || hit.hash !== hash) {
+      fileMisses++;
       try {
-        hit = { mtimeMs: st.mtimeMs, size: st.size, buf: compressBuffer(fs.readFileSync(full), encoding) };
+        hit = { hash, buf: compressBuffer(raw, encoding) };
       } catch (e) {
         return next(); // هر مشکلی پیش آمد، مسیر عادی و بدون فشرده‌سازی
       }
       cache.set(key, hit);
+    } else {
+      fileHits++;
     }
 
-    const etag = `W/"${st.size.toString(16)}-${Math.round(st.mtimeMs).toString(16)}-${encoding}"`;
+    // ETag هم از محتوا ساخته می‌شود، نه از (اندازه، mtime). اگر نسخه‌ی قبلی
+    // ETag را از mtime می‌گرفت، مرورگری که «همان» ETag را داشت ۳۰۴ می‌گرفت و
+    // بدنه‌ی کهنه‌اش را نگه می‌داشت — یعنی باگ حتی پس از رفعِ کشِ سرور هم از
+    // سمت مرورگر برمی‌گشت. حالا تغییرِ بایت = ETagِ تازه = بدنه‌ی تازه.
+    const etag = `W/"${hash}-${encoding}"`;
 
     res.setHeader('Vary', 'Accept-Encoding');
     res.setHeader('ETag', etag);
@@ -130,17 +178,40 @@ function staticCompress(rootDir) {
 //
 // نتیجه در حافظه کش می‌شود؛ کلید کش از خودِ محتوا ساخته می‌شود، پس اگر HTML
 // عوض شود (مثلاً دامنه‌ی دیگری در متاها تزریق شود) خودکار دوباره فشرده می‌شود.
+//
+// ---------- هویتِ کش: همان ۶۴ بیتِ محتوا، نه یک هشِ ۳۲ بیتی ----------
+//
+// کلیدِ قبلی `${encoding}|${buf0.length}|${hash32(html)}` بود، با یک FNV-1a
+// ۳۲ بیتی. باگ «۳۲ بیت کم است» نبود؛ باگ این بود که *خودِ هش* بخشی از هویتِ
+// کش بود، پس هر تصادمِ ۳۲ بیتی یعنی دو سندِ متفاوتِ هم‌اندازه **یک کلید**
+// می‌گرفتند و کش بی‌سروصدا بدنه‌ی سندِ اول را برای سندِ دوم می‌فرستاد: ۲۰۰،
+// `Content-Length` درست، بایت‌ها مالِ صفحه‌ی دیگری. یعنی سندِ جابه‌جا‌شده سرو
+// می‌شد — همان دسته‌باگی که در کشِ فایل‌های استاتیک با `(mtime، size)` داشتیم،
+// این‌بار از سمتِ اثرِ انگشت. طول هم در کلید بود، ولی دقیقاً همان طولِ برابر
+// شرطِ وقوعِ تصادم است؛ پس هیچ محافظتی نمی‌کرد و برداشتنش چیزی را ضعیف نکرد.
+//
+// و «تصادمِ ۳۲ بیتی» آن‌قدر هم که به‌نظر می‌رسد دور نبود: FNV-1a روی
+// ورودی‌های *هم‌تعداد-واحدِ کد* یک‌به‌یک است (هر گام XOR و ضرب در عددی فرد،
+// پس برگشت‌پذیر)، ولی کلید طولِ **بایتِ UTF-8** را می‌سنجید و هش روی
+// **واحدهای کدِ UTF-16** می‌گشت. همین ناهم‌خوانیِ واحد جفت می‌سازد: بایتِ
+// برابر، واحدِ نابرابر. آزمون همین جفت را در زمانِ اجرا پیدا می‌کند.
+//
+// حالا HTML و فایل‌های استاتیک **یک هویتِ محتواییِ مشترک** دارند: ۶۴ بیتِ اولِ
+// sha1. تصادمِ عمدیِ sha1 خارج از توان است و تصادمِ تصادفی در مقیاسِ چند ده
+// سند عملاً ناممکن؛ پس کلید دیگر نمی‌تواند به بدنه‌ی سندِ دیگری اشاره کند.
+// هزینه‌اش هم همان هشِ ارزانی است که برای هر فایلِ استاتیک می‌گیریم
+// (اندازه‌گیری‌شده: ~۳۰ میکروثانیه برای ۳۰KB، در برابر ~۰٫۶ms فشرده‌سازیِ
+// brotli که کش می‌شود). آزمونِ «سندِ جابه‌جا‌شده» همین را می‌سنجد و جفتِ
+// تصادم‌دارِ ۳۲ بیتی را در زمانِ اجرا می‌سازد تا به ثابتِ دستی گره نخورد.
 const htmlCache = new Map();
 const HTML_CACHE_MAX = 24; // چند صفحه × چند دامنه × دو انکدینگ
 
-function hash32(str) {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(36);
-}
+// شمارنده‌های تست: ثابت می‌کنند سندِ دومِ هم‌اندازه واقعاً *دوباره* فشرده شده
+// (یعنی کش بین دو سندِ متفاوت قاطی نشده) و بارِ سومِ همان سند از کش می‌آید
+// (یعنی سخت‌گیریِ تازه، کش را بی‌اثر نکرده).
+let htmlHits = 0;
+let htmlMisses = 0;
+const htmlCacheStats = () => ({ entries: htmlCache.size, hits: htmlHits, misses: htmlMisses });
 
 function sendHtml(req, res, html) {
   res.type('html');
@@ -148,14 +219,17 @@ function sendHtml(req, res, html) {
   const buf0 = Buffer.from(html, 'utf8');
   if (!encoding || buf0.length < MIN_SIZE) return res.end(buf0);
 
-  const key = `${encoding}|${buf0.length}|${hash32(html)}`;
+  const key = `${encoding}|${contentHash(buf0)}`;
   let buf = htmlCache.get(key);
   if (!buf) {
+    htmlMisses++;
     try { buf = compressBuffer(buf0, encoding); } catch (e) { return res.end(buf0); }
     // ساده‌ترین سیاست بیرون‌اندازی: قدیمی‌ترین کلید. تعداد کلیدها طبیعتاً
     // کوچک است، پس چیز پیچیده‌تری لازم نیست.
     if (htmlCache.size >= HTML_CACHE_MAX) htmlCache.delete(htmlCache.keys().next().value);
     htmlCache.set(key, buf);
+  } else {
+    htmlHits++;
   }
   res.setHeader('Vary', 'Accept-Encoding');
   res.setHeader('Content-Encoding', encoding);
@@ -274,4 +348,7 @@ function compressJson(req, res, next) {
   next();
 }
 
-module.exports = { staticCompress, compressJson, sendHtml, jsonCacheStats };
+module.exports = {
+  staticCompress, compressJson, sendHtml,
+  jsonCacheStats, fileCacheStats, htmlCacheStats
+};

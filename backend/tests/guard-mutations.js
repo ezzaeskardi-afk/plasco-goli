@@ -521,6 +521,41 @@ const GUARDS = [
       },
     ],
   },
+  {
+    name: 'static-compress-cache',
+    scope: 'backend',
+    title: 'کشِ فشرده‌سازی با محتوا تازه شود، نه با (mtime، اندازه) یا هشِ ۳۲ بیتی',
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/static-compress-cache.js'] },
+    mutations: [
+      {
+        // دقیقاً همان باگی که این نگهبان برای گرفتنش نوشته شد: اعتبارِ کش
+        // محتوا را نبیند و نسخه‌ی کهنه — با وجود تغییرِ بایت — زنده بماند.
+        // (روی ویندوز و لینوکس یکسان کار می‌کند، چون به فایل‌سیستم وابسته نیست.)
+        label: 'اعتبارِ کش دیگر محتوا را نبیند (بدنه‌ی کهنه بماند)',
+        file: 'backend/lib/static-compress.js',
+        find: 'if (!hit || hit.hash !== hash) {',
+        replace: 'if (!hit) {',
+        expect: /کهنه/,
+      },
+      {
+        label: 'ETag از (اندازه، mtime) ساخته شود (کلاینت ۳۰۴ِ کهنه بگیرد)',
+        file: 'backend/lib/static-compress.js',
+        find: 'const etag = `W/"${hash}-${encoding}"`;',
+        replace: 'const etag = `W/"${st.size}-${Math.round(st.mtimeMs)}-${encoding}"`;',
+        expect: /ETag/,
+      },
+      {
+        // کشِ HTML دوباره با همان کلیدِ قدیمی: هشِ ۳۲ بیتیِ FNV-1a + طولِ
+        // *بایتِ* متن. چون هش روی واحدهای کدِ UTF-16 می‌گردد، دو سندِ هم‌اندازه
+        // ولی با طولِ واحدِ کدِ متفاوت هم‌کلید می‌شوند و سندِ جابه‌جا سرو می‌شود.
+        label: 'هشِ کشِ HTML دوباره ۳۲ بیتی شود (سندِ جابه‌جا سرو شود)',
+        file: 'backend/lib/static-compress.js',
+        find: 'const key = `${encoding}|${contentHash(buf0)}`;',
+        replace: 'const key = `${encoding}|${buf0.length}|${(function(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193);}return (h>>>0).toString(36);})(html)}`;',
+        expect: /جابه/,
+      },
+    ],
+  },
 
   // ----------------------------------------------------------
   // نگهبان‌های Vitest (منبع را عوض می‌کنیم، نگهبان باید قرمز شود)
