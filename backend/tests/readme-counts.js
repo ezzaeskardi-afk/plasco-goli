@@ -153,10 +153,24 @@ const SUITES = [
   { key: 'bench', file: 'bench-report-integrity.js', word: w(0x628, 0x646, 0x686, 0x645, 0x627, 0x631, 0x6a9) },
   { key: 'window', file: 'order-window-integrity.js', word: w(0x647, 0x645, 0x62a, 0x631, 0x627, 0x632, 0x6cc) },
   { key: 'resend', file: 'otp-resend-window.js', word: w(0x627, 0x631, 0x633, 0x627, 0x644) + ' ' + w(0x645, 0x62c, 0x62f, 0x62f) },
+  { key: 'sw', file: 'service-worker-strategy.js', word: w(0x633, 0x631, 0x648, 0x6cc, 0x633, 0x648, 0x631, 0x6a9, 0x631) }, // سرویس‌ورکر
+  { key: 'compress', file: 'static-compress-cache.js', word: w(0x641, 0x634, 0x631, 0x62f, 0x647, 0x633, 0x627, 0x632, 0x6cc) }, // فشرده‌سازی
   { key: 'panel', file: 'panel-retired.js', word: w(0x628, 0x627, 0x632, 0x646, 0x634, 0x633, 0x62a, 0x647) },
   { key: 'readme', file: 'readme-counts.js', word: 'README' },
   { key: 'frontend', file: null, word: w(0x641, 0x631, 0x627, 0x646, 0x62a, 0x627, 0x646, 0x62f) }
 ];
+
+// خودآزمون‌ها به **کلید** اشاره می‌کنند، نه به جایگاهِ آرایه.
+//
+// این خودش یک باگِ واقعی بود: خودآزمونِ جدول `SUITES[10]` را «فرانت‌اند» فرض کرده
+// بود، و با اضافه‌شدنِ یک مجموعه در وسطِ فهرست (سرویس‌ورکر) بی‌صدا به README
+// اشاره می‌کرد و خودآزمون قرمز شد — یعنی آزمون به‌جای گرفتنِ خطای واقعی، از
+// جابه‌جاییِ داخلیِ خودش شکست.
+const S = (key) => {
+  const hit = SUITES.find((s) => s.key === key);
+  if (!hit) throw new Error(`مجموعه‌ی «${key}» در فهرست نیست`);
+  return hit;
+};
 
 // خطِ وضعیت: «… — ۷۳۷ دود + ۸۵ سئو + …» — عدد به کلیدواژه‌ی *بعد از خودش* می‌چسبد.
 function parseStatus(line) {
@@ -253,14 +267,14 @@ function proseMismatches(structural, sources, totals) {
   const DIGIT = (n) => asciiDigits(String(n)).split('')
     .map((d) => String.fromCodePoint(0x6f0 + Number(d))).join('');
   const fakeStatus = `> وضعیت: **${DIGIT(10)} تست خودکار، همه سبز** — ${DIGIT(7)} `
-    + `${SUITES[0].word} + ${DIGIT(3)} ${SUITES[1].word} + ${DIGIT(5)} ${SUITES[2].word}`;
+    + `${S('smoke').word} + ${DIGIT(3)} ${S('seo').word} + ${DIGIT(5)} ${S('owasp').word}`;
   const st = parseStatus(fakeStatus);
   check('خودآزمون: خطِ وضعیت درست خوانده می‌شود',
     st.total === 10 && st.suites.smoke === 7 && st.suites.seo === 3 && st.suites.owasp === 5,
     JSON.stringify(st));
 
-  const fakeTable = `- تست: ${SUITES[0].word} **${DIGIT(7)}** | ${SUITES[1].word} **${DIGIT(3)}**`
-    + ` | ${SUITES[10].word} (Vitest) **${DIGIT(4)}** = **${DIGIT(14)}**`;
+  const fakeTable = `- تست: ${S('smoke').word} **${DIGIT(7)}** | ${S('seo').word} **${DIGIT(3)}**`
+    + ` | ${S('frontend').word} (Vitest) **${DIGIT(4)}** = **${DIGIT(14)}**`;
   const tb = parseBreakdown(fakeTable);
   check('خودآزمون: جدولِ تفکیک درست خوانده می‌شود',
     tb.suites.smoke === 7 && tb.suites.seo === 3 && tb.suites.frontend === 4 && tb.total === 14,
@@ -282,7 +296,7 @@ function proseMismatches(structural, sources, totals) {
   check('خودآزمون: شکلِ جمعِ کلمه («تست‌ها») یک شمارشِ تست حساب نمی‌شود',
     countTokens(`${DIGIT(20)} ${w(0x62a, 0x633, 0x62a, 0x647, 0x627)}`).length === 0);
   check('خودآزمون: کلیدواژه با ZWNJ هم پیدا می‌شود',
-    norm(w(0x641, 0x631, 0x627, 0x646, 0x62a, 0x200c, 0x627, 0x646, 0x62f)).includes(SUITES[10].word));
+    norm(w(0x641, 0x631, 0x627, 0x646, 0x62a, 0x200c, 0x627, 0x646, 0x62f)).includes(S('frontend').word));
 })();
 
 // ---------- ۴) عددهای شمرده‌شدنی ----------
