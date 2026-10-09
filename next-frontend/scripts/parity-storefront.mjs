@@ -26,11 +26,22 @@
 // environment می‌گیرد و ۳۰۰۱ را گوش می‌دهد؛ کانونیکال‌های تولیدشده هم
 // به همان ریشهٔ env اشاره می‌کنند و قابلِ‌مقایسه می‌مانند).
 
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
+
 import {
   META_FIELDS,
   PARITY_PAGES,
   STORE_PROBES,
 } from "../src/lib/parityManifest.ts";
+import { legacyRedirect } from "../src/lib/legacyUrls.ts";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const NEXT_DIR = path.resolve(HERE, "..");
+const ORACLE_DIR = path.join(NEXT_DIR, "tests", "fixtures", "legacy-oracle");
+const ORACLE_PROVENANCE = path.join(ORACLE_DIR, "provenance.json");
 
 // ------------------------------------------------------------
 // آرگومان‌ها
@@ -45,6 +56,7 @@ const flag = (name, fallback) => {
 const EX = String(flag("express", "http://127.0.0.1:3000")).replace(/\/+$/, "");
 const NX = String(flag("next", "http://127.0.0.1:3001")).replace(/\/+$/, "");
 const REPORT_ONLY = flag("report", false) === true;
+const NO_ORACLE = flag("no-oracle", false) === true;
 // چند جملهٔ گم‌شدهٔ هر صفحه را در جدول چاپ کنیم (۰ = هیچ‌کدام).
 const SHOW = Number(flag("show", 0)) || 0;
 
@@ -156,6 +168,37 @@ async function get(url) {
 }
 
 // ------------------------------------------------------------
+// اوراکلِ منجمد — متنِ Express از فایل، نه از سرور
+// ------------------------------------------------------------
+// چرا: با بازنشستگی، مسیرهای `.html` روی Express ریدایرکت می‌شوند و «HTMLِ
+// سروشده‌ی Express» ناپدید می‌شود. اگر معیار همان سرور بماند، بعد از روشن‌شدن
+// ریدایرکت بی‌صدا بدنه‌ی خالی مقایسه می‌شود و همه‌ی جمله‌های Express
+// «گم‌شده» به نظر می‌رسند — یعنی نگهبان بدونِ اینکه کسی دستش بزند بی‌معنا
+// می‌شود. پس متن از `tests/fixtures/legacy-oracle/` خوانده می‌شود
+// (`scripts/freeze-legacy-oracle.mjs` آن را پر می‌کند) و چیزی که همچنان از
+// سرورِ زنده سنجیده می‌شود **کدِ وضعیت** است — چون بازنشستگی خودش هم باید
+// زیرِ نظر بماند.
+const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
+const oracleProvenance = fs.existsSync(ORACLE_PROVENANCE)
+  ? JSON.parse(fs.readFileSync(ORACLE_PROVENANCE, "utf8"))
+  : { entries: [] };
+
+/**
+ * اوراکلِ منجمدِ یک صفحه، یا `null` اگر این صفحه با بازنشستگی کاری ندارد.
+ * `--no-oracle` عمداً دارد تا بتوان دو حالت را کنارِ هم سنجید (A/B) — همان
+ * کاری که برای اثبات «انجماد رفتار را عوض نکرد» لازم است.
+ */
+function loadOracle(page) {
+  if (NO_ORACLE || page.mode === "source") return null;
+  if (!legacyRedirect(page.express.url.split("?")[0], "")) return null;
+  const file = path.join(ORACLE_DIR, `${page.id}.html`);
+  if (!fs.existsSync(file)) return { missing: true, file };
+  const html = fs.readFileSync(file, "utf8");
+  const entry = (oracleProvenance.entries || []).find((e) => e.id === page.id);
+  return { html, file, entry, sha: sha256(html), tampered: Boolean(entry && entry.sha256 !== sha256(html)) };
+}
+
+// ------------------------------------------------------------
 // گزارش‌گیری
 // ------------------------------------------------------------
 // key = شناسهٔ قلمِ واگرایی روی همان صفحه (needle/field/probe)؛ برای این‌که
@@ -189,7 +232,18 @@ async function checkOrigin(label, base) {
 if (!(await checkOrigin("Express", EX))) process.exit(2);
 if (!(await checkOrigin("Next", NX))) process.exit(2);
 
-console.log(`برابریِ فروشگاه — Express ${EX}  ↔  Next ${NX}\n`);
+console.log(`برابریِ فروشگاه — Express ${EX}  ↔  Next ${NX}`);
+const frozenCount = NO_ORACLE ? 0 : PARITY_PAGES.filter((p) => {
+  if (p.mode === "source" || !legacyRedirect(p.express.url.split("?")[0], "")) return false;
+  return fs.existsSync(path.join(ORACLE_DIR, `${p.id}.html`));
+}).length;
+if (frozenCount) {
+  console.log(
+    `اوراکلِ منجمد: ${frozenCount} صفحه از tests/fixtures/legacy-oracle/ خوانده می‌شود (🧊) — ` +
+      `کدِ وضعیت همچنان زنده سنجیده می‌شود.`,
+  );
+}
+console.log();
 
 for (const page of PARITY_PAGES) {
   const head0 = `${page.id.padEnd(14)} «${page.label}»`;
@@ -201,13 +255,38 @@ for (const page of PARITY_PAGES) {
     continue;
   }
 
-  const [ex, nx] = await Promise.all([
+  const [live, nx] = await Promise.all([
     get(EX + page.express.url),
     get(NX + page.next.url),
   ]);
+  const oracle = loadOracle(page);
+  // کدِ وضعیت همیشه از سرورِ زنده می‌آید؛ بدنه (وقتی اوراکل هست) از فایل.
+  const ex = oracle && !oracle.missing ? { ...live, body: oracle.html, frozen: true } : live;
+  // شمارندهٔ واگراییِ همین صفحه — اوراکلِ گم/دست‌کاری‌شده هم واگرایی است، پس
+  // باید پیش از این دو بررسی زنده باشد (وگرنه مسیرِ «اوراکلِ خراب» با
+  // ReferenceError می‌میرد و گزارشِ درست هیچ‌وقت چاپ نمی‌شود).
+  let pageNew = 0;
+  if (oracle && oracle.missing) {
+    add(
+      page,
+      "new",
+      "text",
+      `اوراکلِ منجمدِ این صفحه نیست — پس از بازنشستگی متنِ Express از کجا سنجیده شود؟ ` +
+        `بساز: node scripts/freeze-legacy-oracle.mjs`,
+    );
+    pageNew++;
+  }
+  if (oracle && oracle.tampered) {
+    add(
+      page,
+      "new",
+      "text",
+      `اوراکلِ منجمد دست‌کاری شده (sha با کارنامه نمی‌خواند) — یا عمدی دوباره منجمدش کن یا دست نزن`,
+    );
+    pageNew++;
+  }
 
   const bits = [];
-  let pageNew = 0;
   let shownMissing = [];
 
   // ۱) کدِ وضعیت
@@ -235,7 +314,7 @@ for (const page of PARITY_PAGES) {
       );
     }
   }
-  bits.push(`${ex.status}/${nx.status}`);
+  bits.push(`${ex.status}/${nx.status}${ex.frozen ? " 🧊" : ""}`);
 
   if (page.mode === "redirect") {
     console.log(`${head0}  ${bits.join(" ")}  (ریدایرکت — فقط کدِ وضعیت)`);

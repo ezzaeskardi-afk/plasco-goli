@@ -406,8 +406,17 @@ function shutdown(code) {
       orderRetry.data.paymentUrl === orderRes.data.paymentUrl);
 
     // visit the test payment URL (simulates gateway redirect back)
-    const payVisit = await fetch(orderRes.data.paymentUrl, { headers: { Cookie: cookieHeader() }, redirect: 'follow' });
-    check('Test payment callback completes', payVisit.status === 200);
+    // مشتریِ پول‌داده از درگاه برمی‌گردد. صفحه‌ی نهایی را Next سرو می‌کند (روی
+    // همان دامنه، پشتِ nginx) — پس قراردادِ خودِ بک‌اند این است: بازگشت به
+    // **مسیرِ تمیزِ** سفارش، با شناسهٔ همان سفارش. (پیش‌تر به
+    // `/order-success.html` می‌رفت که در عصرِ Express خودش صفحه بود و حالا
+    // فقط پلِ لینک‌های قدیمی است؛ پرشِ اضافه برای کسی که پول داده یعنی یک
+    // صفحهٔ میانیِ اضافه در بدترین لحظه.)
+    const payVisit = await fetch(orderRes.data.paymentUrl, { headers: { Cookie: cookieHeader() }, redirect: 'manual' });
+    const payTo = payVisit.headers.get('location') || '';
+    check('Test payment callback completes',
+      payVisit.status >= 300 && payVisit.status < 400 && /^\/order-success\?orderId=/.test(payTo),
+      `${payVisit.status} → ${payTo}`);
 
     const myOrder = await api('GET', `/orders/${orderRes.data.orderId}`);
     check('Order is marked as paid after test payment', myOrder.status === 200 && myOrder.data.order?.status === 'paid');
@@ -4101,9 +4110,13 @@ function shutdown(code) {
       const homeAfter = await fetch(BASE + '/');
       check('V37 بازنشسته: حذفِ پنل ویترین را نشکست',
         homeAfter.status === 200, String(homeAfter.status));
-      const accountAfter = await fetch(BASE + '/account.html');
-      check('V37 بازنشسته: صفحه‌ی حساب کاربری هنوز سرو می‌شود',
-        accountAfter.status === 200, String(accountAfter.status));
+      // عصرِ Express بازنشسته شد: این نام دیگر *صفحه* نیست، پل است. سنجهٔ
+      // درست این است که به همان صفحه‌ی زنده روی همان دامنه برود — نه ۲۰۰
+      // (یعنی صفحهٔ کهنه برگشته) و نه ۴۰۴ (یعنی لینکِ مشتری مرده).
+      const accountAfter = await fetch(BASE + '/account.html', { redirect: 'manual' });
+      check('V37 بازنشسته: نامِ حساب کاربری به مسیرِ تمیز می‌رود',
+        accountAfter.status === 301 && (accountAfter.headers.get('location') || '') === '/account',
+        `${accountAfter.status} → ${accountAfter.headers.get('location')}`);
       // پنلِ زنده‌ی Next روی همین مبدأ نیست (۳۰۰۱)، پس Express نباید راهِ
       // دیگری به آن داشته باشد.
       const adminOnExpress = await fetch(BASE + '/admin', { redirect: 'manual' });
