@@ -1,0 +1,85 @@
+{
+  "entries": [
+    {
+      "id": "account",
+      "url": "/account.html",
+      "status": 200,
+      "bytes": 17102,
+      "sha256": "35ceda6a4034b7308951707b97acd83aed610e23f08cc48a46d19ad68e755bf1",
+      "capturedAt": "2026-10-08T23:27:01.126Z",
+      "express": "http://127.0.0.1:3000"
+    },
+    {
+      "id": "cart",
+      "url": "/cart.html",
+      "status": 200,
+      "bytes": 12960,
+      "sha256": "076fb7eb700adf926d9104ef833b8c8874d15d8188b62509aa099416afc11319",
+      "capturedAt": "2026-10-08T23:27:01.126Z",
+      "express": "http://127.0.0.1:3000"
+    },
+    {
+      "id": "checkout",
+      "url": "/checkout.html",
+      "status": 200,
+      "bytes": 12499,
+      "sha256": "77d2b8096d37d78745681935700d7bb7d10e5018e8f2c61cf3f4699de20712bf",
+      "capturedAt": "2026-10-08T23:27:01.126Z",
+      "express": "http://127.0.0.1:3000"
+    },
+    {
+      "id": "index",
+      "url": "/index.html",
+      "status": 200,
+      "bytes": 40087,
+      "sha256": "77ef9146ea9f7d7600e048e8c379d07127936171312c171a0a05b1ffefe81084",
+      "capturedAt": "2026-10-08T23:27:01.125Z",
+      "express": "http://127.0.0.1:3000"
+    },
+    {
+      "id": "login",
+      "url": "/login.html",
+      "status": 200,
+      "bytes": 11525,
+      "sha256": "157b8bb643a08323264b6ac9516e34689554963496a56e6d68d75e4593421509",
+      "capturedAt": "2026-10-08T23:27:01.126Z",
+      "express": "http://127.0.0.1:3000"
+    },
+    {
+      "id": "order-success",
+      "url": "/order-success.html",
+      "status": 200,
+      "bytes": 9703,
+      "sha256": "41c4c88bda8b14edaa0a46f8e28efe60554d9181f53e2a4bcd200fcfdb265f4b",
+      "capturedAt": "2026-10-08T23:27:01.126Z",
+      "express": "http://127.0.0.1:3000"
+    },
+    {
+      "id": "products",
+      "url": "/products.html",
+      "status": 200,
+      "bytes": 15668,
+      "sha256": "c17cb926e954d3b98653ddf4c695fcf5f2615608642161d9969b0547a515a2df",
+      "capturedAt": "2026-10-08T23:27:01.126Z",
+      "express": "http://127.0.0.1:3000"
+    },
+    {
+      "id": "terms",
+      "url": "/terms.html",
+      "status": 200,
+      "bytes": 16284,
+      "sha256": "52dd68bb71b51ce45015107f72c784b0b1249fe820d7db5819a3063efdd06d06",
+      "capturedAt": "2026-10-08T23:27:01.126Z",
+      "express": "http://127.0.0.1:3000"
+    },
+    {
+      "id": "wholesale",
+      "url": "/wholesale.html",
+      "status": 200,
+      "bytes": 10058,
+      "sha256": "656b3cd865f5529b4db2ac37cdc333241e81eb68d66de66a80d8f860fab61793",
+      "capturedAt": "2026-10-08T23:27:01.126Z",
+      "express": "http://127.0.0.1:3000"
+    }
+  ]
+}

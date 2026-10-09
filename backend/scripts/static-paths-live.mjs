@@ -36,11 +36,26 @@
 //   node scripts/static-paths-live.mjs --express=http://127.0.0.1:3100
 //   node scripts/static-paths-live.mjs --allow-next     # فقط برای توسعهٔ محلی
 //
-// کدِ خروج: ۰ = همه ۲۰۰ و همان فایل · ۱ = مسیرِ غیرِ۲۰۰/ناهمخوان · ۲ = پیش‌شرط
+// ---------- بازنشستگی (چرا بعضی مسیرها عمداً ۲۰۰ نمی‌دهند) ----------
+// با بازنشستگیِ فروشگاه، نه صفحه‌های `.html` سرو می‌شوند و نه نام‌هایشان
+// می‌تواند بمیرد. قراردادِ تازه‌ی هر نامِ قدیمی: **۳۰۱ به مقصدِ تمیز** — و این
+// سنجش همان را می‌خواهد، نه ۲۰۰. جدولِ بازنشستگی از خودِ
+// `lib/legacy-redirects.js` خوانده می‌شود (همان فایلی که میدل‌ورِ Express
+// می‌خواند)، پس فهرستِ دستیِ دومی اینجا ساخته نمی‌شود و افزودنِ یک نامِ قدیمی
+// خودبه‌خود انتظارِ ۳۰۱ می‌سازد. نام‌های بیرونِ آن جدول (`404.html`،
+// `500.html`، `offline.html`، `.well-known/…`) دست‌نخورده‌اند و مثلِ قبل ۲۰۰
+// می‌دهند.
+//
+// کدِ خروج: ۰ = هر هدف پاسخِ درست داد (۲۰۰ و همان فایل، یا ۳۰۱ به مقصدِ تمیز) ·
+//           ۱ = پاسخِ غیرِمنتظره یا بدنه‌ی ناهمخوان · ۲ = پیش‌شرط
 
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+// نگاشتِ بازنشستگی از خودِ میدل‌ور می‌آید، نه از فهرستِ دستیِ دوم (بالا را بخوان).
+import legacyRedirectsModule from "../lib/legacy-redirects.js";
+const { legacyRedirect } = legacyRedirectsModule;
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND_DIR = path.resolve(HERE, "..");
@@ -150,7 +165,15 @@ const ROUTES = [
   ["/sitemap.xml", "روتِ داینامیک — باید بدونِ کاتالوگ هم ۲۰۰ بدهد"],
 ];
 
+// rel → مقصدِ تمیز، فقط برای نام‌هایی که بازنشستگی مسیرشان را عوض کرده.
+const RETIRED = new Map();
+for (const rel of files) {
+  const dest = legacyRedirect("/" + rel, "");
+  if (dest) RETIRED.set(rel, dest);
+}
+
 const whyFor = (rel) => {
+  if (RETIRED.has(rel)) return `نشانیِ بازنشسته — باید ۳۰۱ به ${RETIRED.get(rel)} بدهد`;
   if (rendered.has(rel)) return "روتِ رندرشده — دامنه‌ی نمونه جایگزین می‌شود";
   if (rel === "sw.js") return "سرویس‌ورکر — no-cache (کشِ کهنه یعنی مشتریِ گیرکرده)";
   if (rel === "manifest.webmanifest") return "مانیفستِ PWA — layout به آن لینک می‌دهد";
@@ -198,7 +221,7 @@ async function probe(url) {
       signal: AbortSignal.timeout(15000),
     });
     const buf = Buffer.from(await res.arrayBuffer());
-    return { status: res.status, buf };
+    return { status: res.status, buf, location: res.headers.get("location") };
   } catch (e) {
     return { status: 0, error: e.message };
   }
@@ -215,13 +238,32 @@ if (exitCode === 0 && !ALLOW_NEXT && (await nextIsUp())) {
 }
 
 if (exitCode === 0) {
+  // سرورِ درست، در یکی از دو حالتِ عمرِ پروژه:
+  //   • پیش از بازنشستگی: `/index.html` خودِ فایل را با تیترِ خودش می‌دهد.
+  //   • پس از بازنشستگی: همان مسیر ۳۰۱ به `/` می‌دهد (کارِ همین بازنشستگی).
+  // نشانه‌ی هویتی که در *هر دو* حالت باید برقرار باشد و بازنشستگی به آن کاری
+  // ندارد: `/offline.html` بایت‌به‌بایت همان فایلِ دیسک باشد. «تیتر یکی بود»
+  // برای یک سرورِ تصادفی هم می‌توانست جواب بدهد؛ بایت‌به‌بایت نه.
   const home = await probe("/index.html");
-  const looksLikeRepo = home.status === 200 && home.buf.toString("utf8").includes(homeTitle);
-  if (!looksLikeRepo) {
+  const servingLegacy = home.status === 200 && home.buf.toString("utf8").includes(homeTitle);
+  const retiredToRoot = home.status === 301 && home.location === "/";
+  let sameFile = false;
+  let offlineStatus = 0;
+  try {
+    const disk = fs.readFileSync(path.join(FRONTEND_DIR, "offline.html"));
+    const offline = await probe("/offline.html");
+    offlineStatus = offline.status;
+    sameFile = offline.status === 200 && disk.equals(offline.buf);
+  } catch (e) {
+    sameFile = false;
+  }
+  if (!((servingLegacy || retiredToRoot) && sameFile)) {
     giveUp(
-      `سرورِ روی ${EXPRESS} نسخه‌ی همین مخزن را سرو نمی‌کند: ` +
-        `/index.html باید تیترِ «${homeTitle}» را داشته باشد ولی ` +
-        (home.status === 200 ? "نداشت" : `کدِ ${home.status || "—"} داد`) +
+      `سرورِ روی ${EXPRESS} نسخه‌ی همین مخزن را سرو نمی‌کند:` +
+        `\n   • /index.html → ${home.status || "—"}${home.location ? ` → ${home.location}` : ""}` +
+        ` (انتظار: ۲۰۰ با تیترِ «${homeTitle}»، یا ۳۰۱ به /)` +
+        `\n   • /offline.html → ${offlineStatus || "—"}` +
+        `${sameFile ? " و همان فایلِ دیسک" : " ولی بایت‌به‌بایت همان frontend/offline.html نبود"}` +
         `.\n   یعنی این پورت سرورِ دیگری است و سنجشِ frontend/ بی‌معنی می‌شود.`,
     );
   }
@@ -237,10 +279,21 @@ if (exitCode === 0) {
   const notSame = [];
 
   for (const t of targets) {
-    const { status, buf, error } = await probe(t.url);
+    const { status, buf, location, error } = await probe(t.url);
     let note = "";
+    const dest = t.rel ? RETIRED.get(t.rel) : null;
 
-    if (status !== 200) {
+    if (dest) {
+      // بازنشسته: تنها پاسخِ درست ۳۰۱ به مقصدِ همان جدول است. بدنه سنجیده
+      // نمی‌شود؛ خودِ `Location` مدرکِ پاسخ است.
+      if (status !== 301 || location !== dest) {
+        note = ` ✖ انتظارِ ۳۰۱ به ${dest}`;
+        notOk.push(
+          `${t.url} → ${status || `خطا (${error})`}${location ? ` → ${location}` : ""}` +
+            ` (${t.why}) — انتظارِ ۳۰۱ به ${dest}`,
+        );
+      }
+    } else if (status !== 200) {
       notOk.push(`${t.url} → ${status || `خطا (${error})`} (${t.why})`);
     } else if (t.rel && !rendered.has(t.rel)) {
       // دارایی‌ها باید بایت‌به‌بایت همان فایلِ دیسک باشند: «۲۰۰» می‌تواند
@@ -262,13 +315,14 @@ if (exitCode === 0) {
       }
     }
 
-    console.log(`  ${status === 200 && !note ? "✔" : "✖"} ${t.url.padEnd(44)} ${String(status || "—").padEnd(4)} ${t.why}${note}`);
+    const healthy = dest ? status === 301 && !note : status === 200 && !note;
+    console.log(`  ${healthy ? "✔" : "✖"} ${t.url.padEnd(44)} ${String(status || "—").padEnd(4)} ${t.why}${note}`);
   }
 
   console.log("");
   if (notOk.length || notSame.length) {
     if (notOk.length) {
-      console.log(`✖ ${notOk.length} مسیر ۲۰۰ نداد:`);
+      console.log(`✖ ${notOk.length} مسیر پاسخِ درست نداد:`);
       for (const f of notOk) console.log(`  • ${f}`);
     }
     if (notSame.length) {
@@ -277,10 +331,11 @@ if (exitCode === 0) {
     }
     exitCode = 1;
   } else {
-    const bodyChecked = targets.filter((t) => t.rel && !rendered.has(t.rel)).length;
+    const bodyChecked = targets.filter((t) => t.rel && !rendered.has(t.rel) && !RETIRED.has(t.rel)).length;
     console.log(
-      `✔ هر ${targets.length} هدف ۲۰۰ داد — ${files.length} فایلِ frontend/ ` +
-        `(از این میان ${bodyChecked} فایل بایت‌به‌بایت با دیسک یکی بود) ` +
+      `✔ هر ${targets.length} هدف پاسخِ درست داد — ${files.length} فایلِ frontend/ ` +
+        `(از این میان ${bodyChecked} فایل بایت‌به‌بایت با دیسک یکی بود و ` +
+        `${RETIRED.size} نشانیِ بازنشسته ۳۰۱ به مقصدِ تمیز داد) ` +
         `و ${ROUTES.length} روتِ داینامیک.`,
     );
   }

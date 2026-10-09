@@ -556,6 +556,41 @@ const GUARDS = [
       },
     ],
   },
+  {
+    name: 'event-labels',
+    scope: 'backend',
+    title: 'هر رویدادِ دفترِ رویدادها برچسبِ فارسی دارد',
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/event-labels.js'] },
+    mutations: [
+      {
+        // دقیقاً همان بدهیِ تاریخی: رویدادی به بک‌اند اضافه می‌شود و کسی
+        // نگاشتِ پنل را به‌روز نمی‌کند، پس مدیر کلیدِ خام می‌بیند.
+        label: 'رویدادِ تازه‌ای در بک‌اند ثبت شود و برچسبش جا بماند',
+        file: 'backend/routes/admin.js',
+        find: "  note(req, 'backup', path.basename(file));",
+        replace: "  note(req, 'backup', path.basename(file));\n  note(req, 'panel_note_added', 'تست');",
+        expect: /بدونِ برچسب/,
+      },
+      {
+        // پشتیبانِ کلیدِ خام اگر برود، رویدادِ ناشناس بی‌صدا از دفتر ناپدید
+        // می‌شود — بی‌هیچ خطایی، که بدترین حالتِ گم‌شدنِ اطلاعات است.
+        label: 'رویدادِ ناشناس در دفتر پنهان شود (کلیدِ خام نماند)',
+        file: 'next-frontend/src/components/admin/ActivityContent.tsx',
+        find: 'ACTION_FA[entry.action] ?? entry.action',
+        replace: 'ACTION_FA[entry.action] ?? ""',
+        expect: /پنهان/,
+      },
+      {
+        // جهتِ برعکس: کلید در بک‌اند تغییر نام می‌دهد و برچسبِ قدیمی جا می‌ماند،
+        // پس یک برچسب داریم که هیچ رویدادی پشتش نیست.
+        label: 'برچسبی در پنل بماند که رویدادی پشتش نیست (کلیدِ تغییرنام‌داده)',
+        file: 'next-frontend/src/components/admin/ActivityContent.tsx',
+        find: '  order_note: "یادداشت سفارش",',
+        replace: '  order_note: "یادداشت سفارش",\n  order_notes: "یادداشت‌های سفارش",',
+        expect: /بی‌صاحب/,
+      },
+    ],
+  },
 
   // ----------------------------------------------------------
   // نگهبان‌های Vitest (منبع را عوض می‌کنیم، نگهبان باید قرمز شود)
@@ -948,20 +983,66 @@ const GUARDS = [
   {
     name: 'parity-storefront-live',
     scope: 'live',
-    title: 'اجراکننده‌ی زنده‌ی برابری، واگراییِ تازه را می‌گیرد',
+    title: 'اجراکننده‌ی زنده‌ی برابری، دست‌کاریِ اوراکل و اعلامِ گم‌شده را می‌گیرد',
+    // چرا هدفِ جهش‌ها عوض شد: تا پیش از بازنشستگی، دو طرفِ مقایسه دو سرورِ
+    // زنده بودند و «یک جمله به `frontend/terms.html` اضافه کن» کافی بود. حالا
+    // Express این صفحه‌ها را ۳۰۱ می‌دهد و نیمه‌ی Expressی از
+    // `tests/fixtures/legacy-oracle/` می‌آید — یعنی خودِ آرشیو منبعِ حقیقت
+    // شده. پس دو جهشِ معنادارِ امروز: (۱) دست‌کاریِ آرشیو باید گرفته شود،
+    // وگرنه اوراکلِ خراب بی‌صدا سبز می‌ماند؛ (۲) اعلامِ بازنشستگی که از مانیفست
+    // حذف شود باید «واگراییِ تازه» بسازد، وگرنه بازنشستگی بی‌اعلام می‌ماند.
     runner: { kind: 'parity' },
     mutations: [
       {
-        label: 'یک جمله در terms.html اضافه شود',
-        file: 'frontend/terms.html',
+        label: 'اوراکلِ منجمد دست‌کاری شود (یک جمله به terms.html اضافه)',
+        file: 'next-frontend/tests/fixtures/legacy-oracle/terms.html',
         append: '\n<p>این جمله فقط برای آزمونِ تخریبی است و در Next نیست.</p>\n',
-        expect: /تازه: [1-9]/,
+        // چرا «sha با کارنامه»: پیامِ خودِ اجراکننده «اوراکلِ منجمد دستکاری
+        // شده» است و آن «دستکاری» نیم‌فاصله دارد؛ لنگرِ نیم‌فاصله‌دار در هر
+        // ویرایشی به‌راحتی می‌شکند (یک‌بار همین شد)، پس تکّهٔ بدونِ نیم‌فاصله
+        // و یکتای همان پیام قفل می‌شود.
+        expect: /sha با کارنامه/,
       },
       {
-        label: 'متنِ صفحه‌ی اصلی عوض شود',
-        file: 'frontend/index.html',
-        append: '\n<p>جمله‌ی تخریبیِ صفحه‌ی اصلی — فقط در Express.</p>\n',
+        label: 'اعلامِ بازنشستگیِ /cart.html از مانیفست حذف شود',
+        file: 'next-frontend/src/lib/parityManifest.ts',
+        find: '    express: { url: "/cart.html", status: 301 },\n    statusReason: { state: "accepted", reason: WHY.legacyRetired },\n',
+        replace: '    express: { url: "/cart.html", status: 301 },\n',
         expect: /تازه: [1-9]/,
+      },
+    ],
+  },
+  {
+    name: 'legacy-links-live',
+    scope: 'live',
+    title: 'نگهبانِ بازنشستگی، مقصدِ مرده و نامِ بی‌مقصد را می‌گیرد',
+    // چرا دو جهشِ متفاوت: این نگهبان دو چیزِ جدای هم را قفل می‌کند و هر
+    // جهش باید *همان* یکی را بگیرد. اولی «مقصد» را می‌شکند (نگاشت می‌گوید یک
+    // جا، سرورِ زنده جای دیگر می‌رود) و دومی «پوشش» را (نامی که از نگاشت حذف
+    // شود و روزِ حذفِ `frontend/` به لینکِ مرده تبدیل شود).
+    runner: {
+      kind: 'node',
+      cwd: NEXT,
+      args: [
+        '--disable-warning=MODULE_TYPELESS_PACKAGE_JSON',
+        path.join(NEXT, 'scripts', 'legacy-links-live.mjs'),
+        `--express=${EXPRESS_ORIGIN}`,
+      ],
+    },
+    mutations: [
+      {
+        label: 'مقصدِ cart.html در نگاشت به مسیری برود که وجود ندارد',
+        file: 'next-frontend/src/lib/legacyUrls.ts',
+        find: '  "cart.html": "/cart",',
+        replace: '  "cart.html": "/cart-taghiri-karde",',
+        expect: /مقصدِ ریدایرکت/,
+      },
+      {
+        label: 'نامِ cart.html از نگاشت حذف شود (بی‌مقصد بماند)',
+        file: 'next-frontend/src/lib/legacyUrls.ts',
+        find: '  "cart.html": "/cart",\n',
+        replace: '',
+        expect: /نه مقصدی/,
       },
     ],
   },

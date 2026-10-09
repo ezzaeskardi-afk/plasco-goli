@@ -159,6 +159,8 @@ const WHY = {
     "پنلِ مدیریت فقط در Next وجود دارد و برای کاربرِ ناشناس ۳۰۷ به /login می‌رود. در Express صفحه‌ای برای پنل نیست، ولی از این پس /admin (و زیرمسیرهایش) را با ۳۰۲ به همان مسیر روی SITE_URL می‌فرستد تا لینکِ «پنل مدیریت» در صفحهٔ حساب به ۴۰۴ نخورد.",
   errorBoundary:
     "Express صفحهٔ ۵۰۰ را از هندلرِ خطای سرور سرو می‌کرد؛ Next با مرزِ خطا (error.tsx و global-error.tsx + دکمهٔ تلاشِ دوباره). چون خطای ۵۰۰ را نمی‌توان زنده تحریک کرد، فقط ساختار و فایل‌ها سنجیده می‌شوند.",
+  legacyRetired:
+    "فروشگاهِ Express بازنشسته شد: این نشانی که پیش‌تر خودِ صفحه را ۲۰۰ می‌داد، حالا ۳۰۱ به همان صفحه روی Next می‌دهد — ۳۰۱ چون این نام‌ها هرگز برنمی‌گردند، ۳۰۷ روی Next چون دوره‌ی گذار است. متن و متادیتای مقایسه از اوراکلِ منجمد (tests/fixtures/legacy-oracle) خوانده می‌شود و نگهبانِ زندهٔ legacy-links-live مقصدِ دو طرف را یکی‌یکی می‌سنجد.",
 } as const;
 
 /** شش دستهٔ کاتالوگ — در Express در مگامنو، کشوی موبایل و فوترِ هر صفحه تکرار شده‌اند. */
@@ -184,7 +186,8 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "index",
     label: "صفحهٔ اصلی",
-    express: { url: "/index.html", status: 200 },
+    express: { url: "/index.html", status: 301 },
+    statusReason: { state: "accepted", reason: WHY.legacyRetired },
     next: { url: "/", status: 200 },
     mode: "server",
     // ۱۰۰٪ اندازه‌گیری شد (هیرو، نوارِ متحرک، فیلترها، پیگیری، پیشنهاد ویژه،
@@ -200,7 +203,7 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "legacy-index-html",
         url: "/index.html",
-        express: 200,
+        express: 301,
         next: 307,
         axis: "capability",
         state: "accepted",
@@ -231,7 +234,8 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "products",
     label: "فهرستِ محصولات",
-    express: { url: "/products.html", status: 200 },
+    express: { url: "/products.html", status: 301 },
+    statusReason: { state: "accepted", reason: WHY.legacyRetired },
     next: { url: "/products", status: 200 },
     mode: "server",
     textFloor: 0.88,
@@ -261,7 +265,7 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "legacy-products-html",
         url: "/products.html",
-        express: 200,
+        express: 301,
         next: 307,
         axis: "capability",
         state: "accepted",
@@ -337,7 +341,7 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "legacy-product-html-id",
         url: "/product.html?id=1",
-        express: 200,
+        express: 301,
         next: 307,
         axis: "capability",
         state: "accepted",
@@ -360,7 +364,8 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "cart",
     label: "سبد خرید",
-    express: { url: "/cart.html", status: 200 },
+    express: { url: "/cart.html", status: 301 },
+    statusReason: { state: "accepted", reason: WHY.legacyRetired },
     next: { url: "/cart", status: 200 },
     mode: "client",
     textFloor: 0.48,
@@ -467,7 +472,7 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "legacy-cart-html",
         url: "/cart.html",
-        express: 200,
+        express: 301,
         next: 307,
         axis: "capability",
         state: "accepted",
@@ -483,18 +488,24 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "checkout",
     label: "تکمیل خرید",
-    express: { url: "/checkout.html", status: 200 },
+    express: { url: "/checkout.html", status: 301 },
     next: { url: "/checkout", status: 307 },
     mode: "redirect",
     textFloor: 0,
     misses: [],
     meta: [],
-    statusReason: { state: "accepted", reason: WHY.authGate },
+    statusReason: {
+      state: "accepted",
+      // دو تغییرِ هم‌زمان: Express بازنشسته شد (۳۰۱) و Next این صفحه را پشتِ
+      // ورود می‌برد (۳۰۷). هر دو باید در همان یک اعلام بیایند تا کسی فکر
+      // نکند اختلافِ وضعیت یک روزه است.
+      reason: `${WHY.legacyRetired} ${WHY.authGate}`,
+    },
     probes: [
       {
         id: "legacy-checkout-html",
         url: "/checkout.html",
-        express: 200,
+        express: 301,
         next: 307,
         axis: "capability",
         state: "accepted",
@@ -513,7 +524,8 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "login",
     label: "ورود / ثبت‌نام",
-    express: { url: "/login.html", status: 200 },
+    express: { url: "/login.html", status: 301 },
+    statusReason: { state: "accepted", reason: WHY.legacyRetired },
     next: { url: "/login", status: 200 },
     mode: "client",
     textFloor: 0.52,
@@ -661,7 +673,7 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "legacy-login-next-param",
         url: "/login.html?next=%2Faccount",
-        express: 200,
+        express: 301,
         next: 307,
         axis: "capability",
         state: "accepted",
@@ -691,18 +703,24 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "account",
     label: "حساب کاربری",
-    express: { url: "/account.html", status: 200 },
+    express: { url: "/account.html", status: 301 },
     next: { url: "/account", status: 307 },
     mode: "redirect",
     textFloor: 0,
     misses: [],
     meta: [],
-    statusReason: { state: "accepted", reason: WHY.authGate },
+    statusReason: {
+      state: "accepted",
+      // دو تغییرِ هم‌زمان: Express بازنشسته شد (۳۰۱) و Next این صفحه را پشتِ
+      // ورود می‌برد (۳۰۷). هر دو باید در همان یک اعلام بیایند تا کسی فکر
+      // نکند اختلافِ وضعیت یک روزه است.
+      reason: `${WHY.legacyRetired} ${WHY.authGate}`,
+    },
     probes: [
       {
         id: "legacy-account-html",
         url: "/account.html",
-        express: 200,
+        express: 301,
         next: 307,
         axis: "capability",
         state: "accepted",
@@ -731,7 +749,8 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "order-success",
     label: "سفارشِ ثبت‌شده",
-    express: { url: "/order-success.html", status: 200 },
+    express: { url: "/order-success.html", status: 301 },
+    statusReason: { state: "accepted", reason: WHY.legacyRetired },
     next: { url: "/order-success", status: 200 },
     mode: "client",
     textFloor: 0.71,
@@ -754,7 +773,7 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "legacy-order-success-html",
         url: "/order-success.html",
-        express: 200,
+        express: 301,
         next: 307,
         axis: "capability",
         state: "accepted",
@@ -773,7 +792,8 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "terms",
     label: "قوانین و راهنمای خرید",
-    express: { url: "/terms.html", status: 200 },
+    express: { url: "/terms.html", status: 301 },
+    statusReason: { state: "accepted", reason: WHY.legacyRetired },
     next: { url: "/terms", status: 200 },
     mode: "server",
     textFloor: 0.89,
@@ -788,7 +808,7 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "legacy-terms-html",
         url: "/terms.html",
-        express: 200,
+        express: 301,
         next: 307,
         axis: "capability",
         state: "accepted",
@@ -804,7 +824,8 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "wholesale",
     label: "فروشِ عمده",
-    express: { url: "/wholesale.html", status: 200 },
+    express: { url: "/wholesale.html", status: 301 },
+    statusReason: { state: "accepted", reason: WHY.legacyRetired },
     next: { url: "/wholesale", status: 200 },
     mode: "server",
     textFloor: 0.94,
@@ -818,7 +839,7 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "legacy-wholesale-html",
         url: "/wholesale.html",
-        express: 200,
+        express: 301,
         next: 307,
         axis: "capability",
         state: "accepted",

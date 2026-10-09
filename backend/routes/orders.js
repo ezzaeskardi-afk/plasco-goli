@@ -132,23 +132,29 @@ router.get('/payment-callback',
   const { Authority, Status } = req.query;
 
   const order = getOrder(orderId);
-  if (!order) return res.redirect('/order-success.html?error=notfound');
+  // مسیرِ تمیز، نه نامِ عصرِ Express.
+  //
+  // مشتری اینجا پول داده و از درگاه برگشته؛ او نباید یک پرشِ اضافیِ `.html → مسیر تمیز`
+  // بخورد (و اگر روزی آدرسِ صفحه عوض شود، این لینک است که می‌شکند). صفحه‌ی
+  // `order-success` روی همان دامنه سرو می‌شود؛ `/order-success.html` فقط پلِ
+  // لینک‌های قدیمی است، نه مسیری برای کدِ خودمان.
+  if (!order) return res.redirect('/order-success?error=notfound');
 
   // idempotent: اگر نتیجه‌ی این سفارش قبلاً مشخص شده، فقط نمایش می‌دهیم
   // (رفرش صفحه‌ی برگشت، پرداخت دوباره یا آزادسازی دوباره‌ی موجودی ایجاد نمی‌کند)
   if (order.status !== 'pending_payment') {
-    return res.redirect(`/order-success.html?orderId=${order.id}`);
+    return res.redirect(`/order-success?orderId=${order.id}`);
   }
 
   // Authority باید همانی باشد که موقع شروع پرداخت برای همین سفارش ثبت شد
   if (!Authority || Authority !== order.authority) {
     log.warn(`Payment callback with invalid authority for order ${order.id}`, { ip: req.ip });
-    return res.redirect(`/order-success.html?orderId=${order.id}`);
+    return res.redirect(`/order-success?orderId=${order.id}`);
   }
 
   if (Status !== 'OK') {
     markOrderFailedTx(order.id);
-    return res.redirect(`/order-success.html?orderId=${order.id}`);
+    return res.redirect(`/order-success?orderId=${order.id}`);
   }
 
   const verification = await verifyPayment({ authority: Authority, amountToman: order.total });
@@ -170,7 +176,7 @@ router.get('/payment-callback',
     log.warn(`Payment verification failed for order ${order.id}`);
   }
 
-  res.redirect(`/order-success.html?orderId=${order.id}`);
+  res.redirect(`/order-success?orderId=${order.id}`);
 }));
 
 router.get('/mine', requireAuth, (req, res) => {

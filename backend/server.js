@@ -44,6 +44,7 @@ const addressesRoute = require('./routes/addresses');
 const ordersRoute = require('./routes/orders');
 const wishlistRoute = require('./routes/wishlist');
 const adminRoute = require('./routes/admin');
+const { legacyRedirect, isLegacyPath } = require('./lib/legacy-redirects');
 const shopRoute = require('./routes/shop');
 const wholesaleRoute = require('./routes/wholesale');
 
@@ -512,6 +513,35 @@ app.use((req, res, next) => {
   next();
 });
 
+// ---------- بازنشستگیِ فروشگاهِ عصرِ Express ----------
+// «هیچ لینکی ۴۰۴ نشود»: نام‌های `.html` که در بوکمارک، نتیجه‌ی گوگل و لینکِ
+// واتساپی زنده‌اند باید به مسیرِ تمیزِ همان صفحه برسند — نه به ۴۰۴، و نه به
+// نسخه‌ی کهنه‌ای که دیگر به‌روز نمی‌شود.
+//
+// ترتیب مهم است: این میدل‌ور **قبل از** روت‌های سئو و `express.static` می‌آید،
+// وگرنه فایلِ قدیمی (که هنوز روی دیسک است) زودتر فرستاده می‌شود و ریدایرکت
+// هرگز اجرا نمی‌شود.
+//
+// چرا ۳۰۱ و نه ۳۰۲: این نام‌ها هرگز برنمی‌گردند؛ سیگنالِ دائمی همان چیزی است
+// که اعتبارِ لینک‌های قدیمی را روی مسیرهای تمیز جمع می‌کند.
+//
+// چرا مقصد **نسبی** است و نه مطلق روی `SITE_URL`: مسیرِ تمیز روی همان دامنه
+// سرو می‌شود (nginx صفحه‌ها را به Next می‌دهد)، پس `Location: /cart` همان
+// چیزی است که Next هم می‌فرستد — دو دنیا واقعاً هم‌گرا می‌شوند. مطلق‌بودن یک
+// خطرِ واقعی هم دارد: اگر `SITE_URL` اشتباه تنظیم شده باشد (یا به خودِ همین
+// مبدأ اشاره کند، مثلِ اجرای sandbox)، کاربر به دامنه‌ای می‌رود که آن مسیر را
+// ندارد — و همان لینکِ شکسته می‌شود که این کد می‌خواهد از آن جلوگیری کند.
+// (ریدایرکتِ `/admin` پایین‌تر مطلق است، چون آن یکی *باید* به اپِ Next روی
+// دامنهٔ دیگر برود و مسیرِ معادلی روی این مبدأ ندارد.)
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  if (!isLegacyPath(req.path)) return next();
+  const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  const dest = legacyRedirect(req.path, q);
+  if (!dest) return next();
+  res.redirect(301, dest);
+});
+
 // مسیر تمیز صفحه‌ی محصول: /product/12 → product.html با متاهای سئوی «سرور-ساید»
 // چرا سرور-ساید؟ تلگرام/واتساپ جاوااسکریپت اجرا نمی‌کنند؛ پیش‌نمایش لینک فقط از HTML خام
 // ساخته می‌شود. عنوان، توضیح، عکس و canonical هر محصول همین‌جا داخل HTML تزریق می‌شود.
@@ -850,14 +880,21 @@ app.get('/sitemap.xml', (req, res) => {
   //
   // دسته‌ی خالی هم نمی‌آید: getCategories فقط دسته‌هایی را برمی‌گرداند که
   // کالای منتشرشده دارند، پس آدرسِ «صفحه‌ی خالی» به گوگل داده نمی‌شود.
+  // نشانی‌های تمیز، نه `.html`های عصرِ Express.
+  //
+  // چرا: sitemap یعنی «این‌ها را ایندکس کن» و `/products.html` امروز ۳۰۷
+  // می‌شود. اعلام‌کردنِ نشانی‌ای که خودش ریدایرکت می‌شود سیگنالِ متضاد است و
+  // بودجه‌ی خزش را هدر می‌دهد؛ گوگل باید همان مقصدِ نهایی را ببیند. این نگهبان
+  // (`next-frontend/scripts/legacy-links-live.mjs`) دقیقاً همین را می‌سنجد و
+  // پیش از این هشت نشانیِ قدیمی را این‌جا گرفته بود.
   const catUrls = getCategories().map(c =>
-    `  <url><loc>${base}/products.html?cat=${encodeURIComponent(c.category)}</loc><lastmod>${homeLastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>`);
+    `  <url><loc>${base}/products?cat=${encodeURIComponent(c.category)}</loc><lastmod>${homeLastmod}</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>`);
 
   const urls = [
     `  <url><loc>${base}/</loc><lastmod>${homeLastmod}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>`,
-    `  <url><loc>${base}/products.html</loc><lastmod>${homeLastmod}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>`,
+    `  <url><loc>${base}/products</loc><lastmod>${homeLastmod}</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>`,
     ...catUrls,
-    `  <url><loc>${base}/terms.html</loc><lastmod>${termsLastmod}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>`,
+    `  <url><loc>${base}/terms</loc><lastmod>${termsLastmod}</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>`,
     ...products.map(p =>
       `  <url><loc>${base}/product/${p.id}</loc><lastmod>${lastmodOf(p)}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority>${imageTag(p)}</url>`)
   ].slice(0, SITEMAP_MAX_URLS).join('\n');

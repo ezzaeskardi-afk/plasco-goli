@@ -12,6 +12,9 @@
     "test:readme-counts": "node scripts/check-readme-counts.mjs",
     "test:watch": "vitest",
     "parity:storefront": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/parity-storefront.mjs",
+    "legacy-links:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/legacy-links-live.mjs",
+    "freeze:oracle": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/freeze-legacy-oracle.mjs",
+    "cutover:rehearsal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/cutover-rehearsal.mjs",
     "static-paths:live": "node scripts/static-paths-live.mjs"
   },
   "dependencies": {

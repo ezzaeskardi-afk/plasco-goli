@@ -84,8 +84,8 @@ const STEPS = [
     args: ['tests/guard-mutations.js', '--scope=frontend'],
   },
   {
-    label: 'جهش‌های برابریِ زنده',
-    why: 'هر دو سرور لازم است (Express روی ۳۰۰۰ و Next روی ۳۰۰۱)',
+    label: 'جهش‌های نگهبان‌های زنده',
+    why: 'برابریِ فروشگاه و مقصدِ نشانی‌های قدیمی — هر دو سرور لازم است (Express روی ۳۰۰۰ و Next روی ۳۰۰۱)',
     cwd: join(ROOT, 'backend'),
     args: ['tests/guard-mutations.js', '--scope=live'],
     live: true,
