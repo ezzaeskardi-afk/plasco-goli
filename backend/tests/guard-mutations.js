@@ -248,14 +248,20 @@ const GUARDS = [
     runner: { kind: 'node', cwd: BACKEND, args: ['tests/panel-retired.js'] },
     mutations: [
       {
+        // مقصدِ جهش عمداً `next-frontend/public` است، نه پوشه‌ی حذف‌شده‌ی
+        // `frontend/`: آن مسیرِ دارایی هنوز هست و همان درس را می‌دهد («فایلِ
+        // بازنشسته هرجا سرو شود باید گرفته شود»). ساختنِ پوشه‌ی `frontend/`
+        // برای این جهش یک عارضه‌ی جانبی داشت: پوشه‌ی خالیِ جامانده بعد از
+        // بازگردانی، نگهبان‌های «frontend/ برنگشته» را در اجراهای بعدی قرمز
+        // می‌کرد — یعنی هارنس خودش برای بقیه خرابی می‌ساخت.
         label: 'فایلِ پنل دوباره سرِ جایش گذاشته شود',
-        file: 'frontend/admin.html',
+        file: 'next-frontend/public/admin.html',
         create: '<!doctype html><html lang="fa"><body><h1>panel mutation</h1></body></html>\n',
         expect: /برگشته|resurrect/i,
       },
       {
         label: 'لینکی دوباره به admin.html اضافه شود',
-        file: 'frontend/index.html',
+        file: 'next-frontend/public/offline.html',
         append: '\n<a href="/admin.html">mutation</a>\n',
         expect: /ارجاع به پنل/,
       },
@@ -303,15 +309,18 @@ const GUARDS = [
     runner: { kind: 'node', cwd: BACKEND, args: ['tests/otp-resend-window.js'] },
     mutations: [
       {
-        label: 'مهلتِ مطلق به شمارنده‌ی خام برگردد (Express)',
-        file: 'frontend/js/login.js',
+        // سمتِ Expressِ این نگهبان از اوراکلِ منجمد می‌خواند (`frontend/`
+        // حذف شده)، پس جهش هم همان‌جا زده می‌شود: «اگر مرجع عوض شود،
+        // نگهبان می‌گیرد».
+        label: 'مهلتِ مطلق به شمارنده‌ی خام برگردد (اوراکلِ Express)',
+        file: 'next-frontend/tests/fixtures/legacy-src/js/login.js',
         find: 'resendAt: Date.now() + retry * 1000',
         replace: 'resendAt: retry * 1000',
         expect: /مهلت را با/,
       },
       {
-        label: 'کلیدِ وضعیت عوض شود (Express)',
-        file: 'frontend/js/login.js',
+        label: 'کلیدِ وضعیت عوض شود (اوراکلِ Express)',
+        file: 'next-frontend/tests/fixtures/legacy-src/js/login.js',
         find: "const STATE_KEY = 'pg_otp_state';",
         replace: "const STATE_KEY = 'pg_otp_state_mutation';",
         expect: /وضعیت از یک کلید/,
@@ -342,7 +351,7 @@ const GUARDS = [
       },
       {
         label: 'پشتیبانِ Express از پشتیبانِ Next جدا شود',
-        file: 'frontend/js/login.js',
+        file: 'next-frontend/tests/fixtures/legacy-src/js/login.js',
         find: 'const FALLBACK_RESEND_SECONDS = 30;',
         replace: 'const FALLBACK_RESEND_SECONDS = 60;',
         expect: /پشتیبان/,
@@ -410,7 +419,7 @@ const GUARDS = [
   {
     name: 'secrets',
     scope: 'backend',
-    title: 'مرزِ راز: هیچ رازی در frontend و .env.example نمی‌ماند',
+    title: 'مرزِ راز: هیچ رازی در سمتِ کلاینت و .env.example نمی‌ماند',
     runner: { kind: 'node', cwd: BACKEND, args: ['tests/secrets.js'] },
     mutations: [
       {
@@ -418,19 +427,21 @@ const GUARDS = [
         file: 'backend/.env.example',
         find: 'SESSION_SECRET=REPLACE_WITH_A_RANDOM_SECRET_AT_LEAST_32_CHARACTERS',
         replace: 'SESSION_SECRET=mutation-real-secret-value-32-chars',
-        expect: /non-placeholder secret/,
+        expect: /جای\u200cنگهدار/,
       },
       {
-        label: 'رازی داخلِ جاوااسکریپتِ frontend جا بماند',
-        file: 'frontend/js/common.js',
-        append: '\nSESSION_SECRET = leaked-mutation-value\n',
-        expect: /appears in frontend/,
+        // مرزِ کلاینت امروز `next-frontend/` است (دارایی‌های `public/` و سورسی
+        // که باندل می‌شود)، نه پوشه‌ی حذف‌شده‌ی `frontend/`.
+        label: 'رازی داخلِ داراییِ کلاینتی جا بماند',
+        file: 'next-frontend/public/offline.html',
+        append: '\n<script>SESSION_SECRET = leaked-mutation-value</script>\n',
+        expect: /سمتِ کلاینت نیست/,
       },
       {
-        label: 'هدرِ احرازِ هویت داخلِ HTML جا بماند',
-        file: 'frontend/index.html',
-        append: '\n<span>Authorization: AccessKey mutation</span>\n',
-        expect: /appears in frontend/,
+        label: 'هدرِ احرازِ هویت داخلِ سورسِ کلاینتی جا بماند',
+        file: 'next-frontend/src/lib/site.ts',
+        append: '\n// Authorization: AccessKey mutation\n',
+        expect: /سمتِ کلاینت نیست/,
       },
     ],
   },
@@ -490,7 +501,7 @@ const GUARDS = [
         // همان رگرسیونی که این نگهبان برای گرفتنش نوشته شده: یک کپیِ کهنه که
         // بی‌سروصدا جلوتر از شبکه می‌نشیند.
         label: 'کش-اول جای شبکه بنشیند (کپیِ کهنه به کاربر برسد)',
-        file: 'frontend/sw.js',
+        file: 'next-frontend/public/sw.js',
         find: '  return fetch(req, { cache: \'no-cache\' })',
         replace:
           '  return caches.open(PAGE_CACHE).then((c) => c.match(req.url)).then((hit) => hit || fetch(req))',
@@ -498,7 +509,7 @@ const GUARDS = [
       },
       {
         label: 'درخواستِ ناوبری بدونِ `no-cache` برود (واسطه می‌تواند پاسخِ کهنه بدهد)',
-        file: 'frontend/sw.js',
+        file: 'next-frontend/public/sw.js',
         // عبارتِ کد، نه شکلِ داخلِ کامنت — وگرنه لنگر یکتا نیست (هر دو را
         // شمرده می‌شود) و جهش بی‌دلیل می‌شکند.
         find: "return fetch(req, { cache: 'no-cache' })",
@@ -507,14 +518,14 @@ const GUARDS = [
       },
       {
         label: 'تازه‌سازیِ پس‌زمینه حذف شود (کپیِ کش همیشه کهنه می‌ماند)',
-        file: 'frontend/sw.js',
+        file: 'next-frontend/public/sw.js',
         find: '      cachePageInBackground(req, res);\n',
         replace: '',
         expect: /پس‌زمینه/,
       },
       {
         label: 'نسخه‌ی کشِ صفحه‌ها جدا از کشِ دارایی‌ها بامپ شود',
-        file: 'frontend/sw.js',
+        file: 'next-frontend/public/sw.js',
         find: "const PAGE_CACHE = 'pg-pages-v9';",
         replace: "const PAGE_CACHE = 'pg-pages-v8';",
         expect: /نسخه/,
@@ -674,8 +685,8 @@ const GUARDS = [
         failedTest: 'هر قابلیتِ پوسته',
       },
       {
-        label: 'شماره‌ی تماسِ مغازه در Express عوض شود',
-        file: 'frontend/index.html',
+        label: 'شماره‌ی تماسِ مغازه در اوراکلِ Express عوض شود',
+        file: 'next-frontend/tests/fixtures/legacy-src/index.html',
         find: 'tel:09113567409',
         replace: 'tel:09110000000',
         all: true,

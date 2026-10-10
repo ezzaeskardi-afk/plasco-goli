@@ -94,12 +94,29 @@ const derived = {
   libFiles: jsFiles('backend/lib').length,
   routeFiles: jsFiles('backend/routes').length,
   toolFiles: jsFiles('backend/tools').length,
-  frontendJs: jsFiles('frontend/js').length,
-  pages: fs.readdirSync(path.join(ROOT, 'frontend')).filter((f) => f.endsWith('.html')),
   suites: jsFiles('backend/tests'),
   views: 0,
   comp: { plain: 0, tests: 0, home: 0, panel: 0 }
 };
+
+// ---------- نام‌های عصرِ Express: از جدولِ ریدایرکت، نه از پوشه‌ای که نیست ----------
+// تا دیروز این‌جا `fs.readdirSync('frontend')` بود و هر صفحه‌ی آن را در README
+// می‌جست. آن پوشه حذف شد؛ اگر شمارشِ فایل‌های یک پوشه‌ی نبوده را نگه می‌داشتیم،
+// آزمون «سبزِ خالی» می‌شد (صفر صفحه، صفر ایراد). منبعِ حقیقتِ آن نام‌ها امروز
+// جدولِ ریدایرکتِ Next است، پس همان جدول خوانده می‌شود.
+const legacyUrlsSrc = fs.readFileSync(
+  path.join(ROOT, 'next-frontend', 'src', 'lib', 'legacyUrls.ts'), 'utf8');
+const legacySection = (name) => {
+  const at = legacyUrlsSrc.indexOf(`export const ${name}`);
+  if (at === -1) return [];
+  const chunk = legacyUrlsSrc.slice(at, legacyUrlsSrc.indexOf('};', at));
+  return [...chunk.matchAll(/["'](\/?[a-z0-9-]+\.html)["']/g)].map((m) => m[1].replace(/^\//, ''));
+};
+// پلِ زنده: هر کدام باید در README نام برده شده باشد (مستندِ بازنشستگی)
+derived.legacyPages = legacySection('LEGACY_PAGE_ALIASES');
+// عمداً بی‌ریدایرکت — همین تصمیم هم باید مستند باشد، پس نامشان هم در README می‌آید.
+derived.legacyNoAlias = legacySection('LEGACY_NO_ALIAS');
+derived.legacyProduct = /pathname === \"\/product\.html\"/.test(legacyUrlsSrc);
 
 // نماهای پنل از تنها منبعِ حقیقت (`adminSections.ts`) شمرده می‌شوند
 //
@@ -144,9 +161,13 @@ function allNumbers(line) {
   return out;
 }
 
+// ---------- کدام مجموعه‌ها در خطِ وضعیتِ README می‌آیند ----------
+// مجموعهی سئوی بک‌اند از این فهرست رفت: `test-seo.js` روی HTMLِ `frontend/`
+// کار می‌کرد و با حذفِ آن پوشه بی‌مرجع شد. معادلِ زنده‌اش امروز در خانه‌ی
+// تازه است (`next-frontend/src/app/seoParity.test.ts` + `structuredData.test.ts`
+// برای داده‌ی ساختاریافته) و عددهای فرانت‌اند را نگهبانِ خودشان می‌سنجد.
 const SUITES = [
   { key: 'smoke', file: 'test-smoke.js', word: w(0x62f, 0x648, 0x62f) },                       // دود
-  { key: 'seo', file: 'test-seo.js', word: w(0x633, 0x626, 0x648) },                           // سئو
   { key: 'owasp', file: 'owasp-scan.js', word: 'OWASP' },
   { key: 'security', file: 'security.js', word: w(0x627, 0x645, 0x646, 0x6cc, 0x62a) },        // امنیت
   { key: 'discount', file: 'discount.js', word: w(0x62a, 0x62e, 0x641, 0x6cc, 0x641) },        // تخفیف
@@ -268,17 +289,17 @@ function proseMismatches(structural, sources, totals) {
   const DIGIT = (n) => asciiDigits(String(n)).split('')
     .map((d) => String.fromCodePoint(0x6f0 + Number(d))).join('');
   const fakeStatus = `> وضعیت: **${DIGIT(10)} تست خودکار، همه سبز** — ${DIGIT(7)} `
-    + `${S('smoke').word} + ${DIGIT(3)} ${S('seo').word} + ${DIGIT(5)} ${S('owasp').word}`;
+    + `${S('smoke').word} + ${DIGIT(3)} ${S('discount').word} + ${DIGIT(5)} ${S('owasp').word}`;
   const st = parseStatus(fakeStatus);
   check('خودآزمون: خطِ وضعیت درست خوانده می‌شود',
-    st.total === 10 && st.suites.smoke === 7 && st.suites.seo === 3 && st.suites.owasp === 5,
+    st.total === 10 && st.suites.smoke === 7 && st.suites.discount === 3 && st.suites.owasp === 5,
     JSON.stringify(st));
 
-  const fakeTable = `- تست: ${S('smoke').word} **${DIGIT(7)}** | ${S('seo').word} **${DIGIT(3)}**`
+  const fakeTable = `- تست: ${S('smoke').word} **${DIGIT(7)}** | ${S('discount').word} **${DIGIT(3)}**`
     + ` | ${S('frontend').word} (Vitest) **${DIGIT(4)}** = **${DIGIT(14)}**`;
   const tb = parseBreakdown(fakeTable);
   check('خودآزمون: جدولِ تفکیک درست خوانده می‌شود',
-    tb.suites.smoke === 7 && tb.suites.seo === 3 && tb.suites.frontend === 4 && tb.total === 14,
+    tb.suites.smoke === 7 && tb.suites.discount === 3 && tb.suites.frontend === 4 && tb.total === 14,
     JSON.stringify(tb));
 
   const comment = `# ${DIGIT(18)} ${w(0x628, 0x631, 0x631, 0x633, 0x6cc)} ${DIGIT(0)}`;
@@ -334,8 +355,6 @@ const CLI = {
 claimOf(new RegExp(`(${NUM})${SEP}${CLI.file}${SEP}${CLI.library}`, 'g'), 'فایل‌های کتابخانه', derived.libFiles);
 claimOf(new RegExp(`(${NUM})${SEP}${CLI.route}${SEP}API`, 'g'), 'مسیرهای API', derived.routeFiles);
 claimOf(new RegExp(`(${NUM})${SEP}${CLI.tool}${SEP}${CLI.adminish}`, 'g'), 'ابزارهای مدیریتی', derived.toolFiles);
-claimOf(new RegExp(`\\((${NUM})${SEP}${CLI.file}\\)`, 'g'), 'اسکریپت‌های js/', derived.frontendJs, 1,
-  lines.filter((l) => l.includes('js/')));
 claimOf(new RegExp(`(${NUM})${SEP}${CLI.view}`, 'g'), 'نماهای پنل', derived.views, 3);
 
 // اجزای Next: «۲۳ کامپوننت + ۳ آزمون + ۳ کامپوننتِ صفحه اصلی + ۱۳ فایلِ محتوای پنل»
@@ -428,9 +447,21 @@ if (statusLineAt === -1 || breakdownLineAt === -1) {
 
 // ---------- ۶) کامل بودنِ مستندات ----------
 {
-  const missingPages = derived.pages.filter((p) => !readme.includes(p));
-  check('هر صفحه‌ی frontend در README نام برده شده', missingPages.length === 0,
-    missingPages.join(',') || `${derived.pages.length} صفحه`);
+  // پوشه‌ی بازنشسته نباید برگردد، وگرنه شمارش‌های این پرونده دوباره دو منبعی
+  // می‌شوند (یکی پوشه‌ی مرده، یکی Next).
+  check('پوشه‌ی بازنشسته‌ی frontend/ روی دیسک نیست',
+    !fs.existsSync(path.join(ROOT, 'frontend')));
+
+  // مستندِ پلِ بازنشستگی: هر نامِ قدیمی باید جایی در README بیاید — چه آن‌هایی
+  // که ۳۰۱ می‌شوند، چه آن‌هایی که عمداً ۴۰۴ می‌مانند. یک نامِ جامانده یعنی
+  // خواننده‌ی README نمی‌داند آن آدرس چه سرنوشتی دارد.
+  const legacyNames = [...new Set([...derived.legacyPages, ...derived.legacyNoAlias, 'product.html'])];
+  check('جدولِ ریدایرکت واقعاً خوانده شد (کفِ ۱۰ نام)', legacyNames.length >= 10,
+    `${legacyNames.length} نام`);
+  const missingLegacy = legacyNames.filter((p) => !readme.includes(p));
+  check('هر نامِ عصرِ Express در README نام برده شده', missingLegacy.length === 0,
+    missingLegacy.join(',') || `${legacyNames.length} نام`);
+  check('نامِ پارامتریِ product.html در جدولِ ریدایرکت هست', derived.legacyProduct);
 
   const missingSuites = derived.suites.filter((f) => !readme.includes(f));
   check('هر فایلِ backend/tests در README نام برده شده', missingSuites.length === 0,

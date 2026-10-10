@@ -21,9 +21,9 @@ if (isClusterEnabled() && cluster.isPrimary) {
 
 const log = require('./lib/logger');
 const {
-  initDb, expireStaleOrders, cleanupExpired, backupNow, getPublicProducts, getPublicProduct,
-  bumpVisit, cleanupOldVisits, getProductReviews, getSetting, getShippingQuote,
-  closeDb, getDbHealth, getCategories, getCatalogSignature, checkpointWal, getTopProducts
+  initDb, expireStaleOrders, cleanupExpired, backupNow, getPublicProducts,
+  bumpVisit, cleanupOldVisits, getSetting,
+  closeDb, getDbHealth, getCategories, getCatalogSignature, checkpointWal
 } = require('./lib/db');
 const { SqliteSessionStore } = require('./lib/session-store');
 // makeRateLimit خودش بین پیاده‌سازیِ درون‌حافظه و SQLite انتخاب می‌کند؛ قبلاً
@@ -31,7 +31,7 @@ const { SqliteSessionStore } = require('./lib/session-store');
 const { makeRateLimit } = require('./lib/middleware');
 const { productsCache, productDetailCache, categoriesCache, relatedCache, facetsCache, settingsCache, invalidateProducts, invalidateCategories, invalidateAll } = require('./lib/cache');
 const { boolEnv, boundedIntEnv, validateProductionConfig, newRequestId, validateRuntimeConfig } = require('./lib/security-config');
-const { staticCompress, compressJson, sendHtml } = require('./lib/static-compress');
+const { compressJson } = require('./lib/static-compress');
 const { webpNegotiate } = require('./lib/webp-negotiate');
 const { isLive: paymentLive } = require('./lib/payment');
 const { reconcileStaleOrders, RECONCILE_INTERVAL_MS } = require('./lib/reconcile');
@@ -50,7 +50,6 @@ const wholesaleRoute = require('./routes/wholesale');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 // لوگو و عکس محصولات. مسیر از lib/paths.js می‌آید تا با مسیری که آپلودِ پنل
 // در آن می‌نویسد یکی بماند (هر دو `PG_PICTURE_DIR` را می‌بینند).
 const { PICTURE_DIR } = require('./lib/paths');
@@ -94,32 +93,6 @@ function requireProductionSecret(name, { minLength = 1 } = {}) {
   return value;
 }
 
-// ---------- هشِ استایلِ درون‌خطیِ صفحه‌ی آفلاین ----------
-// همه‌ی استایل‌های درون‌خطیِ سایت به style.css منتقل شدند تا 'unsafe-inline'
-// از style-src برداشته شود — به‌جز offline.html. آن صفحه وقتی نشان داده می‌شود
-// که مشتری *اینترنت ندارد*؛ اگر به style.css وابسته شود، دقیقاً همان لحظه‌ای که
-// لازم است بی‌استایل بالا می‌آید. پس <style> خودش سرِ جایش می‌ماند و به‌جای
-// مجوزِ کلی، فقط هشِ همین یک بلوک به CSP اضافه می‌شود: مرورگر این یکی را اجرا
-// می‌کند و هر استایلِ درون‌خطیِ دیگری — از جمله تزریق‌شده — را نه.
-//
-// هش در زمانِ بالا آمدن از خودِ فایل حساب می‌شود، نه دستی. اگر روزی کسی آن
-// استایل را عوض کند، هش خودکار همراهش می‌آید؛ ثابتِ دستی یعنی صفحه‌ی آفلاینِ
-// بی‌استایل، و کسی هم نمی‌فهمد چون آن صفحه فقط در قطعیِ اینترنت دیده می‌شود.
-const offlineStyleHashes = (() => {
-  try {
-    const html = fs.readFileSync(path.join(FRONTEND_DIR, 'offline.html'), 'utf8');
-    const out = [];
-    for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)) {
-      out.push(`'sha256-${crypto.createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
-    }
-    if (!out.length) log.warn('offline.html: no inline <style> found — CSP hash skipped');
-    return out;
-  } catch (e) {
-    // نبودِ فایل نباید جلوی بالا آمدن سرور را بگیرد؛ فقط آن صفحه بی‌استایل می‌شود
-    log.warn('Could not hash offline.html inline style', { err: e.message });
-    return [];
-  }
-})();
 
 // سیاست امنیت محتوا (CSP): سد اصلی در برابر تزریق اسکریپت (XSS).
 // فقط منابع خودِ سایت مجازند؛ اسکریپت بیگانه — حتی اگر جایی به HTML تزریق شود —
@@ -130,7 +103,7 @@ const offlineStyleHashes = (() => {
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  ["style-src 'self'", ...offlineStyleHashes].join(' '),
+  "style-src 'self'",
   "img-src 'self' data:",
   "font-src 'self'",
   "connect-src 'self'",
@@ -518,9 +491,8 @@ app.use((req, res, next) => {
 // واتساپی زنده‌اند باید به مسیرِ تمیزِ همان صفحه برسند — نه به ۴۰۴، و نه به
 // نسخه‌ی کهنه‌ای که دیگر به‌روز نمی‌شود.
 //
-// ترتیب مهم است: این میدل‌ور **قبل از** روت‌های سئو و `express.static` می‌آید،
-// وگرنه فایلِ قدیمی (که هنوز روی دیسک است) زودتر فرستاده می‌شود و ریدایرکت
-// هرگز اجرا نمی‌شود.
+// ترتیب مهم است: این میدل‌ور **قبل از** روت‌های داینامیک (sitemap/robots) می‌آید،
+// وگرنه آن مسیرها یا ۴۰۴ِ انتهایی زودتر جواب می‌دهند و ریدایرکت هرگز اجرا نمی‌شود.
 //
 // چرا ۳۰۱ و نه ۳۰۲: این نام‌ها هرگز برنمی‌گردند؛ سیگنالِ دائمی همان چیزی است
 // که اعتبارِ لینک‌های قدیمی را روی مسیرهای تمیز جمع می‌کند.
@@ -542,264 +514,31 @@ app.use((req, res, next) => {
   res.redirect(301, dest);
 });
 
-// مسیر تمیز صفحه‌ی محصول: /product/12 → product.html با متاهای سئوی «سرور-ساید»
-// چرا سرور-ساید؟ تلگرام/واتساپ جاوااسکریپت اجرا نمی‌کنند؛ پیش‌نمایش لینک فقط از HTML خام
-// ساخته می‌شود. عنوان، توضیح، عکس و canonical هر محصول همین‌جا داخل HTML تزریق می‌شود.
-// نکته‌ی سئو: محصول حذف‌شده کد 410 واقعی می‌گیرد (نه soft-404) تا گوگل سریع از ایندکس خارجش کند.
+// متن را برای درج در HTML/XML بی‌خطر می‌کند (نقشه‌ی سایت و پرونده‌های XML).
 const escHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-// آدرس پایه‌ی سایت (SITE_URL / siteBase) بالاتر — نزدیک میدل‌ورها — تعریف شده،
-// چون بررسی مبدأ درخواست‌ها هم به همان میزبان رسمی نیاز دارد.
-app.get('/product/:id', (req, res) => {
-  const product = getPublicProduct(Number(req.params.id));
-  if (!product) {
-    return res.status(410).sendFile(path.join(FRONTEND_DIR, 'product-gone.html'));
-  }
-  let html;
-  try {
-    html = fs.readFileSync(path.join(FRONTEND_DIR, 'product.html'), 'utf-8');
-  } catch (e) {
-    return res.sendFile(path.join(FRONTEND_DIR, 'product.html'));
-  }
+// ---------- فروشگاه روی Next زندگی می‌کند، نه اینجا ----------
+// تا روزِ بازنشستگی، این سرور خودش دو صفحه می‌ساخت: `/` با ItemList تزریقی و
+// `/product/:id` با متا و JSON-LDِ محصول. پوشهٔ `frontend/` حذف شد و هر دو صفحه
+// حالا در Next هستند؛ نام‌های `.html` هم بالاتر با پلِ ۳۰۱ به مقصدِ تمیز می‌روند.
+//
+// این دو مسیر نامِ *پاک* دارند، پس پلِ `.html` نمی‌گیردشان. قراردادشان عیناً
+// همان قراردادِ `/admin` است: اگر `SITE_URL` روی میزبانِ دیگری باشد، ۳۰۲ به همان
+// مسیر روی سایت؛ وگرنه (استقرارِ تک‌دامنه‌ای، یا نبودِ SITE_URL) می‌گذارد زنجیره
+// ادامه پیدا کند و ۴۰۴ِ خودمان می‌آید. ۳۰۲ و نه ۳۰۱: مقصد ممکن است بعداً عوض
+// شود و مرورگر نباید نسخهٔ قدیمیِ مسیر را برای همیشه کش کند.
+//
+// چرا اصلاً ۳۰۲ و نه ۴۰۴ِ خالی: همان دلیلی که پلِ ۳۰۱ برای نام‌های `.html` وجود
+// دارد — بوکمارکِ مشتری و کرالرِ قدیمی نباید به صفحه‌ی مرده برسند.
+app.use((req, res, next) => {
+  if (req.path !== '/' && !/^\/product\/\d+$/.test(req.path)) return next();
   const base = siteBase(req);
-  const title = `${product.title} | پلاسکو گلی`;
-  const desc = `خرید ${product.title} — ${product.description} قیمت: ${Number(product.price).toLocaleString('fa-IR')} تومان.`;
-  const img = product.image ? base + imagePath(product.image) : '';
-  html = html
-    // product.html (پوسته‌ی بدون محتوا) noindex است؛ اما صفحه‌ی واقعیِ محصول با
-    // آدرس تمیز /product/:id باید ایندکس شود. اینجا آن را برمی‌گردانیم.
-    .replace('<meta name="robots" content="noindex, follow">', '<meta name="robots" content="index, follow, max-image-preview:large">')
-    .replace('<title>محصول | پلاسکو گلی</title>', `<title>${escHtml(title)}</title>`)
-    .replace('<meta name="description" content="مشخصات کامل، قیمت و خرید آنلاین از فروشگاه پلاسکو گلی.">',
-      `<meta name="description" content="${escHtml(desc)}">
-<link rel="canonical" href="${base}/product/${product.id}">
-<meta property="og:type" content="product">
-<meta property="og:site_name" content="پلاسکو گلی">
-<meta property="og:url" content="${base}/product/${product.id}">
-<meta property="og:title" content="${escHtml(title)}">
-<meta property="og:description" content="${escHtml(desc)}">
-${img ? `<meta property="og:image" content="${escHtml(img)}">
-<meta property="og:image:alt" content="${escHtml(title)}">` : ''}
-<meta name="twitter:card" content="${img ? 'summary_large_image' : 'summary'}">
-<meta name="twitter:title" content="${escHtml(title)}">
-${img ? `<meta name="twitter:image" content="${escHtml(img)}">
-<meta name="twitter:image:alt" content="${escHtml(title)}">` : ''}
-<meta property="product:price:amount" content="${Number(product.price) * 10}">
-<meta property="product:price:currency" content="IRR">
-${Number(product.old_price) > Number(product.price) ? `<meta property="og:price:standard_amount" content="${Number(product.old_price) * 10}">` : ''}
-${productJsonLd(product, base)}`);
-  res.setHeader('Cache-Control', 'no-cache');
-  sendHtml(req, res, html);
+  let sameHost = true;
+  try { sameHost = new URL(base).host === req.get('host'); } catch (e) { sameHost = true; }
+  if (!SITE_HOST || sameHost) return next();
+  res.redirect(302, base + req.originalUrl);
 });
 
-// داده‌ی ساختاریافته‌ی محصول (Product + Offer + AggregateRating + BreadcrumbList).
-// چرا سمت سرور: نتیجه‌ی غنی گوگل (قیمت، موجودی، ستاره) از HTML خام خوانده می‌شود.
-// نکته‌ی مهم: aggregateRating فقط وقتی اضافه می‌شود که نظرِ تأییدشده‌ی واقعی وجود
-// داشته باشد. امتیاز ساختگی نقض راهنمای گوگل است و می‌تواند دامنه را جریمه کند.
-function productJsonLd(product, base) {
-  const url = `${base}/product/${product.id}`;
-  const inStock = Number(product.stock) > 0;
-  const node = {
-    '@context': 'https://schema.org',
-    '@type': 'Product',
-    '@id': url + '#product',
-    name: product.title,
-    description: String(product.description || product.title),
-    sku: `PG-${product.id}`,
-    url,
-    category: product.category || undefined,
-    brand: { '@type': 'Brand', name: 'پلاسکو گلی' },
-    offers: {
-      '@type': 'Offer',
-      url,
-      priceCurrency: 'IRR',
-      // گوگل قیمت را بدون جداکننده می‌خواهد. واحد سایت تومان است و IRR ریال،
-      // پس ×۱۰ می‌شود تا عدد با واحد اعلام‌شده بخواند.
-      price: Number(product.price) * 10,
-      availability: inStock
-        ? 'https://schema.org/InStock'
-        : 'https://schema.org/OutOfStock',
-      itemCondition: 'https://schema.org/NewCondition',
-      seller: { '@type': 'Organization', name: 'پلاسکو گلی' }
-    }
-  };
-
-  // هزینه‌ی ارسال و شرایط مرجوعی داخل Offer.
-  // چرا مهم است: گوگل از اواخر ۲۰۲۳ این دو را در نتیجه‌ی خرید نشان می‌دهد و
-  // نبودشان در Search Console هشدارِ زرد می‌سازد. هر دو از منبعِ حقیقیِ خودمان
-  // خوانده می‌شوند — نه عدد دلخواه:
-  //   ارسال  ← getShippingQuote (همان چیزی که مشتری سر سبد می‌بیند)
-  //   مرجوعی ← terms.html: «تا ۷ روز بعد از تحویل»
-  // عمداً returnFees و priceValidUntil را ننوشتم: هیچ‌جای پروژه تعیین نشده که
-  // هزینه‌ی پست مرجوعی با کیست یا قیمت تا چه تاریخی معتبر است، و ادعای بی‌پشتوانه
-  // در داده‌ی ساختاریافته یعنی وعده‌ای که سر صفحه‌ی نتیجه به مشتری داده می‌شود.
-  try {
-    const q = getShippingQuote(Number(product.price) || 0);
-    node.offers.shippingDetails = {
-      '@type': 'OfferShippingDetails',
-      shippingRate: {
-        '@type': 'MonetaryAmount',
-        // ×۱۰ چون واحد اعلام‌شده IRR است، مثل خود price
-        value: Number(q.shippingFee) * 10,
-        currency: 'IRR'
-      },
-      shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'IR' }
-    };
-  } catch (e) { /* تنظیمات ناخوانا نباید صفحه‌ی محصول را زمین بزند */ }
-
-  node.offers.hasMerchantReturnPolicy = {
-    '@type': 'MerchantReturnPolicy',
-    applicableCountry: 'IR',
-    returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-    merchantReturnDays: 7,
-    returnMethod: 'https://schema.org/ReturnByMail'
-  };
-
-  if (product.image) node.image = [base + imagePath(product.image)];
-
-  try {
-    const r = getProductReviews(product.id);
-    if (r && r.count > 0 && r.avg > 0) {
-      node.aggregateRating = {
-        '@type': 'AggregateRating',
-        ratingValue: r.avg,
-        reviewCount: r.count,
-        bestRating: 5,
-        worstRating: 1
-      };
-    }
-  } catch (e) { /* نبودِ امتیاز نباید صفحه‌ی محصول را زمین بزند */ }
-
-  const crumbs = {
-    '@context': 'https://schema.org',
-    '@type': 'BreadcrumbList',
-    itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'خانه', item: `${base}/` },
-      ...(product.category
-        ? [{ '@type': 'ListItem', position: 2, name: product.category, item: `${base}/?cat=${encodeURIComponent(product.category)}#products` }]
-        : []),
-      { '@type': 'ListItem', position: product.category ? 3 : 2, name: product.title, item: url }
-    ]
-  };
-
-  // شناسه‌ی data-pg-ld: صفحه‌ی محصول سمت کلاینت هم می‌تواند همین داده را بسازد؛
-  // با دیدن این نشانه دیگر نسخه‌ی تکراری تزریق نمی‌کند (دو Product schema روی یک
-  // صفحه، ریسک تفسیر متناقض دارد).
-  const dump = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
-  return `<script type="application/ld+json" data-pg-ld="product">${dump(node)}</script>
-<script type="application/ld+json" data-pg-ld="crumbs">${dump(crumbs)}</script>`;
-}
-
-// صفحه‌ی اصلی با متاهای درست‌شده.
-// مشکل: canonical و og:url و کل داده‌ی ساختاریافته‌ی index.html روی یک دامنه‌ی
-// نمونه (polasco-goli.example.com) نوشته شده بود. canonical غلط از نبودِ
-// canonical بدتر است، چون به گوگل می‌گوید «نسخه‌ی اصلی من جای دیگری است» و
-// می‌تواند باعث ایندکس نشدن کل صفحه شود. اینجا با دامنه‌ی واقعی جایگزین می‌شود.
-const PLACEHOLDER_HOST = 'https://polasco-goli.example.com';
-const seoPageCache = new Map(); // `${file}|${base}` -> { html, mtimeMs }
-// سقف: کلید این کش شاملِ `base` است و base — تا وقتی SITE_URL در .env نباشد —
-// از هدر Host خوانده می‌شود. یعنی هر کسی با فرستادنِ Host دلخواه یک ورودیِ
-// تازه (به‌اندازه‌ی کلِ index.html) می‌سازد و حافظه بی‌سقف بالا می‌رود. عملاً
-// دو-سه میزبانِ واقعی بیشتر نداریم (دامنه، www، localhost) پس ۸ با فاصله کافی
-// است و بیشتر از آن یعنی کسی دارد بازی می‌کند.
-const SEO_CACHE_MAX = 8;
-
-// صفحه‌های ایندکس‌شدنی سایت (index، terms و products) از مسیر جایگزینی رد می‌شوند؛
-// بقیه noindex اند و لازم نیست اینجا بیایند.
-function renderSeoPage(fileName) {
-  return function (req, res) {
-    const base = siteBase(req);
-    const file = path.join(FRONTEND_DIR, fileName);
-    try {
-      const mtimeMs = fs.statSync(file).mtimeMs;
-      const key = fileName + '|' + base;
-      const hit = seoPageCache.get(key);
-      if (!hit || hit.mtimeMs !== mtimeMs) {
-        const raw = fs.readFileSync(file, 'utf-8');
-        if (!hit) {
-          if (seoPageCache.size >= SEO_CACHE_MAX) seoPageCache.delete(seoPageCache.keys().next().value);
-        }
-        seoPageCache.set(key, { html: raw.split(PLACEHOLDER_HOST).join(base), mtimeMs });
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      return sendHtml(req, res, seoPageCache.get(key).html);
-    } catch (e) {
-      // اگر خواندن فایل شکست خورد، همان فایل خام سرو می‌شود — بهتر از خطای ۵۰۰
-      return res.sendFile(file);
-    }
-  };
-}
-// ---------- صفحه‌ی اصلی با ItemList تزریقی ----------
-// نتایج غنی گوگل (ListItem برای محصولات پرفروش) فقط وقتی ساخته می‌شوند که
-// کاتالوگ عوض شده باشد — همان امضایی که ETag و sitemap هم از آن استفاده می‌کنند.
-let homeItemListCache = { sig: '', html: '' };
-function buildItemList(base) {
-  const top = getTopProducts(10);
-  if (!top.length) return '';
-  // برای هر محصول به اطلاعات کامل نیاز داریم (image, price)
-  const full = top.map(t => getPublicProduct(t.id)).filter(Boolean);
-  if (!full.length) return '';
-  const items = full.map((p, i) => ({
-    '@type': 'ListItem',
-    position: i + 1,
-    url: `${base}/product/${p.id}`,
-    name: p.title,
-    image: p.image ? base + imagePath(p.image) : undefined,
-    offers: {
-      '@type': 'Offer',
-      price: Number(p.price) * 10,
-      priceCurrency: 'IRR',
-      availability: Number(p.stock) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'
-    }
-  }));
-  const dump = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
-  return `<script type="application/ld+json" data-pg-ld="itemlist">${dump({
-    '@context': 'https://schema.org',
-    '@type': 'ItemList',
-    '@id': `${base}/#top-products`,
-    name: 'محصولات پرفروش پلاسکو گلی',
-    description: 'پرفروش‌ترین لوازم پلاستیکی خانه در فروشگاه پلاسکو گلی',
-    numberOfItems: items.length,
-    itemListOrder: 'https://schema.org/ItemListUnordered',
-    itemListElement: items
-  })}</script>`;
-}
-function renderHomepage(req, res) {
-  const base = siteBase(req);
-  const file = path.join(FRONTEND_DIR, 'index.html');
-  try {
-    const mtimeMs = fs.statSync(file).mtimeMs;
-    const sig = getCatalogSignature();
-    const cacheKey = `index|${base}|${sig}`;
-    const hit = seoPageCache.get(cacheKey);
-    if (!hit || hit.mtimeMs !== mtimeMs) {
-      const raw = fs.readFileSync(file, 'utf-8').split(PLACEHOLDER_HOST).join(base);
-      // ItemList فقط وقتی تزریق می‌شود که کاتالوگ عوض شده باشد
-      if (sig !== homeItemListCache.sig) {
-        homeItemListCache.html = buildItemList(base);
-        homeItemListCache.sig = sig;
-      }
-      const html = raw.replace('<!--pg-itemlist-->', homeItemListCache.html);
-      if (seoPageCache.size >= SEO_CACHE_MAX) seoPageCache.delete(seoPageCache.keys().next().value);
-      seoPageCache.set(cacheKey, { html, mtimeMs });
-    }
-    res.setHeader('Cache-Control', 'no-cache');
-    return sendHtml(req, res, seoPageCache.get(cacheKey).html);
-  } catch (e) {
-    return res.sendFile(file);
-  }
-}
-app.get('/', renderHomepage);
-app.get('/index.html', renderHomepage);
-app.get('/terms.html', renderSeoPage('terms.html'));
-app.get('/products.html', renderSeoPage('products.html'));
-// `wholesale.html` از قلم افتاده بود: فایلش در `frontend/` است، ولی هیچ روتی
-// نداشت، پس مستقیم از `express.static` سرو می‌شد و جایگزینیِ دامنه‌ی نمونه
-// هیچ‌وقت رویش اجرا نمی‌شد. نتیجه: یک صفحه‌ی **ایندکس‌شدنی** که
-// `<link rel="canonical">` و `og:url`اش به `https://polasco-goli.example.com`
-// اشاره می‌کرد — یعنی به گوگل می‌گفت «نسخه‌ی اصلیِ من روی دامنه‌ای است که
-// وجود ندارد». canonicalِ غلط از نبودنش بدتر است.
-app.get('/wholesale.html', renderSeoPage('wholesale.html'));
 
 // robots.txt داینامیک — فایل ثابت قبلی دامنه‌ی نمونه را داشت و خط Sitemap هم
 // دو بار تکرار شده بود. این نسخه همیشه دامنه‌ی واقعیِ همان درخواست را می‌نویسد،
@@ -825,7 +564,7 @@ Sitemap: ${base}/sitemap.xml
 });
 
 // نقشه‌ی سایت داینامیک — صفحه‌ی اصلی + همه‌ی محصولات (برای سئو)
-// نکته: باید قبل از express.static باشد تا جای فایل sitemap.xml قدیمی را بگیرد
+// نکته: این روتِ داینامیک جای هر فایل ثابتی را می‌گیرد (و Express دیگر فایل ثابتی ندارد).
 //
 // کش: ساختنِ این فایل یعنی خواندنِ همه‌ی محصولات + همه‌ی دسته‌ها + یک statSync و
 // بعد چسباندنِ یک رشته‌ی چندده‌کیلوبایتی. تا امروز این کار در *هر* درخواست
@@ -861,7 +600,9 @@ app.get('/sitemap.xml', (req, res) => {
   }, '') || today;
   let termsLastmod = today;
   try {
-    termsLastmod = new Date(fs.statSync(path.join(FRONTEND_DIR, 'terms.html')).mtimeMs)
+    // متنِ قوانین حالا در Next است (پوشهٔ frontend/ حذف شد)، پس lastmod از
+    // همان‌جایی خوانده می‌شود که محتوا ویرایش می‌شود. نبودِ فایل → امروز، مثلِ قبل.
+    termsLastmod = new Date(fs.statSync(path.join(__dirname, '..', 'next-frontend', 'src', 'app', 'terms', 'page.tsx')).mtimeMs)
       .toISOString().slice(0, 10);
   } catch (e) { /* نبودِ فایل نباید نقشه‌ی سایت را بشکند */ }
 
@@ -905,7 +646,7 @@ app.get('/sitemap.xml', (req, res) => {
 });
 
 // ---------- پنلِ مدیریت در اپِ Next زندگی می‌کند ----------
-// لینکِ «پنل مدیریت» در frontend/js/account.js به مسیرِ /admin اشاره می‌کند،
+// لینکِ «پنل مدیریت» در صفحه‌ی حسابِ Next به مسیرِ /admin اشاره می‌کند،
 // ولی خودِ پنل (۱۳ نما) در next-frontend پیاده شده و این سرور صفحه‌ای برایش
 // ندارد. نتیجه‌ی قبلی: کاربرِ مدیر از سمتِ Express روی /admin می‌زد و صفحه‌ی
 // ۴۰۴ می‌گرفت — درست همان چیزی که کاربر گزارش داد.
@@ -929,35 +670,8 @@ app.use((req, res, next) => {
   res.redirect(302, base + req.originalUrl);
 });
 
-// ---------- فایل‌های استاتیک ----------
-// اول فشرده‌سازی: CSS/JS/SVG با gzip یا brotli ارسال می‌شوند (style.css از ۶۵KB
-// به حدود ۱۴KB می‌رسد). نتیجه در حافظه کش می‌شود و با تغییر فایل خودکار تازه می‌شود.
-app.use(staticCompress(FRONTEND_DIR));
-
-// CSS/JS چون با ?v= نسخه‌بندی شده‌اند، یک ماه + immutable کش می‌شوند (بازدید دوم = صفر دانلود).
-// HTML نه، تا تغییرات صفحات فوراً دیده شود.
-app.use(express.static(FRONTEND_DIR, {
-  maxAge: '7d',
-  setHeaders(res, filePath) {
-    const p = filePath.replace(/\\/g, '/').toLowerCase();
-    if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
-    // سرویس‌ورکر و manifest استثنا: اگر کهنه کش شوند، مشتری با منطق کشِ قدیمی
-    // گیر می‌افتد و خودش راهی برای بیرون آمدن ندارد.
-    else if (p.endsWith('/sw.js') || p.endsWith('manifest.json') || p.endsWith('manifest.webmanifest')) {
-      res.setHeader('Cache-Control', 'no-cache');
-    }
-    // icons.svg و favicon.svg بدون ?v= لود می‌شوند. کش کوتاه ۵ دقیقه‌ای
-    // جای no-cache: جلوگیری از ۳۰۴ بیهوده در هر جابه‌جایی صفحه.
-    else if (p.endsWith('/assets/icons.svg') || p.endsWith('/assets/favicon.svg')) {
-      res.setHeader('Cache-Control', 'public, max-age=300');
-    }
-    else if (/\.(css|js|woff2?|svg)$/i.test(p)) {
-      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
-    }
-  }
-}));
 // اگر نسخه‌ی WebP کنارِ عکس باشد و مرورگر بپذیرد، همان تحویل می‌شود (حدود ۳۰٪
-// سبک‌تر). باید قبل از express.static باشد وگرنه اصل زودتر فرستاده می‌شود.
+// سبک‌تر). باید قبل از express.static عکس‌ها باشد وگرنه اصل زودتر فرستاده می‌شود.
 app.use('/picture', webpNegotiate(PICTURE_DIR));
 // سرو عکس‌ها از پوشه‌ی picture — نام فایل‌های آپلودی تصادفی است، پس کش بلند امن است
 app.use('/picture', express.static(PICTURE_DIR, {
@@ -969,20 +683,18 @@ app.use('/picture', express.static(PICTURE_DIR, {
   }
 }));
 
-// 404 — برای API جوابِ JSON، برای صفحه‌ها صفحه‌ی ۴۰۴ اختصاصی (کد واقعی 404، نه soft-404)
+// 404 — برای API جوابِ JSON، برای بقیه متنِ ساده (کدِ واقعی 404، نه soft-404)
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'چنین مسیری وجود ندارد' });
   }
-  // res.sendFile() در Express پیش‌فرض Cache-Control: public, max-age=0 ست می‌کند.
-  // یعنی پروکسی‌های میانی می‌توانند صفحه‌ی ۴۰۴ را کش کنند — حتی برای لحظه‌ای.
-  // با no-cache می‌گوییم هر بار از سرور بپرس.
+  // این سرور دیگر صفحه‌ی HTML ندارد (فروشگاه روی Next است)، پس ۴۰۴ هم متنِ
+  // ساده است: HTMLِ دوم از این‌جا یعنی دو نسخه‌ی واگرا از یک صفحه.
+  //
+  // res.send() در Express برای متن هم پیش‌فرض Cache-Control: public, max-age=0
+  // می‌گذارد؛ با no-cache می‌گوییم هر بار از سرور بپرس.
   res.setHeader('Cache-Control', 'no-cache');
-  res.status(404).sendFile(path.join(FRONTEND_DIR, '404.html'), (sendErr) => {
-    if (sendErr && !res.headersSent) {
-      res.type('text/plain; charset=utf-8').send('چنین صفحه‌ای وجود ندارد.');
-    }
-  });
+  res.status(404).type('text/plain; charset=utf-8').send('چنین صفحه‌ای وجود ندارد.');
 });
 
 // ---------- مدیریت خطای سراسری ----------
@@ -1022,18 +734,10 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // قبلاً index.html با کد ۵۰۰ فرستاده می‌شد: کاربر صفحه‌ی اصلیِ نیمه‌کاره
-  // می‌دید و نمی‌فهمید خطا خورده. حالا صفحه‌ی اختصاصی ۵۰۰ می‌رود.
-  // callback لازم است: اگر خودِ فایل هم خوانده نشود، به جای اینکه Express
-  // دوباره وارد همین هندلر شود و حلقه بسازد، یک متن ساده می‌فرستیم.
-  // مانند ۴۰۴ بالا: جلوی کش پروکسی برای صفحه‌ی خطا
   res.setHeader('Cache-Control', 'no-cache');
-  res.status(500).sendFile(path.join(FRONTEND_DIR, '500.html'), (sendErr) => {
-    if (sendErr && !res.headersSent) {
-      res.type('text/plain; charset=utf-8')
-         .send('خطای داخلی سرور؛ چند لحظه بعد دوباره تلاش کنید.');
-    }
-  });
+  // صفحه‌ی ۵۰۰ هم دیگر فایلی روی این سرور ندارد؛ همان پیامِ متنی با کدِ ۵۰۰.
+  res.status(500).type('text/plain; charset=utf-8')
+     .send('خطای داخلی سرور؛ چند لحظه بعد دوباره تلاش کنید.');
 });
 
 // خطاهای سطح پروسه — لاگ می‌شوند و فقط در وضعیت غیرقابل ادامه خارج می‌شویم

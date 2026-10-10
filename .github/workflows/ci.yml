@@ -78,8 +78,12 @@ jobs:
       - name: Smoke tests
         run: node test-smoke.js
 
-      - name: SEO tests
-        run: node test-seo.js
+      # مجموعهی سئوی بک‌اند (`test-seo.js`) با بازنشستگیِ فروشگاهِ Express
+      # بازنشسته شد: آن آزمون HTMLِ `frontend/` را از دیسک می‌خواند و با حذفِ
+      # آن پوشه هیچ مرجعی نداشت. قراردادِ سئو امروز در jobِ فرانت‌اند سنجیده
+      # می‌شود (`seoParity.test.ts` برای متادیتای هر مسیر و
+      # `structuredData.test.ts` برای داده‌ی ساختاریافته و دارایی‌ها)، و
+      # «هیچ لینکی ۴۰۴ نشود» را خودِ Smoke در بخشِ V37 زنده می‌سنجد.
 
       - name: OWASP Top 10 scan
         run: node tests/owasp-scan.js
@@ -165,41 +169,16 @@ jobs:
       - name: Guard mutation harness (backend guards)
         run: node tests/guard-mutations.js --scope=backend
 
-      # ---------- دارایی‌های frontend/ روی سرورِ واقعی ----------
-      # خواهرِ stepِ «Static and PWA paths on a live Next» در jobِ فرانت‌اند،
-      # این‌بار برای فروشگاهِ Express و روی همان سروری که خودش سرو می‌کند.
-      #
-      # چه چیزی سنجیده می‌شود: همه‌ی فایل‌های `frontend/` — که خودِ اسکریپت از
-      # دیسک می‌شمارد، نه از فهرستِ دستی — به‌علاوهٔ آدرس‌هایی که خودِ صفحه‌ها
-      # با `?v=` صدا می‌زنند و سه روتِ داینامیک. و «۲۰۰» تنها سنجه نیست:
-      # دارایی‌ها باید بایت‌به‌بایت با دیسک یکی باشند، چون کشِ فشرده‌سازی هم ۲۰۰
-      # می‌دهد ولی بدنه‌اش می‌تواند مالِ قبل باشد.
-      #
-      # چرا همین job و نه jobِ فرانت‌اند: هیچ Next‌ای این‌جا بالا نیست، پس
-      # پیش‌شرطِ «بدونِ Next» (نام‌های هم‌نام بین دو برنامه: index.html، sw.js،
-      # manifest.webmanifest، offline.html) طبیعی برقرار است و سنجش دقیقاً همان
-      # چیزی را می‌سنجد که ادعا می‌کند. خودِ اسکریپت هم پیش‌شرط را دوباره
-      # می‌سنجد و اگر برقرار نبود با کدِ ۲ می‌شکند.
-      - name: Static assets of frontend/ on a live Express (no Next)
-        run: |
-          set -euo pipefail
-
-          # سرور از همین‌جا بالا می‌آید. اگر دیتابیس خالی باشد خودش می‌سازد و
-          # می‌کارد، پس این step به داده‌ی از پیش آماده گره نمی‌خورد؛ و به
-          # هیچ محصولِ خاصی هم تکیه نمی‌کند (فهرست از دیسک می‌آید).
-          ( PORT=3000 node server.js > /tmp/express-static.log 2>&1 & )
-
-          for _ in $(seq 1 60); do
-            curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1 && break
-            sleep 1
-          done
-          if ! curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
-            echo '::error::backend never became healthy - the frontend/ live check cannot run'
-            tail -50 /tmp/express-static.log
-            exit 1
-          fi
-
-          npm run static-paths:live
+      # ---------- دارایی‌های ثابتِ فروشگاه ----------
+      # این step بازنشسته شد: `static-paths-live.mjs` بک‌اند همه‌ی فایل‌های
+      # `frontend/` را روی سرورِ واقعی می‌سنجید و آن پوشه حذف شده است. دو
+      # چیزِ واقعی که آن سنجش می‌گرفت جای دیگری زنده‌اند و کم نشده‌اند:
+      #   • «هیچ مسیرِ بازنشسته‌ای ۲۰۰/۴۰۴ِ ناخواسته ندهد» — بخشِ V37 خودِ
+      #     Smoke، روی سروری که خودش بالا می‌آورد.
+      #   • «داراییِ فشرده بدنه‌اش با دیسک یکی باشد» — نگهبانِ
+      #     `tests/static-compress-cache.js` با میان‌افزار و فایلِ واقعی.
+      # دارایی‌های ثابتِ خودِ Next (مانیفست/سرویس‌ورکر/فونت/آفلاین) هم در
+      # jobِ فرانت‌اند، stepِ «Static and PWA paths on a live Next».
 
   frontend:
     name: Next.js typecheck, lint, test and build (Node ${{ matrix.node }})

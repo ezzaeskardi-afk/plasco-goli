@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { getProducts, getFacets } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
 import { FilterBar } from "@/components/FilterBar";
-import { CollectionPageJsonLd } from "@/components/JsonLd";
+import { CollectionPageJsonLd, BreadcrumbJsonLd } from "@/components/JsonLd";
 import { ContactFab } from "@/components/ContactFab";
 import {
   normalizeListingQuery,
@@ -312,6 +312,18 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       <CollectionPageJsonLd
         name="محصولات پلاسکو گلی"
         description="فهرست کامل محصولات پلاستیکی — لوازم خانه، آشپزخانه، نظافت و بیشتر"
+      />
+      {/* مسیرِ راه (BreadcrumbList) — در `products.html` نسخه‌ی Express این
+          قلم بود (`CollectionPage` + `BreadcrumbList`) و در Next جا افتاده بود:
+          یعنی یک واگراییِ **اعلام‌نشده** در داده‌ی ساختاریافته که هیچ نگهبانی
+          نمی‌گرفت (سنجشِ زنده‌ی برابری فقط متادیتا را مقایسه می‌کند). قلمِ دوم
+          عیناً همان واژه‌ی خودِ این صفحه است (`allProducts` در تیتر و متادیتا)
+          و آدرسش هم مثل Express آدرسِ *بی‌فیلترِ* مجموعه است. */}
+      <BreadcrumbJsonLd
+        items={[
+          { name: "خانه", url: "/" },
+          { name: "همه‌ی محصولات", url: "/products" },
+        ]}
       />
       <div className="mx-auto max-w-[1180px] px-6 py-8">
         {/* breadcrumb */}

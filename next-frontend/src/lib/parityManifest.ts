@@ -148,19 +148,27 @@ const WHY = {
     "این مسیرِ تازه فقط در Next وجود دارد (Express نسخهٔ .html را داشت)؛ برای ناشناس محافظت‌شده است.",
   productTitle:
     "عنوانِ تب را در Express خودِ اسکریپتِ کلاینت با قالبِ «| خرید با قیمت … تومان» (product.js:373) جایگزین می‌کرد؛ Next همان قالبِ دیده‌شدهٔ کاربر را مستقیم در متا می‌گذارد (گاردِ seoParity قالب را قفل کرده).",
+  injectedHead:
+    "سرِ صفحهٔ `/product/:id` را خودِ Express در زمانِ سرو بازنویسی می‌کرد: عنوان، description، robots (قالبِ خالی noindex است)، canonical و og/twitter از خودِ کالا ساخته می‌شدند (روتِ product در server.js پیش از بازنشستگی). سورسِ منجمد فقط همان قالبِ خالی است، پس این فیلدها اینجا «دادهٔ زمانِ اجرا»اند نه واگراییِ واقعی — و پیش از بازنشستگی همین مانیفست همین صفحه را زنده می‌سنجید و همهٔ این فیلدها یکسان بودند. ارزش‌ها و قالب را seoParity/apiContract قفل می‌کنند و متنِ رندرشده را کفِ پوششِ همین صفحه.",
   offlineHome:
     "دو نسخهٔ offline.html عمداً فقط در یک لینک فرق دارند: Express به /index.html و Next به / (توضیحش داخلِ خودِ فایلِ Next نوشته شده)؛ متنِ صفحه یکی است.",
   goneLegacy:
-    "میان‌افزار عمداً /product-gone.html را به مسیرِ تازه نگاشت نمی‌کند (دلیلش در legacyUrls.ts آمده)؛ Express همان فایل را ۲۰۰ می‌داد. این آدرس هیچ‌وقت لینکِ کاربر نبود، فقط حاملِ پاسخِ ۴۱۰.",
+    "میان‌افزار عمداً /product-gone.html را به مسیرِ تازه نگاشت نمی‌کند (دلیلش در legacyUrls.ts آمده)؛ Express هم پیش از بازنشستگی همان فایل را ۲۰۰ می‌داد و امروز ۴۰۴. این آدرس هیچ‌وقت لینکِ کاربر نبود، فقط حاملِ پاسخِ ۴۱۰.",
   html410:
-    "محصولِ ناموجود در هر دو ۴۱۰ می‌دهد: Express با صفحهٔ product-gone.html و Next با middleware + صفحهٔ product-gone (گاردش در legacyParity/seoParity هست).",
+    "محصولِ ناموجود در هر دو طرف ۴۱۰ می‌دهد، ولی مسیرش دو گام شده: Express دیگر خودش صفحهٔ product-gone.html را ندارد و ۳۰۲ به Next می‌فرستد و همان‌جا middleware + صفحهٔ product-gone پاسخِ ۴۱۰ را می‌دهد (گاردش در legacyParity/seoParity هست). برای کاربر و کراولر نتیجه یکی است.",
   staticAsset: "داراییِ استاتیکِ مشترک؛ هر دو ۲۰۰ می‌دهند.",
   adminGate:
     "پنلِ مدیریت فقط در Next وجود دارد و برای کاربرِ ناشناس ۳۰۷ به /login می‌رود. در Express صفحه‌ای برای پنل نیست، ولی از این پس /admin (و زیرمسیرهایش) را با ۳۰۲ به همان مسیر روی SITE_URL می‌فرستد تا لینکِ «پنل مدیریت» در صفحهٔ حساب به ۴۰۴ نخورد.",
   errorBoundary:
     "Express صفحهٔ ۵۰۰ را از هندلرِ خطای سرور سرو می‌کرد؛ Next با مرزِ خطا (error.tsx و global-error.tsx + دکمهٔ تلاشِ دوباره). چون خطای ۵۰۰ را نمی‌توان زنده تحریک کرد، فقط ساختار و فایل‌ها سنجیده می‌شوند.",
   legacyRetired:
-    "فروشگاهِ Express بازنشسته شد: این نشانی که پیش‌تر خودِ صفحه را ۲۰۰ می‌داد، حالا ۳۰۱ به همان صفحه روی Next می‌دهد — ۳۰۱ چون این نام‌ها هرگز برنمی‌گردند، ۳۰۷ روی Next چون دوره‌ی گذار است. متن و متادیتای مقایسه از اوراکلِ منجمد (tests/fixtures/legacy-oracle) خوانده می‌شود و نگهبانِ زندهٔ legacy-links-live مقصدِ دو طرف را یکی‌یکی می‌سنجد.",
+    "فروشگاهِ Express بازنشسته شد: این نشانی که پیش‌تر خودِ صفحه را ۲۰۰ می‌داد، حالا ۳۰۱ به همان صفحه روی Next می‌دهد — ۳۰۱ چون این نام‌ها هرگز برنمی‌گردند، ۳۰۷ روی Next چون دوره‌ی گذار است. متن و متادیتای مقایسه از اوراکلِ منجمد خوانده می‌شود (tests/fixtures/legacy-oracle برای HTMLِ سروشده، و tests/fixtures/legacy-src برای خودِ فایل‌های frontend/) و نگهبانِ زندهٔ legacy-links-live مقصدِ دو طرف را یکی‌یکی می‌سنجد.",
+  hostBridge:
+    "فروشگاه روی Next است: Express برای دو مسیرِ تمیزی که خودش سرو می‌کرد (`/` و `/product/:id`) با ۳۰۲ به همان مسیر روی میزبانِ سایت می‌فرستد — فقط وقتی SITE_URL روی میزبانِ دیگری باشد؛ وگرنه در استقرارِ تک‌دامنه‌ای همان مسیر را nginx به Next می‌دهد و این پل خاموش است. ۳۰۲ و نه ۳۰۱: مقصد ممکن است بعداً عوض شود و مرورگر نباید مسیر را برای همیشه کش کند. نتیجه برای کاربر یکی است: همان صفحه، ۲۰۰ از Next.",
+  retiredNoAlias:
+    "این نام عمداً در جدولِ ریدایرکت نیست (دلیلش در legacyUrls.ts آمده: هرگز لینکِ کاربر نبود، فقط حاملِ پاسخِ ۴۱۰). پیش از بازنشستگی خودِ Express همین فایل را ۲۰۰ می‌داد؛ امروز خودش هم ۴۰۴ می‌دهد، پس هر دو طرف یک حرف می‌زنند و صفحه‌ی Next با نسخهٔ منجمدِ بازنشسته سنجیده می‌شود.",
+  singleSourceAsset:
+    "این داراییِ استاتیک حالا فقط یک کپی دارد: `next-frontend/public/` که Next سروش می‌کند. کپیِ دوم در frontend/ با بازنشستگی حذف شد و این سرور همان را ۴۰۴ می‌دهد؛ دو کپی یعنی دو رفتارِ متفاوت — همان چیزی که نگهبانِ سرویس‌ورکر منعش می‌کند.",
 } as const;
 
 /** شش دستهٔ کاتالوگ — در Express در مگامنو، کشوی موبایل و فوترِ هر صفحه تکرار شده‌اند. */
@@ -286,7 +294,8 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "product",
     label: "صفحهٔ محصول",
-    express: { url: "/product/1", status: 200 },
+    express: { url: "/product/1", status: 302 },
+    statusReason: { state: "accepted", reason: WHY.hostBridge },
     next: { url: "/product/1", status: 200 },
     mode: "client",
     textFloor: 0.53,
@@ -303,6 +312,16 @@ export const PARITY_PAGES: ParityPage[] = [
         state: "accepted",
         reason: WHY.productTitle,
         source: "data",
+      },
+      {
+        // قالبِ خالیِ product.html عنوانِ ثابتِ «محصول | پلاسکو گلی» را داشت و
+        // Express در زمانِ سرو آن را با عنوانِ کالا عوض می‌کرد؛ امروز بدنهٔ
+        // مرجع همین قالبِ منجمد است، پس این جمله دیگر در HTMLِ Next پیدا
+        // نمی‌شود (و نباید بشود — عنوانِ واقعیِ کالا همان است که کاربر می‌بیند).
+        needle: "محصول پلاسکو گلی",
+        state: "accepted",
+        reason: WHY.injectedHead,
+        source: "static",
       },
       {
         needle: "محصول پیدا نشد",
@@ -334,8 +353,18 @@ export const PARITY_PAGES: ParityPage[] = [
       // این‌جا نیست چون همان دستهٔ محصولِ نمونه است و روی صفحه می‌آید.
       ...CATEGORY_NEEDLES.filter((r) => r.needle !== "ظروف نگهداری"),
     ],
+    // قالبِ منجمدِ product.html خالی است (بدونِ کالا)، پس هر فیلدی که Express
+    // در زمانِ سرو تزریق می‌کرد اینجا «تعریفِ متفاوت» می‌شود (WHY.injectedHead).
+    // تنها عنوان دلیلِ مستقل دارد: قالبِ نمایشی که اسکریپت هم عوضش می‌کرد.
     meta: [
       { field: "title", state: "accepted", reason: WHY.productTitle },
+      { field: "description", state: "accepted", reason: WHY.injectedHead },
+      { field: "robots", state: "accepted", reason: WHY.injectedHead },
+      { field: "canonical", state: "accepted", reason: WHY.injectedHead },
+      { field: "og:title", state: "accepted", reason: WHY.injectedHead },
+      { field: "og:description", state: "accepted", reason: WHY.injectedHead },
+      { field: "og:type", state: "accepted", reason: WHY.injectedHead },
+      { field: "twitter:card", state: "accepted", reason: WHY.injectedHead },
     ],
     probes: [
       {
@@ -858,7 +887,8 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "product-gone",
     label: "محصولِ حذف‌شده (۴۱۰)",
-    express: { url: "/product-gone.html", status: 200 },
+    express: { url: "/product-gone.html", status: 404 },
+    statusReason: { state: "accepted", reason: WHY.retiredNoAlias },
     next: { url: "/product-gone", status: 200 },
     mode: "server",
     textFloor: 0.95,
@@ -874,7 +904,7 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "missing-product-410",
         url: "/product/999999",
-        express: 410,
+        express: 302,
         next: 410,
         axis: "http",
         state: "accepted",
@@ -883,7 +913,7 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "legacy-product-gone-html",
         url: "/product-gone.html",
-        express: 200,
+        express: 404,
         next: 404,
         axis: "capability",
         state: "accepted",
@@ -951,14 +981,15 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "offline",
     label: "صفحهٔ آفلاین",
-    express: { url: "/offline.html", status: 200 },
+    express: { url: "/offline.html", status: 404 },
     next: { url: "/offline.html", status: 200 },
     mode: "server",
     textFloor: 0.95,
     misses: [],
     meta: [],
     probes: [],
-    statusReason: { state: "accepted", reason: WHY.offlineHome },
+    // دو تفاوتِ هم‌زمان: کدِ وضعیت (Express دیگر صفحه را ندارد) و یک لینکِ داخلی.
+    statusReason: { state: "accepted", reason: `${WHY.retiredNoAlias} ${WHY.offlineHome}` },
     files: {
       express: ["offline.html"],
       next: ["public/offline.html"],
@@ -992,20 +1023,20 @@ export const STORE_PROBES: Probe[] = [
   {
     id: "webmanifest",
     url: "/manifest.webmanifest",
-    express: 200,
+    express: 404,
     next: 200,
     axis: "capability",
     state: "accepted",
-    reason: WHY.staticAsset,
+    reason: WHY.singleSourceAsset,
   },
   {
     id: "service-worker",
     url: "/sw.js",
-    express: 200,
+    express: 404,
     next: 200,
     axis: "capability",
     state: "accepted",
-    reason: WHY.staticAsset,
+    reason: WHY.singleSourceAsset,
   },
   {
     id: "admin-gate",

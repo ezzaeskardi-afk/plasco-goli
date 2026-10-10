@@ -36,12 +36,16 @@ import {
   PARITY_PAGES,
   STORE_PROBES,
 } from "../src/lib/parityManifest.ts";
-import { legacyRedirect } from "../src/lib/legacyUrls.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NEXT_DIR = path.resolve(HERE, "..");
 const ORACLE_DIR = path.join(NEXT_DIR, "tests", "fixtures", "legacy-oracle");
 const ORACLE_PROVENANCE = path.join(ORACLE_DIR, "provenance.json");
+// سورسِ منجمدِ کلِ frontend/ — پشتوانهٔ دومِ بدنهٔ مرجع. برای صفحه‌هایی که
+// اوراکلِ «سروشده» ندارند (۴۰۴، ۵۰۰، آفلاین، product-gone، product) همین
+// فایل‌ها معیارِ متن و متادیتا هستند، چون سرورِ Express دیگر آن‌ها را ندارد.
+const SRC_DIR = path.join(NEXT_DIR, "tests", "fixtures", "legacy-src");
+const SRC_PROVENANCE = path.join(SRC_DIR, "provenance.json");
 
 // ------------------------------------------------------------
 // آرگومان‌ها
@@ -183,19 +187,64 @@ const oracleProvenance = fs.existsSync(ORACLE_PROVENANCE)
   ? JSON.parse(fs.readFileSync(ORACLE_PROVENANCE, "utf8"))
   : { entries: [] };
 
+const srcProvenance = fs.existsSync(SRC_PROVENANCE)
+  ? JSON.parse(fs.readFileSync(SRC_PROVENANCE, "utf8"))
+  : { entries: [] };
+
+/** کارنامهٔ فایلِ منجمد — با sha اگر منبعش ثبتش کرده باشد. */
+function provenanceOf(entries, pick) {
+  const entry = (entries || []).find(pick);
+  return { entry, tampered: Boolean(entry && entry.sha256) };
+}
+
 /**
- * اوراکلِ منجمدِ یک صفحه، یا `null` اگر این صفحه با بازنشستگی کاری ندارد.
- * `--no-oracle` عمداً دارد تا بتوان دو حالت را کنارِ هم سنجید (A/B) — همان
- * کاری که برای اثبات «انجماد رفتار را عوض نکرد» لازم است.
+ * بدنهٔ *مرجعِ* یک صفحه — دو پشتوانه، به ترتیبِ اعتبار:
+ *
+ *   ۱) 🧊 `legacy-oracle/<id>.html` — همان HTMLی که سرورِ Express واقعاً سرو
+ *      کرده بود (شاملِ تزریق‌های سرورساید: متای محصول، ItemListِ صفحهٔ اصلی).
+ *   ۲) 📦 `legacy-src/<files.express[0]>` — خودِ فایلِ `frontend/` پیش از حذف.
+ *      برای صفحه‌هایی که اوراکلِ سروشده ندارند و امروز روی Express ۴۰۴/۳۰۲
+ *      می‌گیرند (۴۰۴، آفلاین، product-gone، product) این تنها معیارِ ممکن است؛
+ *      بدونِ آن، بدنهٔ خالی با HTMLِ Next مقایسه می‌شد و «پوششِ متن ۰٪» می‌داد —
+ *      یعنی نگهبان بدونِ اینکه کسی متن را عوض کند، بی‌معنا می‌شد.
+ *
+ * `null` یعنی این صفحه بدنهٔ مرجعی ندارد و باید از پاسخِ زنده سنجیده شود.
+ * `--no-oracle` هر دو پشتوانه را خاموش می‌کند تا بتوان دو حالت را کنارِ هم
+ * سنجید (A/B) — همان کاری که برای اثباتِ «انجماد رفتار را عوض نکرد» لازم است.
  */
 function loadOracle(page) {
   if (NO_ORACLE || page.mode === "source") return null;
-  if (!legacyRedirect(page.express.url.split("?")[0], "")) return null;
-  const file = path.join(ORACLE_DIR, `${page.id}.html`);
-  if (!fs.existsSync(file)) return { missing: true, file };
-  const html = fs.readFileSync(file, "utf8");
-  const entry = (oracleProvenance.entries || []).find((e) => e.id === page.id);
-  return { html, file, entry, sha: sha256(html), tampered: Boolean(entry && entry.sha256 !== sha256(html)) };
+  const oracleFile = path.join(ORACLE_DIR, `${page.id}.html`);
+  if (fs.existsSync(oracleFile)) {
+    const html = fs.readFileSync(oracleFile, "utf8");
+    const { entry, tampered } = provenanceOf(oracleProvenance.entries, (e) => e.id === page.id);
+    return {
+      html,
+      file: oracleFile,
+      kind: "oracle",
+      entry,
+      sha: sha256(html),
+      tampered: tampered && entry.sha256 !== sha256(html),
+    };
+  }
+  const rel = page.files.express[0];
+  const srcFile = rel ? path.join(SRC_DIR, rel) : "";
+  if (!srcFile || !fs.existsSync(srcFile)) {
+    return { missing: true, file: oracleFile, triedSrc: srcFile };
+  }
+  const html = fs.readFileSync(srcFile, "utf8");
+  const { entry, tampered } = provenanceOf(
+    srcProvenance.entries,
+    (e) => e.id === page.id || e.file === rel,
+  );
+  return {
+    html,
+    file: srcFile,
+    kind: "src",
+    entry,
+    sha: sha256(html),
+    tampered: tampered && entry.sha256 !== sha256(html),
+  };
 }
 
 // ------------------------------------------------------------
@@ -233,13 +282,17 @@ if (!(await checkOrigin("Express", EX))) process.exit(2);
 if (!(await checkOrigin("Next", NX))) process.exit(2);
 
 console.log(`برابریِ فروشگاه — Express ${EX}  ↔  Next ${NX}`);
-const frozenCount = NO_ORACLE ? 0 : PARITY_PAGES.filter((p) => {
-  if (p.mode === "source" || !legacyRedirect(p.express.url.split("?")[0], "")) return false;
-  return fs.existsSync(path.join(ORACLE_DIR, `${p.id}.html`));
-}).length;
-if (frozenCount) {
+const frozenPages = NO_ORACLE
+  ? []
+  : PARITY_PAGES.map((p) => ({ p, frozen: loadOracle(p) })).filter(
+      ({ frozen }) => frozen && !frozen.missing,
+    );
+if (frozenPages.length) {
+  const nOracle = frozenPages.filter(({ frozen }) => frozen.kind === "oracle").length;
+  const nSrc = frozenPages.length - nOracle;
   console.log(
-    `اوراکلِ منجمد: ${frozenCount} صفحه از tests/fixtures/legacy-oracle/ خوانده می‌شود (🧊) — ` +
+    `بدنهٔ مرجعِ منجمد: ${frozenPages.length} صفحه — 🧊 ${nOracle} از tests/fixtures/legacy-oracle/ ` +
+      `(HTMLِ سروشده) و 📦 ${nSrc} از tests/fixtures/legacy-src/ (سورسِ frontend/). ` +
       `کدِ وضعیت همچنان زنده سنجیده می‌شود.`,
   );
 }
@@ -260,8 +313,10 @@ for (const page of PARITY_PAGES) {
     get(NX + page.next.url),
   ]);
   const oracle = loadOracle(page);
-  // کدِ وضعیت همیشه از سرورِ زنده می‌آید؛ بدنه (وقتی اوراکل هست) از فایل.
-  const ex = oracle && !oracle.missing ? { ...live, body: oracle.html, frozen: true } : live;
+  // کدِ وضعیت همیشه از سرورِ زنده می‌آید؛ بدنه (وقتی بدنهٔ مرجع هست) از فایل.
+  const ex = oracle && !oracle.missing
+    ? { ...live, body: oracle.html, frozen: true, frozenKind: oracle.kind }
+    : live;
   // شمارندهٔ واگراییِ همین صفحه — اوراکلِ گم/دست‌کاری‌شده هم واگرایی است، پس
   // باید پیش از این دو بررسی زنده باشد (وگرنه مسیرِ «اوراکلِ خراب» با
   // ReferenceError می‌میرد و گزارشِ درست هیچ‌وقت چاپ نمی‌شود).
@@ -271,8 +326,8 @@ for (const page of PARITY_PAGES) {
       page,
       "new",
       "text",
-      `اوراکلِ منجمدِ این صفحه نیست — پس از بازنشستگی متنِ Express از کجا سنجیده شود؟ ` +
-        `بساز: node scripts/freeze-legacy-oracle.mjs`,
+      `بدنهٔ مرجعِ منجمدِ این صفحه نیست — پس از بازنشستگی متن و متادیتای Express از کجا سنجیده شود؟ ` +
+        `یا اوراکل بساز (node scripts/freeze-legacy-oracle.mjs) یا فایلِ «${page.files.express[0]}» را در tests/fixtures/legacy-src/ داشته باش`,
     );
     pageNew++;
   }
@@ -281,7 +336,7 @@ for (const page of PARITY_PAGES) {
       page,
       "new",
       "text",
-      `اوراکلِ منجمد دست‌کاری شده (sha با کارنامه نمی‌خواند) — یا عمدی دوباره منجمدش کن یا دست نزن`,
+      `بدنهٔ منجمد (${oracle.kind === "oracle" ? "legacy-oracle" : "legacy-src"}) دست‌کاری شده (sha با کارنامه نمی‌خواند) — یا عمدی دوباره منجمزش کن یا دست نزن`,
     );
     pageNew++;
   }
@@ -314,7 +369,9 @@ for (const page of PARITY_PAGES) {
       );
     }
   }
-  bits.push(`${ex.status}/${nx.status}${ex.frozen ? " 🧊" : ""}`);
+  bits.push(
+    `${ex.status}/${nx.status}${ex.frozen ? (ex.frozenKind === "src" ? " 📦" : " 🧊") : ""}`,
+  );
 
   if (page.mode === "redirect") {
     console.log(`${head0}  ${bits.join(" ")}  (ریدایرکت — فقط کدِ وضعیت)`);
@@ -375,9 +432,14 @@ for (const page of PARITY_PAGES) {
       }
     }
     for (const rule of page.misses) {
-      if (!used.has(rule.needle)) {
-        add(page, "stale", "text", `اعلامِ کهنه: needleِ «${rule.needle}» دیگر هیچ جمله‌ای را نمی‌پوشاند — از مانیفست بردار`);
-      }
+      if (used.has(rule.needle)) continue;
+      // needleِ «دادهٔ زمانِ اجرا» هرگز در بدنهٔ منجمد پیدا نمی‌شود: آن بدنه یا
+      // اوراکلِ HTMLِ سروشده است (که پشتش دیتابیسِ لحظه‌ی انجماد بوده) یا
+      // قالبِ خالیِ frontend/ (که داده هیچ‌وقت داخلش نبوده). پس «کهنه» خواندنش
+      // درست نیست — فقط می‌شود گفت این یکی زنده قابلِ سنجش نیست و باید با
+      // گاردهای منبع (seoParity/apiContract) قفل شده باشد.
+      if (rule.source === "data") continue;
+      add(page, "stale", "text", `اعلامِ کهنه: needleِ «${rule.needle}» دیگر هیچ جمله‌ای را نمی‌پوشاند — از مانیفست بردار`);
     }
     if (cov.missing.length && pageNew === 0) {
       bits.push(`— ${cov.missing.length} جملهٔ اعلام‌شده گم است`);

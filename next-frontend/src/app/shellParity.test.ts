@@ -29,8 +29,10 @@ import { describe, expect, it } from "vitest";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIR = path.resolve(HERE, "..", ".."); // next-frontend/
 const SRC_DIR = path.join(FRONTEND_DIR, "src");
-const REPO_DIR = path.resolve(FRONTEND_DIR, "..");
-const EXPRESS_DIR = path.join(REPO_DIR, "frontend");
+// اوراکلِ منجمد: نسخه‌ی متنِ کاملِ فروشگاهِ Express، همان‌طور که پیش از
+// حذفِ `frontend/` روی دیسک بود — از این پس منبعِ حقیقت همین fixture است،
+// نه یک پوشه‌ی زنده‌ی در حالِ خروج (وگرنه این نگهبان‌ها بی‌صدا skip می‌شدند).
+const EXPRESS_DIR = path.join(FRONTEND_DIR, "tests", "fixtures", "legacy-src");
 
 function walk(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -59,10 +61,10 @@ const nextSrc = readAll(
 );
 
 const expressIndexPath = path.join(EXPRESS_DIR, "index.html");
-const HAS_EXPRESS = fs.existsSync(expressIndexPath);
+const HAS_ORACLE = fs.existsSync(expressIndexPath);
 
 // منبعِ Express: همان سه فایلی که پوسته را می‌سازند.
-const expressSrc = HAS_EXPRESS
+const expressSrc = HAS_ORACLE
   ? [
       fs.readFileSync(expressIndexPath, "utf8"),
       fs.readFileSync(path.join(EXPRESS_DIR, "js", "common.js"), "utf8"),
@@ -165,7 +167,7 @@ const FEATURES: Feature[] = [
 /** لنگرهای صفحه‌ی اصلی که در هر دو فرانت‌اند باید وجود داشته باشند. */
 const ANCHORS = ["home", "products", "about", "faq", "track", "contact"];
 
-const describeExpress = HAS_EXPRESS ? describe : describe.skip;
+const describeExpress = HAS_ORACLE ? describe : describe.skip;
 
 describeExpress("پوسته ی Express در Next هم هست", () => {
   it("هر قابلیتِ پوسته در هر دو طرف موجود است", () => {
