@@ -37,9 +37,8 @@ import { createAddress, createOrder, getAddresses, updateAddress } from "@/lib/a
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NEXT_DIR = path.resolve(HERE, "..", "..");
-const REPO_DIR = path.resolve(NEXT_DIR, "..");
-const COMMON_JS = path.join(REPO_DIR, "frontend", "js", "common.js");
-const HAS_EXPRESS = fs.existsSync(COMMON_JS);
+// اوراکلِ منجمدِ فروشگاهِ Express (اگر روزی لازم شد) کنارِ همین تست‌هاست:
+// `tests/fixtures/legacy-src/`. نگهبانِ زیر به کلاینتِ *زنده* اشاره می‌کند.
 
 /** پاسخی به‌شکلِ Response که `fetcher` می‌خواند (ok/status/json). */
 function jsonRes(body: unknown) {
@@ -142,25 +141,29 @@ describe("قراردادِ آدرس‌ها و سفارش بین سرور و فر
   });
 });
 
-describe("قراردادِ هدرها در کلاینتِ Express (`frontend/js/common.js`)", () => {
-  it.skipIf(!HAS_EXPRESS)(
-    "PG.api هدرِ Content-Type را با هدرهای فراخوان ادغام می‌کند",
-    () => {
-      const src = fs.readFileSync(COMMON_JS, "utf8");
 
-      // هدرهای فراخوان باید از `options` بیرون کشیده شوند؛ در غیر این صورت هر
-      // `...fetchOpts`ی که بعد از `headers` بیاید، کلِ هدرهای پیش‌فرض را
-      // جایگزین می‌کند — همان باگی که رخ داد.
-      expect(
-        src,
-        "هدرهای فراخوان باید از options جدا شوند تا گسترشِ بقیهٔ گزینه‌ها آن‌ها را پاک نکند",
-      ).toMatch(/const\s*\{\s*timeout\s*,\s*headers\s*,\s*\.\.\.fetchOpts\s*\}\s*=\s*options/);
-
-      // و ادغام باید واقعاً انجام شود (نه جایگزینی).
-      expect(
-        src,
-        "Content-Type باید با هدرهای فراخوان ادغام شود",
-      ).toMatch(/headers:\s*\{\s*'Content-Type':\s*'application\/json'\s*,\s*\.\.\.\(headers\s*\|\|\s*\{\}\)\s*\}/);
-    },
-  );
+// ============================================================
+// قراردادِ ادغامِ هدرها — از کلاینتِ Express به کلاینتِ زنده منتقل شد
+// ============================================================
+// این نگهبان در عصرِ Express روی `frontend/js/common.js` نوشته شد: آن‌جا
+// `...fetchOpts` *بعد* از `headers` می‌آمد و هر فراخوانی‌ای که هدرِ خودش را
+// می‌فرستاد (checkout.js برای `Idempotency-Key`) `Content-Type` را کل دور
+// می‌ریخت؛ مرورگر بدنه را `text/plain` می‌فرستاد، `express.json()` آن را
+// پارس نمی‌کرد و هر سفارش با «آدرس معتبر انتخاب نشده» رد می‌شد.
+//
+// حالا همان قرارداد روی کلاینتِ زنده سنجیده می‌شود: `api.ts` باید هدرهای
+// پیش‌فرض را با هدرهای فراخوان *ادغام* کند، نه جایگزین.
+describe("قراردادِ ادغامِ هدرها در کلاینتِ Next (`src/lib/api.ts`)", () => {
+  it("هدرهای فراخوان روی پیش‌فرض‌ها سوار می‌شوند (نه جایگزین)", () => {
+    const src = fs.readFileSync(
+      path.join(NEXT_DIR, "src", "lib", "api.ts"),
+      "utf8",
+    );
+    expect(
+      src,
+      "`...init.headers` باید *بعد* از `Content-Type` بیاید تا آن را پاک نکند",
+    ).toMatch(
+      /headers:\s*\{\s*"Content-Type":\s*"application\/json",\s*\.\.\.init\.headers,?\s*\}/,
+    );
+  });
 });

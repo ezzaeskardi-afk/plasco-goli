@@ -32,10 +32,12 @@ import { describe, expect, it } from "vitest";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NEXT_DIR = path.resolve(HERE, "..", ".."); // next-frontend/
-const REPO_DIR = path.resolve(NEXT_DIR, "..");
-const EXPRESS_DIR = path.join(REPO_DIR, "frontend");
+// اوراکلِ منجمد: نسخه‌ی متنِ کاملِ فروشگاهِ Express، همان‌طور که پیش از
+// حذفِ `frontend/` روی دیسک بود — از این پس منبعِ حقیقت همین fixture است،
+// نه یک پوشه‌ی زنده‌ی در حالِ خروج (وگرنه این نگهبان‌ها بی‌صدا skip می‌شدند).
+const EXPRESS_DIR = path.join(NEXT_DIR, "tests", "fixtures", "legacy-src");
 
-const HAS_EXPRESS = fs.existsSync(path.join(EXPRESS_DIR, "cart.html"));
+const HAS_ORACLE = fs.existsSync(path.join(EXPRESS_DIR, "cart.html"));
 
 // ---------- فایل‌های دو طرف ----------
 const CART_HTML = "cart.html";
@@ -788,7 +790,7 @@ const STORE_RESTORED: { what: string; re: RegExp }[] = [
   { what: "«افزودن به سبد خرید» به‌جای «افزودن به سبد»", re: /افزودن به سبد خرید/ },
 ];
 
-const describeExpress = HAS_EXPRESS ? describe : describe.skip;
+const describeExpress = HAS_ORACLE ? describe : describe.skip;
 
 describeExpress("متنِ سبد، پرداخت و فیلترها بین Express و Next یکی است", () => {
   for (const [label, claims] of [

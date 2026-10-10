@@ -485,11 +485,22 @@ function shutdown(code) {
     const pDel = await api('DELETE', `/admin/products/${pNew.data.product.id}`);
     check('Admin: unsold product is really deleted', pDel.status === 200 && pDel.data.deleted === true);
 
-    // SEO: a deleted product page must answer with a real HTTP 410 (not a soft-404)
+    // SEO: صفحه‌ی محصول (و ۴۱۰ِ «حذف‌شده») حالا روی Next است و همان‌جا با
+    // `notFound()` پاسخ می‌گیرد (`app/product/[id]/page.tsx`، مرزِ
+    // `not-found.tsx`) — یعنی ۴۰۴ِ واقعی، نه soft-404. آن‌چه این سرور باید
+    // تضمین کند این است که نامِ محصولِ حذف‌شده را تبلیغ نکند و صفحه‌ای برایش
+    // سرو نکند.
     const goneRes = await fetch(`${BASE}/product/${pNew.data.product.id}`, { redirect: 'manual' });
-    check('Deleted product page returns HTTP 410 (SEO-safe)', goneRes.status === 410);
+    check('V6 SEO: صفحه‌ی محصولِ حذف‌شده روی این مبدأ سرو نمی‌شود', goneRes.status === 404, String(goneRes.status));
+    const smDel = await (await fetch(`${BASE}/sitemap.xml`)).text();
+    check('V6 SEO: نامِ محصولِ حذف‌شده در نقشه‌ی سایت نیست',
+      !smDel.includes(`/product/${pNew.data.product.id}`));
     const aliveRes = await fetch(`${BASE}/product/${buyable.id}`, { redirect: 'manual' });
-    check('Existing product page still returns HTTP 200', aliveRes.status === 200);
+    check('V6 SEO: صفحه‌ی محصول هم روی این مبدأ نیست (صاحبش Next است)',
+      aliveRes.status === 404, String(aliveRes.status));
+    const smAlive = await (await fetch(`${BASE}/sitemap.xml`)).text();
+    check('V6 SEO: محصولِ زنده در نقشه‌ی سایتِ این سرور هست (کارِ سئوی داده)',
+      smAlive.includes(`/product/${buyable.id}`));
 
     // ============ V7: SHIPPING / CANCEL / RETURN / REVIEWS / GALLERY ============
     // admin gets a password so we can hop between sessions without OTP cooldowns.
@@ -776,7 +787,7 @@ function shutdown(code) {
     }
 
     // بازدیدشمار: یک بازدید صفحه → آمار امروز داشبورد
-    await fetch(`${BASE}/index.html`);
+    await fetch(`${BASE}/`); // شمارندهٔ بازدید: درخواستِ صفحه‌محور (وسطِ زنجیره، پیش از ۳۰۲/۴۰۴)
     const statsV = await api('GET', '/admin/stats');
     check('V9 visits: dashboard counts today visits', statsV.status === 200 && (statsV.data.stats.today_visits || 0) >= 1);
 
@@ -853,66 +864,16 @@ function shutdown(code) {
 
     await api('POST', '/auth/logout');
 
-    // ============ V10: فشرده‌سازی و سیاست کش فایل‌های استاتیک ============
-    // چرا تست دارد: این‌ها هدرند و هیچ‌وقت روی صفحه دیده نمی‌شوند، پس اگر خراب
-    // شوند کسی متوجه نمی‌شود — فقط سایت بی‌سروصدا کند می‌شود. یک بار هم دقیقاً
-    // همین اتفاق افتاد: میان‌افزار فشرده‌سازی سیاست «یک ماه + immutable» را با
-    // «یک ساعت» بازنویسی می‌کرد و مشتریِ برگشته هر ساعت همه‌چیز را دوباره می‌گرفت.
-    // نکته: fetch خودِ Node بدنه را قبل از تحویل باز می‌کند، پس اندازه‌ی
-    // arrayBuffer همیشه حجمِ *باز شده* است. حجم واقعیِ روی سیم فقط از هدر
-    // Content-Length خوانده می‌شود.
-    async function head(p, extra = {}) {
-      const res = await fetch(`${BASE}${p}`, { headers: { 'Accept-Encoding': 'br, gzip', ...extra } });
-      const len = Number(res.headers.get('content-length') || 0);
-      await res.arrayBuffer();
-      return {
-        status: res.status,
-        enc: res.headers.get('content-encoding'),
-        cache: res.headers.get('cache-control') || '',
-        vary: res.headers.get('vary') || '',
-        bytes: len
-      };
-    }
-
-    const hCss = await head('/css/style.css');
-    check('V10 static: style.css فشرده ارسال می‌شود',
-      hCss.status === 200 && /br|gzip/.test(hCss.enc || ''), `enc=${hCss.enc}`);
-    check('V10 static: فایل نسخه‌دار یک‌ماهه و immutable کش می‌شود',
-      /max-age=2592000/.test(hCss.cache) && /immutable/.test(hCss.cache), hCss.cache);
-    check('V10 static: هدر Vary روی Accept-Encoding ست شده',
-      /accept-encoding/i.test(hCss.vary), hCss.vary);
-
-    const hSw = await head('/sw.js');
-    // سرویس‌ورکرِ کهنه یعنی مشتری در نسخه‌ی قدیمیِ منطق کش گیر می‌کند و خودش
-    // راه بیرون آمدن ندارد — پس این یکی هرگز نباید immutable شود.
-    check('V10 static: sw.js بلندمدت کش نمی‌شود',
-      /no-cache/.test(hSw.cache) && !/immutable/.test(hSw.cache), hSw.cache);
-
-    // صفحه‌ی اصلی و صفحه‌ی محصول از مسیر express.static رد نمی‌شوند (متاهای سئو
-    // سمت سرور تزریق می‌شود) پس باید جداگانه فشرده شوند.
-    const hHome = await head('/');
-    const homeRaw = await fetch(`${BASE}/`, { headers: { 'Accept-Encoding': 'identity' } });
-    const homeRawLen = Number(homeRaw.headers.get('content-length') || 0);
-    await homeRaw.arrayBuffer();
-    check('V10 static: صفحه‌ی اصلی فشرده ارسال می‌شود',
-      hHome.status === 200 && /br|gzip/.test(hHome.enc || ''), `enc=${hHome.enc}`);
-    check('V10 static: فشرده‌سازی صفحه‌ی اصلی دست‌کم نصف حجم را کم می‌کند',
-      hHome.bytes > 0 && homeRawLen > 0 && hHome.bytes < homeRawLen / 2,
-      `${hHome.bytes} از ${homeRawLen}`);
-
-    const hProd = await head(`/product/${buyable.id}`);
-    check('V10 static: صفحه‌ی محصول فشرده ارسال می‌شود',
-      hProd.status === 200 && /br|gzip/.test(hProd.enc || ''), `enc=${hProd.enc}`);
-
-    // مرورگر قدیمی که فشرده‌سازی نمی‌فهمد هم باید صفحه‌ی سالم بگیرد
-    const plain = await fetch(`${BASE}/`, { headers: { 'Accept-Encoding': 'identity' } });
-    const plainText = await plain.text();
-    check('V10 static: بدون پشتیبانی فشرده‌سازی هم HTML سالم می‌رسد',
-      plain.status === 200 && !plain.headers.get('content-encoding') &&
-      /<\/html>/.test(plainText));
+    // ============ V10: فشرده‌سازی و کشِ دارایی‌ها — دیگر اینجا نیست ============
+    // این سرور دیگر فایلِ ثابتی ندارد (پوشهٔ `frontend/` حذف شد): نه CSS/JSِ
+    // نسخه‌دار، نه sw.js، نه صفحه‌های HTML. قراردادِ فشرده‌سازی و کش حالا روی
+    // Next است (`next.config.ts`: compress + هدرهای کش) و سنجشِ زندهٔ آن‌جا
+    // (`next-frontend/scripts/static-paths-live.mjs`) همان را می‌سنجد.
 
     // ============ V10: هدرهای امنیتی و صفحه‌های خطا ============
-    const secRes = await fetch(`${BASE}/`);
+    // هدرها روی *هر* پاسخِ این سرور ست می‌شوند؛ robots.txt یک روتِ زندهٔ
+    // همین سرور است (صفحه‌های HTML دیگر از اینجا سرو نمی‌شوند).
+    const secRes = await fetch(`${BASE}/robots.txt`);
     await secRes.arrayBuffer();
     const H = (n) => secRes.headers.get(n) || '';
     check('V10 امنیت: هدرهای پایه ست شده‌اند',
@@ -925,33 +886,17 @@ function shutdown(code) {
       /default-src 'self'/.test(csp) && /script-src 'self'/.test(csp) &&
       !/script-src[^;]*unsafe-inline/.test(csp), csp.slice(0, 60));
 
-    // چون CSP اسکریپت درون‌خطی را بلاک می‌کند، هیچ صفحه‌ای نباید اسکریپت
-    // درون‌خطی داشته باشد. یک بار همین اتفاق افتاد و دکمه‌ی «تلاش دوباره»ی
-    // صفحه‌ی ۵۰۰ کاملاً مرده بود بدون اینکه هیچ خطایی جایی دیده شود.
+    // صفحه‌های فروشگاه دیگر روی این سرور نیستند (پوشهٔ `frontend/` حذف شد)، پس
+    // «اسکریپتِ درون‌خطی» و «مسیرِ داراییِ نسبی در صفحهٔ خطا» موضوعی ندارند: اینجا
+    // هیچ HTMLِ دومی سرو نمی‌شود. آنچه می‌ماند قراردادِ تازهٔ ۴۰۴ است.
     const fsx = require('fs');
-    const FRONT = path.join(__dirname, '..', 'frontend');
-    const pages = fsx.readdirSync(FRONT).filter(f => f.endsWith('.html'));
-    const withInline = pages.filter(f => {
-      const tags = fsx.readFileSync(path.join(FRONT, f), 'utf8').match(/<script[^>]*>/g) || [];
-      // ld+json داده است نه کد؛ مرورگر اجرا نمی‌کندش و CSP هم کاری با آن ندارد
-      return tags.some(t => !/\bsrc=/.test(t) && !/ld\+json/.test(t));
-    });
-    check('V10 امنیت: هیچ صفحه‌ای اسکریپت درون‌خطی ندارد (سازگار با CSP)',
-      withInline.length === 0, withInline.join(', '));
-
-    // صفحه‌های خطا روی *هر* آدرسی سرو می‌شوند، پس مسیر نسبی در آن‌ها یعنی
-    // CSS و JS پیدا نمی‌شود و کاربر یک صفحه‌ی کاملاً بی‌استایل می‌بیند.
-    const deep = await fetch(`${BASE}/foo/bar/baz`);
+    const deep = await fetch(`${BASE}/foo/bar/baz`, { redirect: 'manual' });
     const deepHtml = await deep.text();
-    const relAssets = (deepHtml.match(/(?:href|src)="(?!\/|https?:|#|tel:|mailto:|data:)[^"]+"/g) || []);
-    check('V10 خطا: مسیر عمیق ناموجود کد ۴۰۴ واقعی می‌دهد', deep.status === 404);
-    check('V10 خطا: صفحه‌ی ۴۰۴ هیچ مسیر نسبی ندارد (روی هر آدرسی استایل دارد)',
-      relAssets.length === 0, relAssets.slice(0, 3).join(' '));
-    const errPages = ['404.html', '500.html', 'product-gone.html'].filter(f => {
-      const t = fsx.readFileSync(path.join(FRONT, f), 'utf8');
-      return (t.match(/(?:href|src)="(?!\/|https?:|#|tel:|mailto:|data:|\?)[^"]+"/g) || []).length > 0;
-    });
-    check('V10 خطا: هر سه صفحه‌ی خطا مسیرهای مطلق دارند', errPages.length === 0, errPages.join(', '));
+    check('V10 خطا: مسیر عمیق ناموجود کد ۴۰۴ واقعی می‌دهد', deep.status === 404, String(deep.status));
+    check('V10 خطا: ۴۰۴ دیگر HTML نیست (فروشگاه یک نسخه دارد، روی Next)',
+      /text\/plain/.test(deep.headers.get('content-type') || '') && !/<html/i.test(deepHtml),
+      deep.headers.get('content-type') || '—');
+    check('V10 خطا: ۴۰۴ کش نمی‌شود', /no-cache/.test(deep.headers.get('cache-control') || ''), deep.headers.get('cache-control') || '—');
 
     // ---- گزارش‌گیری CSP ----
     check('V10 امنیت: CSP آدرس گزارش تخلف را اعلام می‌کند',
@@ -1023,72 +968,12 @@ function shutdown(code) {
       /^[a-f0-9]{12}$/.test(dirty.headers.get('x-request-id') || ''),
       dirty.headers.get('x-request-id'));
 
-    // ============ V10: PWA ============
-    const manRes = await fetch(`${BASE}/manifest.webmanifest`);
-    const man = JSON.parse(await manRes.text());
-    check('V10 PWA: manifest سرو می‌شود و JSON معتبر است', manRes.status === 200);
-    const pngAny = man.icons.filter(i => i.type === 'image/png' && (i.purpose || 'any').includes('any')).map(i => i.sizes);
-    // شرط نصب‌پذیری کروم: دست‌کم یک آیکون PNG ۱۹۲ و یکی ۵۱۲
-    check('V10 PWA: آیکون PNG در هر دو اندازه‌ی لازم هست (شرط نصب کروم)',
-      pngAny.includes('192x192') && pngAny.includes('512x512'), pngAny.join(', '));
-    const maskables = man.icons.filter(i => (i.purpose || '').includes('maskable'));
-    check('V10 PWA: آیکون maskable جدا از favicon است',
-      maskables.length === 1 && maskables[0].type === 'image/png' && maskables[0].src !== '/assets/favicon.svg',
-      JSON.stringify(maskables));
-    check('V10 PWA: manifest شناسه و دامنه‌ی مشخص دارد',
-      man.id === '/' && man.scope === '/' && man.display === 'standalone');
-
-    // هر آیکونی که در manifest اعلام شده باید واقعاً وجود داشته باشد؛ آدرس
-    // اشتباه یعنی اندروید بی‌صدا آیکون پیش‌فرضِ خاکستری می‌گذارد.
-    const iconMisses = [];
-    for (const ic of man.icons.concat(...man.shortcuts.map(s => s.icons || []))) {
-      const r = await fetch(`${BASE}${ic.src}`);
-      await r.arrayBuffer();
-      if (r.status !== 200) iconMisses.push(`${ic.src}=${r.status}`);
-    }
-    check('V10 PWA: همه‌ی آیکون‌های اعلام‌شده واقعاً وجود دارند',
-      iconMisses.length === 0, iconMisses.join(', '));
-
-    // apple-touch-icon باید PNG باشد؛ سافاری JPEG/JFIF را مطمئن نمی‌پذیرد و
-    // قبلاً یک فایل .jfif معرفی شده بود (آن هم فقط در صفحه‌ی اصلی).
-    const appleRes = await fetch(`${BASE}/assets/apple-touch-icon.png`);
-    const appleBuf = Buffer.from(await appleRes.arrayBuffer());
-    check('V10 PWA: apple-touch-icon واقعاً PNG است',
-      appleRes.status === 200 && appleBuf.subarray(1, 4).toString() === 'PNG');
-    const noApple = fsx.readdirSync(FRONT)
-      .filter(f => f.endsWith('.html') && /rel="manifest"/.test(fsx.readFileSync(path.join(FRONT, f), 'utf8')))
-      .filter(f => !/apple-touch-icon/.test(fsx.readFileSync(path.join(FRONT, f), 'utf8')));
-    check('V10 PWA: هر صفحه‌ی نصب‌پذیری apple-touch-icon دارد', noApple.length === 0, noApple.join(', '));
-    const jfifRefs = fsx.readdirSync(FRONT).filter(f => f.endsWith('.html'))
-      .filter(f => /apple-touch-icon[^>]*\.(jfif|jpe?g)/i.test(fsx.readFileSync(path.join(FRONT, f), 'utf8')));
-    check('V10 PWA: هیچ صفحه‌ای آیکون JPEG را به‌عنوان apple-touch-icon نمی‌دهد',
-      jfifRefs.length === 0, jfifRefs.join(', '));
-
-    // صفحه‌ی آفلاین وقتی نشان داده می‌شود که اینترنت نیست، پس نباید به هیچ
-    // فایل بیرونی (CSS/JS/فونت) وابسته باشد — وگرنه همان لحظه بارگذاری نمی‌شود.
-    const offRes = await fetch(`${BASE}/offline.html`);
-    const offHtml = await offRes.text();
-    check('V10 PWA: صفحه‌ی آفلاین سرو می‌شود', offRes.status === 200 && /آفلاین/.test(offHtml));
-    const offDeps = (offHtml.match(/<(?:link[^>]*rel="(?:stylesheet|preload)"|script)[^>]*>/g) || [])
-      .filter(t => /\bsrc=|\bhref=/.test(t) && !/favicon/.test(t));
-    check('V10 PWA: صفحه‌ی آفلاین به هیچ فایل بیرونی وابسته نیست',
-      offDeps.length === 0, offDeps.join(' '));
-
-    const swSrc = fsx.readFileSync(path.join(FRONT, 'sw.js'), 'utf8');
-    check('V10 PWA: سرویس‌ورکر صفحه‌ی آفلاین را کش می‌کند', /offline\.html/.test(swSrc));
-    check('V10 PWA: سرویس‌ورکر برای ناوبری پشتیبان آفلاین دارد',
-      /req\.mode === 'navigate'/.test(swSrc));
-    // اگر نسخه‌ی کش عوض نشود، مرورگرِ مشتریِ قدیمی هیچ‌وقت فایل‌های تازه را
-    // نمی‌گیرد چون activate فقط کش‌های *غیرِ* CACHE فعلی را پاک می‌کند.
-    //
-    // این عدد قبلاً روی «v2» میخکوب بود و هر بامپِ درست، تست را می‌شکست —
-    // یعنی تست به جای محافظت، جلوی کار درست را می‌گرفت. حالا جارَقه است:
-    // نسخه فقط اجازه دارد جلو برود. اگر sw.js را بامپ کردی، این کف را هم
-    // همراهش ببر بالا تا عقب‌گرد گرفته شود.
-    const SW_MIN_VERSION = 9;
-    const swVer = Number((swSrc.match(/pg-static-v(\d+)/) || [])[1] || 0);
-    check(`V10 PWA: نسخه‌ی کش سرویس‌ورکر حداقل v${SW_MIN_VERSION} است`,
-      swVer >= SW_MIN_VERSION, `الان v${swVer}`);
+    // ============ V10: PWA — از این سرور سرو نمی‌شود ============
+    // مانیفست، سرویس‌ورکر، صفحهٔ آفلاین، آیکون‌ها و security.txt همه در
+    // `next-frontend/public/` هستند و همان‌جا هم سنجیده می‌شوند:
+    //   • `next-frontend/scripts/static-paths-live.mjs` — روی سرورِ واقعیِ Next
+    //   • `src/app/internalLinks.test.ts` — ارجاع‌های مانیفست/precache/آفلاین
+    //   • `backend/tests/service-worker-strategy.js` — رفتارِ کشِ سرویس‌ورکر
 
     // ============ V11: بازدیدهای اخیر ============
     // در مرورگر فقط «شناسه» ذخیره می‌شود و اطلاعات از این مسیر تازه گرفته
@@ -1143,21 +1028,15 @@ function shutdown(code) {
     check('V11 اخیر: مسیر by-ids قبل از /:id ثبت شده',
       prodSrc.indexOf("'/by-ids'") < prodSrc.indexOf("'/:id'"));
 
-    const mainSrc = fsx.readFileSync(path.join(FRONT, 'js', 'main.js'), 'utf8');
-    // اگر شنونده فقط روی #productGrid بماند، دکمه‌های کارت‌های «اخیراً دیده‌اید»
-    // ظاهر دارند و هیچ کاری نمی‌کنند — بدترین نوع باگ، چون خطایی هم دیده نمی‌شود.
-    check('V11 اخیر: کلیک کارت‌ها شامل شبکه‌ی بازدیدهای اخیر هم هست',
-      /#productGrid,\s*#recentGrid/.test(mainSrc));
-    check('V11 اخیر: نمای سریع برای کارت‌های اخیر هم داده دارد',
-      /RECENT_ITEMS\.find/.test(mainSrc));
-    const commonSrc = fsx.readFileSync(path.join(FRONT, 'js', 'common.js'), 'utf8');
+    // V11 سمتِ مرورگر — مالکش حالا Next است؛ پرونده‌های عصرِ Express
+    // (`js/main.js`، `js/common.js`، `js/product.js`) حذف شده‌اند.
+    const recentSrc = nextSrc('lib/recent.ts');
     check('V11 اخیر: فقط شناسه در مرورگر ذخیره می‌شود، نه قیمت',
-      /pg_recent/.test(commonSrc) && !/pg_recent[\s\S]{0,400}price/.test(commonSrc));
-    const prodJs = fsx.readFileSync(path.join(FRONT, 'js', 'product.js'), 'utf8');
-    // اول خواندن فهرست، بعد افزودن خودِ محصول؛ وگرنه محصول باز‌شده داخل نوار
-    // «اخیراً دیده‌اید» خودش تکرار می‌شود.
-    check('V11 اخیر: محصول باز‌شده در نوار اخیرِ خودش تکرار نمی‌شود',
-      prodJs.indexOf('loadRecent(product)') < prodJs.indexOf('pushRecent(product.id)'));
+      /pg_recent/.test(recentSrc) && !/\bprice\b/.test(recentSrc));
+    check('V11 اخیر: محصولِ بازشده در فهرست ثبت می‌شود',
+      /pushRecent/.test(nextSrc('components/ProductDetail.tsx')));
+    check('V11 اخیر: فهرست از خودِ آرشیوِ Next خوانده می‌شود',
+      /getRecentIds/.test(nextSrc('components/home/RecentlyViewed.tsx')));
 
     // ============ V12: گزارش‌ها و داشبورد ============
     const adLogin = await loginAdmin();
@@ -1717,71 +1596,33 @@ function shutdown(code) {
     check('V14 پاکسازی: انتخاب بکاپ فقط الگوی روزانه را می‌پذیرد',
       /\^polasco-\\d\{4\}-\\d\{2\}-\\d\{2\}\\\.db\$/.test(tidySrc));
 
-    // ============ V16: حالت‌های خطا و خالی در فرانت ============
-    // همه ثابت‌اند: این‌ها فقط وقتی *شبکه قطع است* دیده می‌شوند و در تست
-    // خودکارِ HTTP هیچ‌وقت اجرا نمی‌شوند — یعنی خرابی‌شان کاملاً بی‌صداست.
-    const FE = path.join(__dirname, '..', 'frontend');
-    const rd = (p) => fs.readFileSync(path.join(FE, p), 'utf8');
-    const commonJs = rd('js/common.js');
-
-    check('V16 شبکه: خطای fetch به فارسی ترجمه می‌شود (نه Failed to fetch)',
-      /catch \(e\) \{[\s\S]{0,1600}navigator\.onLine === false/.test(commonJs) &&
-      /اینترنت وصل نیست/.test(commonJs) &&
-      /ارتباط با سرور برقرار نشد/.test(commonJs));
+    // ============ V16: حالت‌های خطا و خالی — سورسِ vanilla بازنشسته شد ============
+    // `js/common.js`، `js/main.js`، `js/product.js` و بقیهٔ پرونده‌های عصرِ Express
+    // با پوشهٔ `frontend/` رفتند. قرارهای رفتاری‌شان حالا در سورسِ Next زندگی
+    // می‌کنند و همان‌جا آزمون دارند:
+    //   • شبکه/مهلت/پیام `src/lib/api.ts` + `src/lib/apiContract.test.ts`
+    //   • رابط کاربری `*.test.tsx` (ورود، سبد، نتیجهٔ پرداخت، حساب)
+    // اینجا فقط همان وصل‌هایی می‌مانند که آن suiteها از بیرون نمی‌بینند.
+    const apiNext = nextSrc('lib/api.ts');
+    check('V16 شبکه: خطای شبکه به فارسی ترجمه می‌شود (نه Failed to fetch)',
+      /اینترنت وصل نیست/.test(apiNext) && /ارتباط با سرور برقرار نشد/.test(apiNext));
     check('V16 شبکه: درخواست سقف زمانی دارد (درخواستِ معلق نمی‌ماند)',
-      /AbortController/.test(commonJs) && /NET_TIMEOUT/.test(commonJs));
-    check('V16 شبکه: خطای شبکه با پرچم network و status=0 مشخص می‌شود',
-      /err\.network = true/.test(commonJs) && /err\.status = 0/.test(commonJs));
-    check('V16 شبکه: تلاش دوباره هم داخل پوشش است (شکست دوم بی‌صدا نمی‌ماند)',
-      /onRetry \|\| \(\(\) => boot\(fn, onRetry\)\)/.test(commonJs));
-    check('V16 شبکه: کادر خطا بعد از موفقیت برداشته می‌شود',
-      /pgPageError'\)\?\.remove\(\)/.test(commonJs));
-    check('V16 شبکه: pageError و boot صادر شده‌اند',
-      /return \{[^}]*\bpageError\b[^}]*\bboot\b/.test(commonJs));
-
-    for (const [file, label] of [['js/checkout.js', 'پرداخت'], ['js/account.js', 'حساب کاربری'], ['js/order-success.js', 'نتیجه‌ی پرداخت']]) {
-      check(`V16 راه‌اندازی: صفحه‌ی ${label} داخل PG.boot است`,
-        /DOMContentLoaded', \(\) => PG\.boot\(async \(\) => \{/.test(rd(file)), file);
-    }
-    check('V16 راه‌اندازی: گرفتن سبد داخل PG.boot است', /PG\.boot\(renderCart\)/.test(rd('js/cart.js')));
-
-    const productJs = rd('js/product.js');
-    check('V16 محصول: فقط ۴۰۴/۴۱۰ پیام «پیدا نشد» می‌دهد، نه هر خطایی',
-      /e\.status === 404 \|\| e\.status === 410\) return showNotFound\(\)/.test(productJs));
-    const mainJs = rd('js/main.js');
-    check('V16 ویترین: خطای بارگذاری دکمه‌ی تلاش دوباره دارد',
-      /data-retry-products/.test(mainJs) && /renderGrid\(\);/.test(mainJs));
-    check('V16 ویترین: پیام خطا دلیل واقعی را نشان می‌دهد نه «رفرش کنید»',
-      /PG\.esc\(e\.message/.test(mainJs) && !/لطفاً صفحه را رفرش کنید/.test(mainJs));
-
-    for (const [file, label] of [['js/account.js', 'حساب کاربری']]) {
-      check(`V16 خروج: خروجِ ناموفق در ${label} بی‌صدا نیست`,
-        /خروج انجام نشد/.test(rd(file)), file);
-    }
+      /AbortController/.test(apiNext) && /NET_TIMEOUT/.test(apiNext));
+    check('V16 شبکه: خطای شبکه با پرچمِ network و status=0 مشخص می‌شود',
+      /\.network = true/.test(apiNext) && /new ApiError\(0,/.test(apiNext));
+    check('V16 شبکه: ۴۰۴ پیامِ «پیدا نشد» می‌گیرد، نه پیام عمومی',
+      /status === 404\) return "این مورد پیدا نشد/.test(apiNext));
     // پنلِ Express دکمه‌ی خروجِ خودش را داشت و حذف شد؛ همتای Next (که خروج در
     // خودِ حساب کاربری است) هم خروجِ ناموفق را با toast می‌گوید، نه با سکوت.
     check('V16 خروج: خروجِ ناموفق در حسابِ کاربریِ Next بی‌صدا نیست',
       /خروج انجام نشد/.test(nextSrc('components/AccountContent.tsx')));
-    check('V16 استایل: کلاس page-error در CSS تعریف شده', /\.page-error\{/.test(rd('css/style.css')));
-
-    // نسخه‌ی فایل‌های ثابت: بعد از تغییر CSS/JS باید بالا رفته باشد، وگرنه مرورگرِ
-    // مشتریِ قدیمی نسخه‌ی کش‌شده را می‌گیرد و اصلاً این تغییرها را نمی‌بیند.
-    const htmlFiles = fs.readdirSync(FE).filter(f => f.endsWith('.html') && f !== 'offline.html');
-    const versions = new Set();
-    for (const f of htmlFiles) for (const m of rd(f).matchAll(/\?v=(\d+)/g)) versions.add(m[1]);
-    // هر تغییر cache-busted ممکن است فقط یک صفحه را لمس کند؛ نسخه‌ی جدید باید
-    // با نسخه‌ی غالب پروژه یکی باشد و یک نسخه‌ی قدیمیِ تک‌افتاده خطا محسوب نشود.
-    const expectedVersion = Math.max(...[...versions].map(Number));
-    check('V16 کش: همه‌ی صفحه‌ها روی نسخه‌ی جاری‌اند',
-      versions.size === 1 || (versions.size === 2 && versions.has(String(expectedVersion))),
-      [...versions].join(', ') || 'هیچ');
-    check('V16 کش: نسخه‌ی جاری حداقل 47 است', expectedVersion >= 47, String(expectedVersion));
-    check('V16 کش: همه‌ی صفحه‌ها روی نسخه‌ی جاری‌اند',
-      versions.size >= 1 && versions.has(String(expectedVersion)), [...versions].join(', ') || 'هیچ');
-    check('V16 کش: هر صفحه‌ی HTML نسخه‌گذاری شده است',
-      htmlFiles.every(f => /\?v=\d+/.test(rd(f))),
-      htmlFiles.filter(f => !/\?v=\d+/.test(rd(f))).join(', ') || 'همه دارند');
-
+    // لینکِ رهگیریِ بدون ورود در همه‌ی صفحه‌ها بود؛ در Next فوتر میزبانی‌اش
+    // می‌کند و مقصدش لنگرِ `#track` است.
+    check('V16 رهگیری: لینکِ پیگیری در فوترِ Next هست و به #track می‌رود',
+      /\/#track/.test(nextSrc('components/Footer.tsx')));
+    // `?v=…` نسخه‌گذاریِ دستیِ فایل‌های ثابت بود (کشِ مرورگرِ مشتریِ قدیمی).
+    // با حذفِ آن پرونده‌ها این قرارداد هم رفت و جایش را نام‌های هش‌دارِ Next
+    // گرفت — چیزی که در سورس نمی‌شود سنجید، چون خودِ بیلد می‌سازدش.
     // ============ V17: «دوباره سفارش بده» و متن‌های صادق ============
     // چرا این روت اضافه شد: سبد در routes/orders.js موقع رفتن به درگاه خالی
     // می‌شود. تا پیش از این، صفحه‌ی نتیجه به مشتریِ پرداخت‌ناموفق می‌گفت «می‌توانید
@@ -1845,38 +1686,22 @@ function shutdown(code) {
       /require\('\.\/lib\/paths'\)/.test(fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8')) &&
       /require\('\.\.\/lib\/paths'\)/.test(fs.readFileSync(path.join(__dirname, 'routes', 'admin.js'), 'utf8')));
 
-    const osJs = rd('js/order-success.js');
-    // کامنت‌ها برداشته می‌شوند: توضیحِ «چرا این جمله را برداشتیم» خودش همان جمله را
-    // دارد و تست را الکی رد می‌کرد (همان تله‌ی V14).
-    const osCode = osJs.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    check('V17 متن: ادعای قطعیِ «مبلغی کسر نشده» برداشته شد',
+    // V17 متن — نسخهٔ مشتریان حالا `components/OrderSuccessContent.tsx` است؛
+    // کامنت‌ها برداشته می‌شوند تا توضیحِ خودِ «چرا این ادعا را نکردیم» قرمز نکند.
+    const osNext = nextSrc('components/OrderSuccessContent.tsx');
+    const osCode = osNext.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    check('V17 متن: ادعای قطعیِ «مبلغی از حساب شما کسر نشده» برنگشته',
       !/مبلغی از حساب شما کسر نشده/.test(osCode));
     check('V17 متن: وضعیت در انتظار پرداخت متن جدا دارد',
-      /order\.status === 'pending_payment'/.test(osJs));
-    check('V17 متن: صفحه‌ی نتیجه فقط روی ۴۰۴ می‌گوید سفارشی پیدا نشد',
-      /err\.status === 404/.test(osJs));
-    check('V17 متن: دکمه‌ی «دوباره سفارش بده» در صفحه‌ی نتیجه هست',
-      /data-reorder/.test(osJs));
-    check('V17 متن: «خرید دوباره» در سفارش‌های من هم هست',
-      /data-reorder/.test(rd('js/account.js')));
-    check('V17 متن: شماره‌ی سفارش با رقم فارسی نمایش داده می‌شود',
-      /PG\.num\(order\.id\)/.test(osJs) && /PG\.num\(order\.id\)/.test(rd('js/account.js')));
-    check('V17 متن: PG.num صادر شده و با money قاطی نشده',
-      // به رشته‌ی دقیقِ خط export گیر نده — هر بار یک تابع اضافه شود این تست
-      // بی‌دلیل قرمز می‌شود. چیزی که واقعاً مهم است: هر دو صادر شده باشند.
-      /useGrouping: false/.test(commonJs) && /\breturn \{[^}]*\bmoney\b[^}]*\bnum\b/.test(commonJs));
-    check('V17 متن: پاسخِ بی‌بدنه هم پیام فارسیِ متناسب با کد وضعیت می‌گیرد',
-      /res\.status === 429 \? /.test(commonJs) && !/data\.error \|\| 'خطایی رخ داد'/.test(commonJs));
+      /pending_payment: "در انتظار پرداخت"/.test(osNext));
     check('V17 متن: نمونه‌ی شماره در سرور هم فارسی است',
       !/09123456789/.test(fs.readFileSync(path.join(__dirname, 'routes', 'auth.js'), 'utf8')));
     check('V17 متن: خطای عملیات گروهی دیگر ۴۰۰ با متن خام نمی‌دهد',
       !/عملیات گروهی انجام نشد/.test(fs.readFileSync(path.join(__dirname, 'routes', 'admin.js'), 'utf8')));
 
-    const accJs = rd('js/account.js');
-    check('V17 علاقه‌مندی: پرچم بارگذاری فقط بعد از موفقیت بالا می‌رود',
-      /const \{ products \} = await PG\.api\('\/wishlist'\);[\s\S]{0,400}wishLoaded = true;/.test(accJs));
-    check('V17 علاقه‌مندی: خطا دکمه‌ی تلاش دوباره دارد', /data-retry-wish/.test(accJs));
-    check('V17 آدرس: خطای بارگذاری آدرس‌ها دکمه‌ی تلاش دوباره دارد', /data-retry-addr/.test(accJs));
+    // V17 علاقه‌مندی/آدرس — همان دو قرار در `components/AccountContent.tsx`
+    // ادامه دارد (دکمه‌ی «تلاش دوباره» برای فهرستِ علاقه‌مندی و آدرس‌ها)؛
+    // آزمونِ رفتارش در suiteِ کامپوننتیِ Next است، نه با خواندنِ سورس.
 
     // همان دو قاعده، ولی روی آپلودِ پنلِ Next (پنلِ Express حذف شد).
     const admJs = nextSrc('lib/adminApi.ts');
@@ -1917,70 +1742,38 @@ function shutdown(code) {
     check('V18 robots: مسیر پنل بسته است', /^Disallow: \/admin$/m.test(rb));
     check('V18 robots: دامنه‌ی نمونه ندارد', !rb.includes('example.com'));
 
-    // JSON-LD واقعی را از صفحه‌ی یک محصولِ واقعی می‌خوانیم و می‌سنجیم.
-    const anyProd = (await api('GET', '/products')).data.products
-      .find(p => p.title !== TEST_PRODUCT_MARK);
-    const pPage = await (await fetch(`${BASE}/product/${anyProd.id}`)).text();
-    const ldRaw = (pPage.match(/data-pg-ld="product">([\s\S]*?)<\/script>/) || [])[1];
-    let ld = null;
-    try { ld = JSON.parse(ldRaw); } catch (e) {}
-    check('V18 داده‌ی ساختاریافته: JSON محصول معتبر پارس می‌شود', Boolean(ld));
-    check('V18 داده‌ی ساختاریافته: هزینه‌ی ارسال داخل Offer آمده',
-      ld && ld.offers.shippingDetails &&
-      ld.offers.shippingDetails['@type'] === 'OfferShippingDetails');
-    check('V18 داده‌ی ساختاریافته: نرخ ارسال عدد ریالی است نه رشته',
-      ld && typeof ld.offers.shippingDetails.shippingRate.value === 'number' &&
-      ld.offers.shippingDetails.shippingRate.currency === 'IRR');
-    // نرخِ اعلام‌شده باید دقیقاً همان چیزی باشد که مشتری سر سبد می‌بیند
-    const realQuote = require('./lib/db').getShippingQuote(Number(anyProd.price) || 0);
-    check('V18 داده‌ی ساختاریافته: نرخ ارسال با تنظیمات واقعیِ فروشگاه یکی است',
-      ld && ld.offers.shippingDetails.shippingRate.value === realQuote.shippingFee * 10,
-      JSON.stringify({ ld: ld && ld.offers.shippingDetails.shippingRate.value, real: realQuote.shippingFee * 10 }));
-    check('V18 داده‌ی ساختاریافته: شرایط مرجوعی آمده',
-      ld && ld.offers.hasMerchantReturnPolicy['@type'] === 'MerchantReturnPolicy');
-    check('V18 داده‌ی ساختاریافته: مهلت مرجوعی ۷ روز است، همان چیزی که در قوانین نوشته',
-      ld && ld.offers.hasMerchantReturnPolicy.merchantReturnDays === 7 &&
-      /۷ روز/.test(rd('terms.html')));
-    check('V18 داده‌ی ساختاریافته: کشور مرجوعی ایران است',
-      ld && ld.offers.hasMerchantReturnPolicy.applicableCountry === 'IR');
-    // ادعای بی‌پشتوانه نباید در داده‌ی ساختاریافته باشد
-    check('V18 داده‌ی ساختاریافته: هزینه‌ی مرجوعیِ ساختگی ادعا نشده',
-      ld && !('returnFees' in ld.offers.hasMerchantReturnPolicy));
-    check('V18 داده‌ی ساختاریافته: تاریخ اعتبار قیمتِ ساختگی ادعا نشده',
-      ld && !('priceValidUntil' in ld.offers));
+    // داده‌ی ساختاریافته‌ی محصول حالا در Next ساخته می‌شود
+    // (`components/JsonLd.tsx`)، پس قرارداد از همان منبع خوانده می‌شود؛ نرخِ
+    // واقعیِ ارسال را فقط سنجشِ زندهٔ Next می‌تواند ببیند (برابری با آرشیو).
+    const jld = nextSrc('components/JsonLd.tsx');
+    check('V18 داده‌ی ساختاریافته: هزینه‌ی ارسال داخل Offer آمده', /OfferShippingDetails/.test(jld));
+    check('V18 داده‌ی ساختاریافته: مهلت مرجوعی ۷ روز است', /merchantReturnDays:\s*7/.test(jld));
+    check('V18 داده‌ی ساختاریافته: کشور مرجوعی ایران است', /applicableCountry:\s*"IR"/.test(jld));
+    check('V18 داده‌ی ساختاریافته: هزینه‌ی مرجوعیِ ساختگی ادعا نشده', !/returnFees/.test(jld));
+    check('V18 داده‌ی ساختاریافته: تاریخ اعتبار قیمتِ ساختگی ادعا نشده', !/priceValidUntil/.test(jld));
+    check('V18 داده‌ی ساختاریافته: مهلت مرجوعی همان ۷ روزِ قوانین است',
+      /۷ روز/.test(nextSrc('app/terms/page.tsx')));
 
-    // نگهبانِ یک کلاسِ باگِ واقعی: نشانیِ عکسی که سرور می‌سازد باید **واقعاً
-    // ۲۰۰ بدهد**. یک بار `encodeURI` روی مقداری که خودِ API از قبل کدشده بود
-    // اجرا می‌شد و `%25D8…` می‌ساخت؛ نتیجه این بود که og:image، `image` داده‌ی
-    // ساختاریافته و `<image:loc>` هر سه ۴۰۴ می‌دادند — یعنی گوگل و واتساپ
-    // عکسی نمی‌دیدند و هیچ تستی هم قرمز نمی‌شد.
+    // نشانیِ عکس باید واقعاً ۲۰۰ بدهد (همان کلاسِ باگِ %25…). نسخهٔ زنده از
+    // نقشه‌ی سایتِ همین سرور سنجیده می‌شود؛ ساختِ نشانی در Next هم نگهبانِ
+    // خودش را دارد (`lib/imagePath.test.ts`).
     const probeImage = async (u) => {
       const r = await fetch(u);
       return { status: r.status, type: r.headers.get('content-type') || '' };
     };
     const isImage = (r) => r.status === 200 && /^image\//.test(r.type);
-    const ldImg = ld && Array.isArray(ld.image) && ld.image[0];
-    const ldImgRes = ldImg ? await probeImage(ldImg) : { status: 0, type: '' };
-    check('V18 داده‌ی ساختاریافته: نشانیِ عکسِ Product واقعاً ۲۰۰ می‌دهد',
-      Boolean(ldImg) && isImage(ldImgRes), `${ldImg} → ${ldImgRes.status} ${ldImgRes.type}`);
-    const ogImg = (pPage.match(/property="og:image" content="([^"]+)"/) || [])[1];
-    const ogImgRes = ogImg ? await probeImage(ogImg) : { status: 0, type: '' };
-    check('V18 og:image صفحه‌ی محصول واقعاً ۲۰۰ می‌دهد',
-      Boolean(ogImg) && isImage(ogImgRes), `${ogImg} → ${ogImgRes.status} ${ogImgRes.type}`);
     const smImg = (sm.match(/<image:loc>([^<]+)<\/image:loc>/) || [])[1];
     const smImgRes = smImg ? await probeImage(smImg) : { status: 0, type: '' };
     check('V18 نقشه‌ی سایت: نشانیِ <image:loc> واقعاً ۲۰۰ می‌دهد',
       Boolean(smImg) && isImage(smImgRes), `${smImg} → ${smImgRes.status} ${smImgRes.type}`);
 
-    // و همان کلاسِ باگ برای خودِ صفحه‌ها: دامنه‌ی نمونه فقط در `sitemap.xml` و
-    // `robots.txt` سنجیده می‌شد، در حالی که HTMLِ صفحه‌ها هم می‌تواند با آن
-    // سرو شود. `wholesale.html` روتی نداشت که جایگزینی را انجام دهد، پس
-    // canonical و og:urlاش به `polasco-goli.example.com` اشاره می‌کرد — یعنی
-    // به گوگل می‌گفت «نسخه‌ی اصلیِ من روی دامنه‌ای است که وجود ندارد».
-    for (const page of ['/', '/products.html', '/terms.html', '/wholesale.html']) {
-      const pageHtml = await (await fetch(BASE + page)).text();
-      check(`V18 صفحه‌ی ${page}: هیچ دامنه‌ی نمونه‌ای در HTML نیست`,
-        !pageHtml.includes('polasco-goli.example.com'));
+    // به‌جای «دامنه‌ی نمونه‌ای در HTMLِ صفحه‌ها نباشد» (خودِ صفحه‌ها رفته‌اند)
+    // قراردادِ تازه سنجیده می‌شود: هر نامِ قدیمی به مقصدِ تمیزِ خودش می‌رود.
+    for (const [legacy, dest] of [['/products.html', '/products'], ['/terms.html', '/terms'], ['/wholesale.html', '/wholesale']]) {
+      const r = await fetch(BASE + legacy, { redirect: 'manual' });
+      check(`V18 بازنشسته: ${legacy} به ${dest} می‌رود`,
+        r.status === 301 && r.headers.get('location') === dest,
+        `${r.status} → ${r.headers.get('location')}`);
     }
 
     // ============ V19: رهگیری سفارش بدون ورود ============
@@ -2039,31 +1832,12 @@ function shutdown(code) {
     check('V19 ورودی: فاصله‌ی اضافه‌ی اول و آخر مشکلی نمی‌سازد', tSpaces.status === 200);
 
     // رابط کاربری
-    const idx = rd('index.html');
-    check('V19 رابط: بخش رهگیری در صفحه‌ی اصلی هست',
-      /id="track"/.test(idx) && /id="trackForm"/.test(idx));
-    check('V19 رابط: هر دو کادر ورودی وجود دارند',
-      /id="trackOrderId"/.test(idx) && /id="trackPhone"/.test(idx));
-    check('V19 رابط: صفحه‌ی ورود راه میان‌بر بدون OTP را نشان می‌دهد',
-      /index\.html#track/.test(rd('login.html')));
-    check('V19 رابط: لینک پیگیری در فوتر همه‌ی صفحه‌های اصلی هست',
-      ['index.html', 'cart.html', 'checkout.html', 'account.html', 'order-success.html', 'terms.html']
-        .every(f => rd(f).includes('index.html#track')));
-    const trkMainJs = rd('js/main.js');
-    check('V19 رابط: منطق رهگیری در main.js هست', /initOrderTracking/.test(trkMainJs));
-    check('V19 رابط: خط زمانی مراحل ساخته می‌شود', /track-steps/.test(trkMainJs));
-    const trkCss = rd('css/style.css');
-    check('V19 استایل: کلاس‌های رهگیری در CSS تعریف شده‌اند',
-      /\.track-form/.test(trkCss) && /\.track-steps/.test(trkCss) && /\.track-result/.test(trkCss));
-    check('V19 استایل: روی موبایل کادرها یک‌ستونه می‌شوند',
-      /\.track-fields\{grid-template-columns:1fr\}/.test(trkCss.replace(/;\}/g, '}')));
-    // برچسب وضعیت دیگر سه‌جا کپی نیست
-    check('V19 یکپارچگی: statusLabel فقط یک نسخه دارد (در common.js)',
-      /function statusLabel/.test(rd('js/common.js')) &&
-      !/function statusLabel/.test(rd('js/account.js')) &&
-      !/function statusLabel/.test(rd('js/order-success.js')));
-    check('V19 یکپارچگی: statusLabel از common صادر شده',
-      /\breturn \{[^}]*\bstatusLabel\b/.test(rd('js/common.js')));
+    // رابط کاربری — بخشِ رهگیری حالا `components/home/OrderTracking.tsx` است
+    // (پروندهٔ vanilla حذف شد)؛ خودِ API بالا با درخواست‌های واقعی سنجیده شد.
+    const trackNext = nextSrc('components/home/OrderTracking.tsx');
+    check('V19 رابط: بخش رهگیری در Next هست', /id="track"/.test(trackNext));
+    check('V19 رابط: جست‌وجو با شماره‌ی سفارش و موبایل انجام می‌شود',
+      /orderId/.test(trackNext) && /phone/.test(trackNext));
 
     // ============ V20: فاکتور چاپی ============
     // چیزی که تست می‌شود «شکل کاغذ» نیست، چهار قرارِ رفتاری است:
@@ -2071,68 +1845,21 @@ function shutdown(code) {
     //  ۲) Ctrl+P عادیِ کاربر دزدیده نشود
     //  ۳) جمعِ بالای جدول از خودِ اقلام حساب شود، نه از total
     //  ۴) بعد از چاپ صفحه در حالت چاپ گیر نکند
-    const accHtml = rd('account.html');
-    const invJs = rd('js/account.js');
-    const invCss = rd('css/style.css');
-
-    check('V20 ساختار: میزبان فاکتور در صفحه‌ی حساب هست',
-      /id="invoiceSheet"/.test(accHtml) && /class="invoice-sheet"/.test(accHtml));
-    check('V20 ساختار: میزبان فاکتور از دید صفحه‌خوان پنهان است',
-      /id="invoiceSheet"[^>]*aria-hidden="true"/.test(accHtml));
-    check('V20 منطق: تابع چاپ فاکتور در account.js هست',
-      /function printInvoice\(/.test(invJs) && /window\.print\(\)/.test(invJs));
-
-    // دکمه فقط برای وضعیت‌های پرداخت‌شده
-    check('V20 منطق: فهرست وضعیت‌های دارای فاکتور تعریف شده',
-      /const PAID_LIKE = \[/.test(invJs));
-    const paidLike = (invJs.match(/const PAID_LIKE = \[([^\]]*)\]/) || [, ''])[1];
+    // V20 فاکتور — نسخهٔ چاپی حالا `components/InvoiceSheet.tsx` +
+    // `components/AccountContent.tsx` است؛ چهار قرارِ رفتاری از همان سورس
+    // سنجیده می‌شود (شکلِ کاغذ و کلاس‌های CSS به Tailwind منتقل شده).
+    const acTab = nextSrc('components/AccountContent.tsx');
+    const paidLike = (acTab.match(/const PAID_LIKE = \[([^\]]*)\]/) || [, ''])[1];
+    check('V20 منطق: فهرست وضعیت‌های دارای فاکتور تعریف شده', /const PAID_LIKE = \[/.test(acTab));
     check('V20 منطق: سفارشِ پرداخت‌شده/ارسال‌شده/تحویل‌شده فاکتور دارد',
-      ['paid', 'shipped', 'delivered'].every(s => paidLike.includes(`'${s}'`)), paidLike);
+      ['paid', 'shipped', 'delivered'].every(s => paidLike.includes(`"${s}"`)), paidLike);
     check('V20 منطق: سفارشِ پرداخت‌نشده و ناموفق فاکتور نمی‌گیرد',
-      !paidLike.includes("'pending_payment'") && !paidLike.includes("'failed'") &&
-      !paidLike.includes("'canceled'"), paidLike);
+      !paidLike.includes('pending_payment') && !paidLike.includes('failed') && !paidLike.includes('canceled'), paidLike);
     check('V20 منطق: دکمه‌ی چاپ مشروط به همان فهرست است',
-      /PAID_LIKE\.includes\(order\.status\)[\s\S]{0,200}data-invoice=/.test(invJs));
-
-    // جمعِ اقلام باید از اقلام درآید، نه از total (وگرنه فاکتور با خودش نمی‌خواند)
-    check('V20 محاسبه: جمع کالاها از خودِ اقلام حساب می‌شود',
-      /const itemsTotal = order\.items\.reduce\(/.test(invJs));
-    check('V20 محاسبه: مبلغ قابل پرداخت همان total سرور است',
-      /inv-grand[\s\S]{0,120}PG\.money\(order\.total\)/.test(invJs));
-    check('V20 محاسبه: تخفیف فقط وقتی چاپ می‌شود که واقعاً وجود دارد',
-      /order\.discount > 0 \?/.test(invJs));
-
-    // Ctrl+P کاربر نباید دزدیده شود
-    check('V20 چاپ: پنهان‌کردن صفحه فقط زیر کلاسِ عمدی اتفاق می‌افتد',
-      /html\.printing-invoice body > \*\{display:none !important/.test(invCss.replace(/\s*\n\s*/g, '')));
-    check('V20 چاپ: بدون آن کلاس، برگه‌ی فاکتور اصلاً دیده نمی‌شود',
-      /\.invoice-sheet\{display:none/.test(invCss));
-    check('V20 چاپ: خودِ برگه هنگام چاپ نمایان می‌شود',
-      /html\.printing-invoice \.invoice-sheet\{/.test(invCss.replace(/\s*\n\s*/g, '')));
-    check('V20 چاپ: کلاس بعد از چاپ برداشته می‌شود',
-      /afterprint[\s\S]{0,120}cleanup/.test(invJs) &&
-      /classList\.remove\('printing-invoice'\)/.test(invJs));
-    check('V20 چاپ: تایمر ایمنی برای مرورگرهایی که afterprint ندارند',
-      /setTimeout\(cleanup,/.test(invJs));
-    check('V20 چاپ: نام فایل PDF شماره‌ی سفارش را دارد',
-      /document\.title = `فاکتور سفارش/.test(invJs));
-
-    check('V20 استایل: کلاس‌های جدول فاکتور تعریف شده‌اند',
-      /\.inv-table/.test(invCss) && /\.inv-grand/.test(invCss) && /\.inv-sums/.test(invCss));
-    check('V20 استایل: ردیف‌های جدول وسط صفحه دو نصف نمی‌شوند',
-      /\.inv-table tr\{break-inside:avoid/.test(invCss.replace(/\s*\n\s*/g, '')));
-
-    // امنیت: محتوای فاکتور از داده‌ی کاربر ساخته می‌شود، پس باید esc شود
-    const invBlock = invJs.slice(invJs.indexOf('function printInvoice('));
-    check('V20 امنیت: نام و نشانی و عنوان کالا با esc چاپ می‌شوند',
-      /PG\.esc\(i\.title\)/.test(invBlock) && /PG\.esc\(addr\.addressLine/.test(invBlock));
-    check('V20 امنیت: هیچ متن خامی از سفارش بدون esc داخل قالب نرفته',
-      !/\$\{(order|addr|user)\.(fullName|addressLine|city|province|trackingCode|couponCode)\}/.test(invBlock));
-
-    // آیکن دکمه باید واقعاً در مجموعه‌ی آیکن‌ها وجود داشته باشد
-    const invIcon = (invJs.match(/data-invoice[\s\S]{0,200}?href="#(i-[a-z-]+)"/) || [])[1];
-    check('V20 رابط: آیکن دکمه‌ی چاپ در icons.svg تعریف شده',
-      !!invIcon && rd('assets/icons.svg').includes(`id="${invIcon}"`), invIcon || 'یافت نشد');
+      /PAID_LIKE\.includes\(order\.status\)/.test(acTab));
+    check('V20 منطق: چاپ فاکتور واقعاً اجرا می‌شود', /printInvoice/.test(acTab));
+    check('V20 رابط: اسپرایتِ آیکون‌ها همان فایلِ publicِ Next است',
+      /id="i-/.test(fs.readFileSync(path.join(__dirname, '..', 'next-frontend', 'public', 'assets', 'icons.svg'), 'utf8')));
 
     // ============ V21: خروجی اکسل مشتری‌ها و انبار ============
     // نشستِ جاری ممکن است در تست‌های بالا خارج شده باشد؛ دوباره وارد می‌شویم
@@ -2334,8 +2061,6 @@ function shutdown(code) {
     check('V22 نشست: صفحه‌ی ورود پرده‌ی «دوباره وارد شوید» را نشان می‌دهد',
       /searchParams\.get\("idle"\) === "1"/.test(admLogin) &&
       /idleEnded &&/.test(admLogin) && /خارج شدید/.test(admLogin));
-    check('V22 نشست: رویداد از common.js پخش می‌شود',
-      /reason === 'idle'[\s\S]{0,200}pg:idle-logout/.test(rd('js/common.js')));
     check('V22 رابط: رویدادهای ورود در دفترِ پنل برچسب فارسی دارند',
       /login_ok: "ورود به پنل"/.test(nextSrc('components/admin/ActivityContent.tsx')) &&
       /login_failed: "ورود ناموفق به پنل"/.test(nextSrc('components/admin/ActivityContent.tsx')));
@@ -2409,54 +2134,11 @@ function shutdown(code) {
     }
 
 
-    // ---------- V23: کنتراست رنگ در سطح WCAG 2.2 AA ----------
-    // این بلاک خودِ ابزار را اجرا می‌کند، نه اینکه محاسبه را دوباره بنویسد.
-    // دلیلش ساده است: اگر تست ریاضیِ کنتراست را جدا پیاده کند، دو پیاده‌سازی
-    // داریم که می‌توانند هر دو با هم اشتباه باشند. اجرای واقعیِ ابزار یعنی
-    // «همان چیزی که آدم دستی اجرا می‌کند» سبز است.
-    {
-      const cs = require('child_process');
-      const run = cs.spawnSync(process.execPath, [path.join(__dirname, 'tools', 'contrast-audit.js')],
-        { cwd: __dirname, encoding: 'utf8' });
-      const out = (run.stdout || '') + (run.stderr || '');
-      check('V23 کنتراست: بازرس بدون ایراد تمام می‌شود (خروجی صفر)',
-        run.status === 0, out.split('\n').filter(l => l.includes('⚠')).slice(0, 6).join(' | ') || `status=${run.status}`);
-      check('V23 کنتراست: گزارش واقعاً چیزی سنجیده، نه اینکه خالی رد شده باشد',
-        /قاعده‌ی متنی سنجیده شد/.test(out) && !/  0 قاعده‌ی متنی/.test(out),
-        (out.match(/(\d+) قاعده‌ی متنی/) || [, '?'])[1]);
-      check('V23 کنتراست: مرزِ کنترل‌ها هم سنجیده می‌شود',
-        /مرزِ کنترل سنجیده شد/.test(out) && !/  0 مرزِ کنترل/.test(out),
-        (out.match(/(\d+) مرزِ کنترل/) || [, '?'])[1]);
-
-      // خودِ بازرس باید واقعاً قادر به گرفتنِ ایراد باشد. اگر روزی منطقش
-      // بشکند و همیشه سبز شود، تستِ بالا هیچ‌وقت نمی‌فهمد. پس یک CSS خرابِ
-      // ساختگی به آن می‌دهیم و انتظار داریم شکایت کند.
-      const cssPath = path.join(__dirname, '..', 'frontend', 'css', 'style.css');
-      const original = fs.readFileSync(cssPath, 'utf8');
-      try {
-        fs.writeFileSync(cssPath, original + '\n.pg-contrast-canary{color:#1A2420;}\n');
-        const canary = cs.spawnSync(process.execPath, [path.join(__dirname, 'tools', 'contrast-audit.js')],
-          { cwd: __dirname, encoding: 'utf8' });
-        check('V23 کنتراست: بازرس رنگِ عمداً بد را می‌گیرد (تستِ خودِ ابزار)',
-          canary.status !== 0 && /pg-contrast-canary/.test(canary.stdout || ''),
-          `status=${canary.status}`);
-      } finally {
-        fs.writeFileSync(cssPath, original);
-      }
-
-      // متغیرهای تازه باید واقعاً استفاده شده باشند، وگرنه فقط تعریف‌اند و
-      // رنگ‌های خامِ قدیمی هنوز سرِ جایشان‌اند.
-      const cssNow = rd('css/style.css');
-      check('V23 کنتراست: رنگِ کم‌نورِ دستیِ قدیمی دیگر جایی نمانده',
-        !/#5F736A|#6E837A/.test(cssNow.replace(/\/\*[\s\S]*?\*\//g, '')), 'باید همه به var(--ink-dim) وصل باشند');
-      check('V23 کنتراست: متغیرهای تازه هم تعریف و هم استفاده شده‌اند',
-        ['--ink-dim', '--line-control', '--ink-on-warm'].every(v =>
-          cssNow.includes(v + ':') && (cssNow.match(new RegExp('var\\(' + v + '\\)', 'g')) || []).length >= 1),
-        'ink-dim / line-control / ink-on-warm');
-      check('V23 کنتراست: مرزِ اینپوت‌ها به متغیرِ کنترل وصل شده',
-        (cssNow.match(/var\(--line-control\)/g) || []).length >= 10,
-        String((cssNow.match(/var\(--line-control\)/g) || []).length));
-    }
+    // ---------- V23: کنتراست رنگ — ابزارش با پرونده‌اش رفت ----------
+    // `tools/contrast-audit.js` و `tools/css-audit.js` فقط `frontend/css/style.css`
+    // را می‌خواندند؛ با حذفِ آن پرونده، بازرس هم بازنشسته شد. سنجشِ کنتراستِ
+    // فروشگاهِ Next یک کارِ جدا است (توکن‌های Tailwind، نه CSSِ vanilla) و در
+    // گزارشِ بازنشستگی به‌عنوانِ قدمِ بعدی ثبت شده است.
 
     // ---------- V24: عکس‌ها — ابعادِ صریح و تحویلِ WebP ----------
     // دو چیزِ جدا که هر دو به «سرعتِ دیده‌شدنِ صفحه» مربوط‌اند:
@@ -2466,61 +2148,34 @@ function shutdown(code) {
     //   ۲) نسخه‌ی WebP باید واقعاً از سرور بیرون بیاید. این را با HTTP واقعی
     //      می‌سنجیم نه با خواندنِ کد؛ ترتیبِ میدل‌ورها یک جا عوض شود، کد سالم
     //      به‌نظر می‌رسد ولی هیچ‌وقت webp تحویل نمی‌شود.
-    {
-      const { imageSizeFromFile } = require('./lib/imagesize');
+      const REPO_ROOT = path.join(__dirname, '..');
+      const ASSET_EXT = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf|eot|html|webmanifest)$/i;
+      const NEXT_PUB = path.join(REPO_ROOT, 'next-frontend', 'public');
+
+      // کامنت می‌تواند مسیرِ مرده‌ای را نام ببرد؛ مثلاً در `site.ts` نوشته شده
+      // «قبلاً `/assets/og-image.png` بود که ۴۰۴ می‌داد». بدونِ حذفِ کامنت،
+      // نگهبان روی همان یادداشتِ تاریخی قرمز می‌شود. پس اول کامنت‌ها می‌روند.
+      // `://` دست‌نخورده می‌ماند تا آدرسِ مطلقِ کامل خراب نشود.
+      const stripComments = (label, text) => {
+        if (/\.html$/.test(label)) return text.replace(/<!--[\s\S]*?-->/g, ' ');
+        if (/\.css$/.test(label)) return text.replace(/\/\*[\s\S]*?\*\//g, ' ');
+        return text
+          .replace(/\/\*[\s\S]*?\*\//g, ' ')
+          .replace(/(^|[^:])\/\/[^\n]*/gm, '$1 ');
+      };
+
+      const assetSources = [];
+      const addAssetSource = (label, root, dir, raw) =>
+        assetSources.push({ label, root, dir, text: stripComments(label, raw) });
+
+      // ابزارِ ابعاد و پوشه‌ی عکس یک‌بار و در سطحِ خودِ بخش می‌آیند. پیش‌تر داخلِ
+      // یک بلوکِ `{ }` بودند که کارِ دیگری نداشت؛ با حذفِ `<img>`های vanilla آن
+      // بلوک خالی ماند و متغیرهایش از دسترسِ بررسی‌های پایین‌تر بیرون افتادند
+      // (`imageSizeFromFile is not defined`) — پس فایلِ خراب را نمی‌سنجیدیم.
+      const { imageSizeFromBuffer, imageSizeFromFile } = require('./lib/imagesize');
       const PIC = PIC_ROOT;
-      const htmlFiles = fs.readdirSync(FE).filter(f => f.endsWith('.html'));
-
-      const noDim = [];
-      const badRatio = [];
-      const missingSrcset = [];
-      let checkedRatios = 0;
-
-      for (const f of htmlFiles) {
-        const src = rd(f);
-        for (const tag of src.match(/<img\b[^>]*>/g) || []) {
-          const w = (tag.match(/\bwidth="(\d+)"/) || [])[1];
-          const h = (tag.match(/\bheight="(\d+)"/) || [])[1];
-          const url = (tag.match(/\bsrc="([^"]+)"/) || [])[1] || '';
-          if (!w || !h) { noDim.push(`${f}: ${url || tag.slice(0, 60)}`); continue; }
-
-          // نسبت را با فایلِ روی دیسک می‌سنجیم. عددِ مطلق لازم نیست یکی باشد
-          // (لوگو ۵۱۲×۵۱۲ است و ۴۸×۴۸ نوشته شده و درست هم هست) — چیزی که
-          // اهمیت دارد نسبت است، چون همان جای خالی را رزرو می‌کند.
-          if (!url.startsWith('/picture/')) continue;
-          const onDisk = path.join(PIC, decodeURIComponent(url.replace('/picture/', '')));
-          if (!fs.existsSync(onDisk)) { missingSrcset.push(`${f}: ${url}`); continue; }
-          const dim = imageSizeFromFile(onDisk);
-          if (!dim) { missingSrcset.push(`${f}: ابعادِ ${url} خوانده نشد`); continue; }
-          checkedRatios++;
-          const declared = Number(w) / Number(h);
-          const real = dim.width / dim.height;
-          if (Math.abs(declared - real) / real > 0.02) {
-            badRatio.push(`${f}: ${url} — نوشته ${w}×${h} (${declared.toFixed(3)}) ولی فایل ${dim.width}×${dim.height} (${real.toFixed(3)})`);
-          }
-
-          // اگر روزی srcset اضافه شد، هر نامزدش باید روی دیسک باشد وگرنه
-          // مرورگر همان را انتخاب می‌کند و کادرِ خالی می‌ماند.
-          const ss = (tag.match(/\bsrcset="([^"]+)"/) || [])[1];
-          if (ss) {
-            for (const cand of ss.split(',')) {
-              const p = cand.trim().split(/\s+/)[0];
-              if (!p.startsWith('/picture/')) continue;
-              const cp = path.join(PIC, decodeURIComponent(p.replace('/picture/', '')));
-              if (!fs.existsSync(cp)) missingSrcset.push(`${f}: نامزدِ srcset نیست → ${p}`);
-            }
-          }
-        }
-      }
-
-      check('V24 عکس: همه‌ی <img>های ثابت عرض و ارتفاع دارند',
-        noDim.length === 0, noDim.join(' | '));
-      check('V24 عکس: نسبتِ نوشته‌شده با فایلِ واقعی می‌خواند',
-        badRatio.length === 0, badRatio.join(' | '));
-      check('V24 عکس: هیچ عکسِ ثابتی به فایلِ ناموجود اشاره نمی‌کند',
-        missingSrcset.length === 0, missingSrcset.join(' | '));
-      check('V24 عکس: تست واقعاً چند نسبت را سنجیده (تستِ خودِ تست)',
-        checkedRatios >= 4, `${checkedRatios} عکس`);
+      // ابعادِ <img>های ثابتِ vanilla بازنشسته شد؛ Next از `next/image` با
+      // width/height (و deviceSizes در next.config) استفاده می‌کند.
 
       /* ---- V24 نگهبانِ گیت: ارجاعِ ایستا باید در مخزن باشد، نه فقط روی دیسک ----
          چرا این بررسی اضافه شد: لوگوی فروشگاه (`picture/logo/…jfif`) در هر ۱۲
@@ -2530,11 +2185,7 @@ function shutdown(code) {
          می‌شد: سایت بدونِ لوگو بالا می‌آمد و CI سرِ همین قرمز می‌شد.
          «روی دیسکِ من هست» با «در مخزن هست» یکی نیست، و تفاوتشان وقتی معلوم
          می‌شود که دیر است. */
-      const REPO_ROOT = path.join(__dirname, '..');
       const logoRefSources = [
-        ...htmlFiles.map((f) => [f, rd(f), /(?:src|href|content)="([^"]+)"/g]),
-        ...fs.readdirSync(path.join(FE, 'js')).filter((f) => f.endsWith('.js'))
-          .map((f) => [`js/${f}`, fs.readFileSync(path.join(FE, 'js', f), 'utf8'), /["'`]([^"'`]+)["'`]/g]),
         // فایل‌های آزمونِ Next عمداً بیرون‌اند: مسیرهایشان ساختگی است
         // (`/picture/products/a.jpg`) و چیزی درباره‌ی سایتِ واقعی نمی‌گویند.
         ...(fs.existsSync(NEXT_SRC)
@@ -2591,33 +2242,6 @@ function shutdown(code) {
 
          دامنه‌ی پسوندها عمداً غیرکد است (`png/svg/woff2/…` و `html/webmanifest`)
          تا ارجاع‌های کد مثل `/api/x.json` الکی قرمز نشوند. */
-      const ASSET_EXT = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf|eot|html|webmanifest)$/i;
-      const FIRST_ROOT = path.join(REPO_ROOT, 'frontend');
-      const NEXT_PUB = path.join(REPO_ROOT, 'next-frontend', 'public');
-
-      // کامنت می‌تواند مسیرِ مرده‌ای را نام ببرد؛ مثلاً در `site.ts` نوشته شده
-      // «قبلاً `/assets/og-image.png` بود که ۴۰۴ می‌داد». بدونِ حذفِ کامنت،
-      // نگهبان روی همان یادداشتِ تاریخی قرمز می‌شود. پس اول کامنت‌ها می‌روند.
-      // `://` دست‌نخورده می‌ماند تا آدرسِ مطلقِ کامل خراب نشود.
-      const stripComments = (label, text) => {
-        if (/\.html$/.test(label)) return text.replace(/<!--[\s\S]*?-->/g, ' ');
-        if (/\.css$/.test(label)) return text.replace(/\/\*[\s\S]*?\*\//g, ' ');
-        return text
-          .replace(/\/\*[\s\S]*?\*\//g, ' ')
-          .replace(/(^|[^:])\/\/[^\n]*/gm, '$1 ');
-      };
-
-      const assetSources = [];
-      const addAssetSource = (label, root, dir, raw) =>
-        assetSources.push({ label, root, dir, text: stripComments(label, raw) });
-      for (const sub of ['', 'css', 'js']) {
-        const abs = path.join(FIRST_ROOT, sub);
-        if (!fs.existsSync(abs)) continue;
-        for (const f of fs.readdirSync(abs).filter((x) => /\.(html|css|js|webmanifest)$/.test(x))) {
-          const label = `frontend/${sub ? sub + '/' : ''}${f}`;
-          addAssetSource(label, FIRST_ROOT, abs, fs.readFileSync(path.join(abs, f), 'utf8'));
-        }
-      }
       if (fs.existsSync(NEXT_SRC)) {
         for (const rel of fs.readdirSync(NEXT_SRC, { recursive: true, encoding: 'utf8' })) {
           if (!/\.(ts|tsx|css)$/.test(rel) || /\.test\./.test(rel)) continue;
@@ -2656,8 +2280,24 @@ function shutdown(code) {
          نشانی‌های عصرِ Express از سورسِ Next برداشته شود، این مسیرِ استثنا
          تبدیل به کدِ مرده می‌شود و همان شرط لو می‌دهدش — وگرنه یک استثنای
          خالی، اولین قدم به‌سوی نگهبانی است که دیگر چیزی نمی‌گیرد. */
+      // نام‌های عصرِ Express از خودِ جدولِ ریدایرکت خوانده می‌شوند — پوشهٔ
+      // `frontend/` دیگر وجود ندارد و این جدول تنها منبعِ حقیقتِ آن نام‌ها
+      // است (نگهبانِ کامل‌بودنش: `internalLinks.test.ts` و `legacy-links-live`).
+      //
+      // الگو عمداً «هر نامِ `*.html` که داخلِ کوتیشن است» را می‌گیرد، نه فقط
+      // کلیدهای جدول: `/product.html?id=12` کلیدِ جدول نیست — مقصدش از کوئری
+      // ساخته می‌شود (`if (pathname === "/product.html")`) و با الگویِ کلید-محور
+      // می‌افتاد بیرون. نتیجه‌اش این شد که همین مسیرِ پرترافیک (عکسِ محصول در
+      // نتیجه‌ی گوگل) به‌جای «نشانیِ قدیمی» یک «داراییِ گمشده» شمرده و نگهبان
+      // قرمز می‌شد.
+      //
+      // `\/?` عمدی است: در آن شرط، کوتیشن پیش از اسلش است و نامِ فایل بعد از آن
+      // (`"/product.html"`). بدونِ آن، الگو فقط کلیدهای جدول را می‌گرفت و همان
+      // یک مورد را جا می‌گذاشت. نام‌های `LEGACY_NO_ALIAS` هم به‌همین شکل می‌آیند
+      // و عمداً بخشی از دامنه‌ی «نام‌های دنیای Express»اند.
+      const legacyUrlsSrc = fs.readFileSync(path.join(REPO_ROOT, 'next-frontend', 'src', 'lib', 'legacyUrls.ts'), 'utf8');
       const legacyPageFiles = new Set(
-        (fs.existsSync(FIRST_ROOT) ? fs.readdirSync(FIRST_ROOT) : []).filter((f) => /\.html$/i.test(f))
+        [...legacyUrlsSrc.matchAll(/["']\/?([a-z0-9-]+\.html)["']/g)].map((m) => m[1]),
       );
       const isLegacyRouteName = (clean) =>
         legacyPageFiles.has(path.basename(clean)) || /(^|\/):[A-Za-z_][A-Za-z0-9_]*/.test(clean);
@@ -2672,7 +2312,7 @@ function shutdown(code) {
           if (!ASSET_EXT.test(clean)) continue;
           const abs = resolveAsset(s, clean);
           const relPath = path.relative(REPO_ROOT, abs).split(path.sep).join('/');
-          if (!/^(frontend|next-frontend\/public|picture)\//.test(relPath)) continue;
+          if (!/^(next-frontend\/public|picture)\//.test(relPath)) continue;
           if (!fs.existsSync(abs) && isLegacyRouteName(clean)) {
             if (!routeRefs.has(clean)) routeRefs.set(clean, new Set());
             routeRefs.get(clean).add(s.label);
@@ -2684,14 +2324,31 @@ function shutdown(code) {
       }
       let assetTracked = null;
       try {
-        const out = execSync('git ls-files -z -- frontend next-frontend/public picture', {
+        const out = execSync('git ls-files -z -- next-frontend/public picture', {
           cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024,
         });
         assetTracked = new Set(out.split(String.fromCharCode(0)).filter(Boolean));
       } catch (e) { assetTracked = null; }
-      // کفِ ۲۰ ارجاع: امروز ۳۴ ارجاعِ دارایی است (+ ۲ نشانیِ مسیر)؛ اگر روزی
-      // اسکن خالی برگردد، نباید سبز شود
-      const ASSET_FLOOR = 20;
+      // «نگهبانِ خالی سبز نشود» را با یک عددِ ثابت نمی‌سنجیم. عددِ ۲۰ تا دیروز
+      // درست بود چون سورس‌های vanilla هم اسکن می‌شدند؛ با بازنشستگیِ `frontend/`
+      // شمارِ ارجاع‌ها به ۱۴ افتاد و آن کف شد یک عددِ دلبخواه — یا باید هر بار
+      // دستی پایین می‌آمد، یا نگهبان را روی معماریِ سالم قرمز می‌کرد.
+      //
+      // جای عدد، سه *سبدِ* دارایی می‌گذاریم و از هر کدام دستِ‌کم یک ارجاعِ زنده
+      // می‌خواهیم. این دقیقاً همان چیزی را می‌گیرد که تضعیف‌شدنش خطرناک است:
+      // نبودِ ارجاع به manifest/offline یعنی نصبِ PWA شکسته است، نبودِ فونت یعنی
+      // متن بدونِ فونتِ فارسی می‌آید، و نبودِ `picture/` یعنی هیچ عکسی در سورس
+      // ارجاع نشده. اسکنِ کاملِ خالی هم هر سه سبد را خالی می‌کند و همان‌جا لو می‌رود.
+      const ASSET_BUCKETS = [
+        ['سرویس‌ورکر/PWA',
+          /^next-frontend\/public\/(manifest\.webmanifest|offline\.html|assets\/(favicon\.svg|icons\.svg|apple-touch-icon\.png|icon-[0-9]+\.png))$/],
+        ['فونت', /^next-frontend\/public\/assets\/fonts\/[^/]+\.woff2$/],
+        ['عکسِ مخزن (picture/)', /^picture\//],
+      ];
+      const assetRefPaths = [...firstPartyRefs.keys()];
+      const emptyBuckets = ASSET_BUCKETS
+        .filter(([, re]) => !assetRefPaths.some((p) => re.test(p)))
+        .map(([name]) => name);
       const assetOffDisk = [];
       const assetOffGit = [];
       for (const [relPath, where] of firstPartyRefs) {
@@ -2700,17 +2357,20 @@ function shutdown(code) {
         if (assetTracked && !assetTracked.has(relPath)) assetOffGit.push(`${relPath} ← ${who}`);
       }
       const routeSeen = [...routeRefs.keys()].join('، ');
+      check('V24 نگهبان: اسکنِ دارایی هر سه سبد را دید (PWA/فونت/عکسِ مخزن)',
+        firstPartyRefs.size > 0 && emptyBuckets.length === 0,
+        emptyBuckets.length
+          ? `هیچ ارجاعی در این سبدها پیدا نشد: ${emptyBuckets.join('، ')} — نگهبانِ خالی سبز نشود`
+          : `${firstPartyRefs.size} ارجاع در ${ASSET_BUCKETS.length} سبد`);
       check('V24 نگهبان: دارایی‌های CSS/manifest/سرویس‌ورکر روی دیسک هستند',
-        firstPartyRefs.size >= ASSET_FLOOR && assetOffDisk.length === 0 && routeRefs.size >= 1,
-        firstPartyRefs.size < ASSET_FLOOR
-          ? `فقط ${firstPartyRefs.size} ارجاع پیدا شد (کف ${ASSET_FLOOR}) — نگهبانِ خالی سبز نشود`
-          : (assetOffDisk.length
-            ? assetOffDisk.join(' | ')
-            : (routeRefs.size === 0
-              ? 'هیچ نشانیِ مسیرِ عصرِ Express دیده نشد — آیا جدولِ ریدایرکتِ Next حذف شده است؟'
-              : `${firstPartyRefs.size} ارجاع، همه روی دیسک (+ ${routeRefs.size} نشانیِ مسیر: ${routeSeen})`)));
+        firstPartyRefs.size > 0 && assetOffDisk.length === 0 && routeRefs.size >= 1,
+        assetOffDisk.length
+          ? assetOffDisk.join(' | ')
+          : (routeRefs.size === 0
+            ? 'هیچ نشانیِ مسیرِ عصرِ Express دیده نشد — آیا جدولِ ریدایرکتِ Next حذف شده است؟'
+            : `${firstPartyRefs.size} ارجاع، همه روی دیسک (+ ${routeRefs.size} نشانیِ مسیر: ${routeSeen})`));
       check('V24 نگهبان: همان دارایی‌ها در گیت هم ترک شده‌اند',
-        assetTracked !== null && firstPartyRefs.size >= ASSET_FLOOR && assetOffGit.length === 0,
+        assetTracked !== null && firstPartyRefs.size > 0 && assetOffGit.length === 0,
         assetTracked === null
           ? 'گیت در دسترس نیست — این بررسی سنجیده نشد'
           : (assetOffGit.length ? `در گیت نیست: ${assetOffGit.join(' | ')}` : `${firstPartyRefs.size} ارجاع، همه در گیت`));
@@ -2746,7 +2406,7 @@ function shutdown(code) {
 
       // مذاکره‌کننده قبل از express.static می‌نشیند، پس محافظتِ آن به او نمی‌رسد
       // و باید خودش جلوی بیرون‌زدن از پوشه‌ی عکس را بگیرد.
-      const trav = await fetch(BASE + '/picture/products/..%2f..%2fbackend%2f.env.jpg',
+      const travPic = await fetch(BASE + '/picture/products/..%2f..%2fbackend%2f.env.jpg',
         { headers: { Accept: 'image/webp' } });
       check('V24 وب‌پی: مسیرِ بیرون‌زننده از پوشه‌ی عکس تحویل نمی‌شود',
         trav.status !== 200, String(trav.status));
@@ -2767,7 +2427,6 @@ function shutdown(code) {
       // ---- خودِ imagesize.js ----
       // اگر این اشتباه بخواند، هم نسبت‌های بالا غلط تأیید می‌شوند و هم نگهبانِ
       // آپلود. پس با فایلی که خودمان ساختیم و ابعادش را می‌دانیم می‌سنجیمش.
-      const { imageSizeFromBuffer } = require('./lib/imagesize');
       const probe = imageSizeFromBuffer(makePng(321, 123));
       check('V24 ابعاد: PNG با ابعادِ معلوم درست خوانده می‌شود',
         probe && probe.width === 321 && probe.height === 123 && probe.type === 'png',
@@ -2831,20 +2490,14 @@ function shutdown(code) {
 
       /* ---- V26: سمتِ فرانت ----
          سرور بی‌عیب باشد ولی هیچ صفحه‌ای ?w نفرستد، این کار بی‌فایده است. */
-      const commonSrc = fs.readFileSync(path.join(FRONT, 'js', 'common.js'), 'utf8');
-      const cartSrc = fs.readFileSync(path.join(FRONT, 'js', 'cart.js'), 'utf8');
-      const adminSrc = nextSrc('components/admin/StockContent.tsx');
+      // V26 سمتِ فرانت: پرونده‌های vanilla حذف شده‌اند؛ طرفِ Next همان قرارداد
+      // را ادامه می‌دهد (سرورِ بندانگشتی بالا با HTTPِ واقعی سنجیده شد).
+      const adminStockSrc = nextSrc('components/admin/StockContent.tsx');
       const adminApiSrc = nextSrc('lib/adminApi.ts');
-      check('V26 فرانت: تابعِ thumb از common.js بیرون داده شده',
-        /\breturn \{[^}]*\bthumb\b/.test(commonSrc), 'در فهرستِ export نیست');
-      check('V26 فرانت: پیشنهادِ جست‌وجو از نسخه‌ی کوچک استفاده می‌کند',
-        /suggest-thumb[\s\S]{0,160}thumb\(/.test(commonSrc));
-      check('V26 فرانت: ردیفِ سبد از نسخه‌ی کوچک استفاده می‌کند',
-        /PG\.thumb\(item\.image\)/.test(cartSrc));
       check('V26 فرانت: پنل تابعِ thumbUrl دارد و ?w را می‌فرستد',
         /export function thumbUrl/.test(adminApiSrc) && /\?w=\$\{w\}/.test(adminApiSrc));
       check('V26 فرانت: فهرستِ کالای پنل از نسخه‌ی کوچک استفاده می‌کند',
-        /src=\{thumbUrl\(p\.image\)\}/.test(adminSrc), 'بدونِ ?w عکسِ کامل دانلود می‌شود');
+        /src=\{thumbUrl\(p\.image\)\}/.test(adminStockSrc), 'بدونِ ?w عکسِ کامل دانلود می‌شود');
 
       /* نگهبانِ فرض: عددِ ۳۲۰ از روی بزرگ‌ترین کادر (۷۶px) حساب شده. اگر کسی
          روزی .cart-row-media را بزرگ کند و یادش برود، عکس بی‌سروصدا تار می‌شود
@@ -2854,23 +2507,14 @@ function shutdown(code) {
          بلوکِ `.ad-thumb` حذف شد)؛ اندازه‌اش همان `width/height` صریحِ خودِ
          `<img>` است، پس از همان‌جا خوانده می‌شود. `adBox > 0` هم عمداً شرط است:
          نشانه‌ای که پیدا نشود باید قرمز کند، نه اینکه بی‌صدا صفر شود. */
-      const cssSrc = fs.readFileSync(path.join(FRONT, 'css', 'style.css'), 'utf8');
-      const boxOf = (cls) => {
-        const m = cssSrc.match(new RegExp(`\\.${cls}\\{[^}]*?width:(\\d+)px`, 's'));
-        return m ? Number(m[1]) : null;
-      };
-      const adDims = adminSrc.match(/\bwidth=\{(\d+)\}\s+height=\{(\d+)\}/);
+      // اندازه‌ی کادرِ بندانگشتیِ پنل از خودِ JSX خوانده می‌شود (بالا)، چون
+      // پروندهٔ vanilla CSS حذف شده است.
+      const adDims = adminStockSrc.match(/\bwidth=\{(\d+)\}\s+height=\{(\d+)\}/);
       const adBox = adDims && adDims[1] === adDims[2] ? Number(adDims[1]) : 0;
-      const boxes = { 'suggest-thumb': boxOf('suggest-thumb'), 'cart-row-media': boxOf('cart-row-media'), 'پنلِ Next': adBox };
-      const biggest = Math.max(...Object.values(boxes).map(v => v || 0));
-      check('V26 نگهبان: بزرگ‌ترین کادرِ بندانگشتی هنوز در حدِ ۳۲۰px جا می‌شود',
-        biggest > 0 && adBox > 0 &&
-        biggest * 3 <= (tDim ? Math.min(tDim.width, tDim.height) : 0) + 4,
-        `${JSON.stringify(boxes)} → بزرگ‌ترین ${biggest}px، لازم ${biggest * 3}px`);
-
-      // آدرس‌های بیرونی و svg نباید پارامتر بگیرند
-      check('V26 thumb: فقط مسیرهای داخلیِ /picture را دست می‌زند',
-        /startsWith\('\/picture\/'\)/.test(commonSrc) && /includes\('\?'\)/.test(commonSrc));
+      check('V26 نگهبان: کادرِ بندانگشتیِ پنل اندازه‌ی صریح دارد', adBox > 0, String(adBox));
+      check('V26 نگهبان: کادرِ پنل روی DPR۳ در نسخه‌ی ۳۲۰ جا می‌شود',
+        adBox > 0 && (tDim ? Math.min(tDim.width, tDim.height) : 0) >= adBox * 3,
+        `کادر ${adBox}px → لازم ${adBox * 3}px`);
 
       /* ---- V27: کارتِ محصول روی صفحه‌ی DPR۱ (?w=560) ----
          اندازه‌گیری: کادرِ کارت ۴ستونه ۲۶۸px، ۳ستونه ۳۲۷، ۲ستونه ۲۸۳، و
@@ -2915,24 +2559,10 @@ function shutdown(code) {
          longhandِ «padding-inline:24px». .container عمداً به longhand رفت
          (شورتهند فاصله‌ی عمودیِ .page-head را پاک می‌کرد)، و آن تغییرِ درست
          این نگهبان را کور کرد: pad برابرِ null شد و تست به‌جای «عدد عوض شد»
-         گفت «از CSS درآمد nullpx». یعنی نگهبان به نگارش حساس بود نه به عدد. */
-      {
-        const bp = cssSrc.match(/@media \(max-width:(\d+)px\)\{[^@]*?\.product-grid\{grid-template-columns:1fr/s);
-        const pad = cssSrc.match(/\.container\{[^}]*?padding(?:-inline)?:(?:0 )?(\d+)px/s);
-        const box = bp && pad ? Number(bp[1]) - 2 * Number(pad[1]) : null;
-        check('V27 نگهبان: بزرگ‌ترین کادرِ کارت هنوز همان ۳۸۲px است',
-          box === CARD_MAX_BOX, `از CSS درآمد ${box}px، فرضِ کد ${CARD_MAX_BOX}px`);
-      }
-
-      check('V27 فرانت: تابعِ cardImg از common.js بیرون داده شده',
-        /\breturn \{[^}]*\bcardImg\b/.test(commonSrc), 'در فهرستِ export نیست');
-      check('V27 فرانت: تصمیم بر اساسِ چگالیِ پیکسل است نه عرضِ پنجره',
-        /devicePixelRatio/.test(commonSrc) && /cardImg[\s\S]{0,400}thumb\(src, 560\)/.test(commonSrc));
-      for (const [f, srcTxt] of [['main.js', null], ['product.js', null], ['account.js', null]]) {
-        const s = srcTxt || fs.readFileSync(path.join(FRONT, 'js', f), 'utf8');
-        check(`V27 فرانت: کارتِ محصول در ${f} از cardImg رد می‌شود`,
-          /PG\.cardImg\(p\.image\)/.test(s));
-      }
+      // V27: تصمیمِ «کدام عرض» حالا با `next/image` و `deviceSizes` انجام
+      // می‌شود (`next.config.ts`)، پس نگهبانِ CSSِ vanilla حذف شد. قراردادِ
+      // خودِ سرور (فقط ۳۲۰/۵۶۰ مجاز، و ضلعِ کوچکِ ۵۶۰ زیرِ ۳۸۲ نرود) پایین
+      // می‌ماند.
       check('V27 عرضِ مجاز یک فهرستِ بسته مانده (نه هر عددی)',
         /ALLOWED_WIDTHS = new Set\(\[320, 560\]\)/.test(
           fs.readFileSync(path.join(__dirname, 'lib', 'webp-negotiate.js'), 'utf8')));
@@ -3542,15 +3172,15 @@ function shutdown(code) {
         (await guest('GET', '/auth/sessions')).status === 401);
 
       /* ---- ۳) سمتِ کاربر ---- */
-      const acHtml = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'account.html'), 'utf8');
-      const acJs = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'js', 'account.js'), 'utf8');
-      check('V31 فرانت: کارتِ دستگاه‌ها در صفحه‌ی حساب هست',
-        acHtml.includes('id="btnLogoutOthers"') && acHtml.includes('id="sessHint"'));
-      check('V31 فرانت: دکمه به مسیرِ درست وصل است', acJs.includes('/auth/logout-others'));
-      check('V31 فرانت: شمارشِ دستگاه‌ها خوانده می‌شود', acJs.includes('/auth/sessions'));
+      const acNext = nextSrc('components/AccountContent.tsx');
+      const apiNext = nextSrc('lib/api.ts');
+      check('V31 فرانت: کارتِ دستگاه‌ها در حسابِ کاربریِ Next هست',
+        /sessions/.test(acNext) && /logoutOthers/.test(acNext));
+      check('V31 فرانت: دکمه به مسیرِ درست وصل است', /\/auth\/logout-others/.test(apiNext));
+      check('V31 فرانت: شمارشِ دستگاه‌ها خوانده می‌شود', /sessions/.test(acNext));
       // اگر تعداد را نگوییم، کاربر فکر می‌کند تغییرِ رمز هیچ کارِ دیگری نکرده.
       check('V31 فرانت: بعد از تغییرِ رمز تعدادِ دستگاه‌های خارج‌شده اعلام می‌شود',
-        /r\.revoked/.test(acJs));
+        /revoked/.test(acNext));
 
       await loginAdmin(); // ظرفِ اصلی را در حالتِ معلوم می‌گذاریم
     }
@@ -3892,97 +3522,23 @@ function shutdown(code) {
         authSrc.indexOf('current.password_hash') < authSrc.indexOf('setUserPassword(req.session.userId, await hashPassword'));
       check('V34 نگهبان: /password/remove هم سقفِ نرخ دارد',
         /password\/remove['"],\s*passwordSetLimiter/.test(authSrc));
-      const acJs34 = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'js', 'account.js'), 'utf8');
-    const loginHtmlOtp = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'login.html'), 'utf8');
-    const loginJsOtp = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'js', 'login.js'), 'utf8');
-    const styleOtp = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'css', 'style.css'), 'utf8');
-    check('V35 OTP: پنج اینپوت تک‌رقمی هستند', (loginHtmlOtp.match(/class="otp-digit"/g) || []).length === 5);
-    check('V35 OTP: one-time-code remains accessible', loginHtmlOtp.includes('autocomplete="one-time-code"') && loginHtmlOtp.includes('aria-describedby="codeExpiry"'));
-    check('V35 OTP: input updates the visual slots', loginJsOtp.includes('paintOtp') && loginJsOtp.includes('otpBoxes'));
-    check('V35 OTP: verdict states distinguish success and error', loginJsOtp.includes("paintOtp(code, 'success')") && loginJsOtp.includes("paintOtp(code, 'error')"));
-    check('V35 OTP: reduced-motion fallback exists', styleOtp.includes('@media (prefers-reduced-motion:reduce)') && styleOtp.includes('.otp-boxes'));
+    // V34/V35 — کلاینتِ OTP و رمز حالا فقط در Next است. رفتارِ کامل (پنج خانه،
+    // ثانیه‌شمار، ناوبری) در `components/LoginForm.test.tsx` اجرا می‌شود؛ اینجا
+    // فقط وصلِ سیم‌کشی‌هایی که آن suite نشانشان نمی‌دهد سنجیده می‌شود.
+    const loginFormNext = nextSrc('components/LoginForm.tsx');
+    check('V35 OTP: پنجرهٔ ورودِ Next کد را one-time-code اعلام می‌کند',
+      /one-time-code/.test(loginFormNext));
+    const acOtNext = nextSrc('components/AccountContent.tsx');
+    const apiOtNext = nextSrc('lib/api.ts');
+    check('V34 فرانت: کادرِ رمزِ فعلی در حسابِ کاربریِ Next هست',
+      /currentPassword/.test(acOtNext) && /currentPassword/.test(apiOtNext));
+    check('V34 فرانت: کادر فقط برای کسی که رمز دارد باز می‌شود',
+      /hasPassword/.test(acOtNext) && /hasPw/.test(acOtNext));
 
-    /* ================= V38: نشانگرِ «خانه‌ی پرشده» — وصلِ CSS به HTML و JS =========
-       نشانگرِ «پرشده» یک‌بار با `:not(:placeholder-shown)` نوشته شده بود، ولی هیچ‌کدام
-       از پنج اینپوتِ رقم `placeholder` نداشتند. یعنی شبه‌كلاس هرگز «خالی» را نشان
-       نمی‌داد و هر پنج خانه از لحظهٔ باز شدن پُر به‌نظر می‌رسیدند. این گروه همان وصلِ
-       سیم‌کشی را قفل می‌کند، و خودِ استخراج‌کننده را هم می‌آزماید تا «سبزِ خالی»
-       نشویم. */
-    const readOtpInputs = (html) => [...html.matchAll(/class="(otp-digit[^"]*)"[\s\S]*?>/g)]
-      .map((m) => {
-        const ph = m[0].match(/\splaceholder="([^"]*)"/);
-        return { tag: m[0], cls: m[1], placeholder: ph ? ph[1] : null };
-      });
-    const otpInputs = readOtpInputs(loginHtmlOtp);
-    const fakeOtp = readOtpInputs([
-      '<input class="otp-digit" type="tel" maxlength="1">',
-      '<input class="otp-digit"\n  type="tel" placeholder=" ">',
-      '<input class="otp-digit" placeholder="5">',
-      '<input class="otp-digit has-value" maxlength="1">'
-    ].join('\n'));
-    check('V38 خودآزمون: استخراج‌کننده روی ۴ نمونهٔ ساختگی درست رفتار کرد',
-      fakeOtp.length === 4 &&
-      fakeOtp[0].placeholder === null &&
-      fakeOtp[1].placeholder === ' ' &&
-      fakeOtp[2].placeholder === '5' &&
-      fakeOtp[3].cls === 'otp-digit has-value',
-      `count=${fakeOtp.length} ph=[${fakeOtp.map((i) => i.placeholder === null ? 'null' : JSON.stringify(i.placeholder)).join(',')}] cls=[${fakeOtp.map((i) => i.cls).join('|')}]`);
-    const otpNoPlaceholder = otpInputs.map((i, n) => (i.placeholder === null ? n + 1 : null)).filter(Boolean);
-    check('V38 OTP: هر پنج اینپوتِ رقم placeholder دارند (وگرنه شاخهٔ :not(:placeholder-shown) همیشه صادق می‌ماند)',
-      otpInputs.length === 5 && otpNoPlaceholder.length === 0,
-      otpNoPlaceholder.length ? `بدونِ placeholder: خانهٔ ${otpNoPlaceholder.join('، ')}` : `${otpInputs.length} اینپوت، همه دارای placeholder`);
-    const otpVisiblePlaceholder = otpInputs
-      .map((i, n) => (i.placeholder !== null && i.placeholder.trim() !== '' ? n + 1 : null)).filter(Boolean);
-    check('V38 OTP: placeholderِ خانه‌ها نامرئی است (وگرنه پنج نویسهٔ روحی زیرِ رقم‌ها می‌ماند)',
-      otpInputs.length === 5 && otpVisiblePlaceholder.length === 0,
-      otpVisiblePlaceholder.length ? `دیدنی: خانهٔ ${otpVisiblePlaceholder.join('، ')}` : 'خالی یا فاصله');
-    const otpBakedClass = otpInputs.map((i, n) => (i.cls === 'otp-digit' ? null : n + 1)).filter(Boolean);
-    check('V38 OTP: هیچ خانه‌ای با کلاسِ has-value از پیش پُر نشان داده نمی‌شود',
-      otpInputs.length === 5 && otpBakedClass.length === 0,
-      otpBakedClass.length ? `خانهٔ ${otpBakedClass.join('، ')} کلاسِ اضافه دارد` : 'هر پنج خانه فقط کلاسِ otp-digit');
-    // سمتِ CSS: قاعدهٔ «پرشده» باید هر دو شاخه را داشته باشد و هیچ شاخهٔ لختی نداشته باشد
-    const phAnchor = styleOtp.indexOf(':not(:placeholder-shown)');
-    let filledSelector = '';
-    if (phAnchor >= 0) {
-      const open = styleOtp.lastIndexOf('}', phAnchor);
-      const close = styleOtp.indexOf('{', phAnchor);
-      if (close > phAnchor) {
-        filledSelector = styleOtp.slice(open + 1, close).replace(/\/\*[\s\S]*?\*\//g, '').trim();
-      }
-    }
-    const filledArms = filledSelector.split(',').map((a) => a.trim()).filter(Boolean);
-    check('V38 CSS: قاعدهٔ «پرشده» هم شاخهٔ placeholder دارد هم شاخهٔ has-value',
-      phAnchor >= 0 &&
-      filledArms.some((a) => a.includes('.otp-digit:not(:placeholder-shown)')) &&
-      filledArms.some((a) => a.endsWith('.otp-digit.has-value')),
-      phAnchor >= 0
-        ? `انتخابگر: ${filledSelector.replace(/\s+/g, ' ').slice(0, 140)}`
-        : 'لنگرِ :not(:placeholder-shown) در style.css پیدا نشد');
-    const bareArms = filledArms.filter((a) => !/:/.test(a) && !/\.has-value/.test(a));
-    check('V38 CSS: کنارِ حالت‌ها هیچ شاخهٔ لختی (.otp-digit تنها) نیست',
-      filledArms.length >= 2 && bareArms.length === 0,
-      bareArms.length ? `شاخهٔ لخت: ${bareArms.join(' | ')}` : `${filledArms.length} شاخه، همه حالت‌دار`);
-    // سمتِ JS: paintOtp نقطهٔ صفر است (paintOtp('') همهٔ خانه‌ها را خالی می‌کند)، پس
-    // کلاس باید آنجا از روی مقدار ست شود — نه با `true` قفل‌شده. Larkِ بیرون‌زدنِ رقم هم
-    // باید کلاس را پاک کند، وگرنه خانهٔ خالی تا آخر پُر می‌ماند.
-    const paintStart = loginJsOtp.indexOf('function paintOtp');
-    const paintEnd = paintStart >= 0 ? loginJsOtp.indexOf('\n  }', paintStart) : -1;
-    const paintBody = paintEnd > paintStart ? loginJsOtp.slice(paintStart, paintEnd) : '';
-    const otpCondCall = paintBody.match(/classList\.toggle\(\s*['"]has-value['"]\s*,\s*([^)]*)/);
-    const otpJsCond = Boolean(otpCondCall) && otpCondCall[1].trim() !== 'true';
-    const otpJsClear = /classList\.remove\(\s*['"]has-value['"]/.test(loginJsOtp);
-    check('V38 JS: کلاسِ has-value در paintOtp از روی مقدار ست می‌شود و بیرون‌زدنِ رقم پاکش می‌کند',
-      otpJsCond && otpJsClear,
-      paintStart < 0
-        ? 'لنگرِ function paintOtp در login.js پیدا نشد'
-        : `شرطی=${otpJsCond}${otpCondCall ? ` (${otpCondCall[1].trim().slice(0, 40)})` : ''} پاک=${otpJsClear}`);
+    // V38 (نشانگرِ «خانه‌ی پرشده») با پرونده‌های vanilla بازنشسته شد؛ معادلش
+    // در Next یک وضعیتِ React است و آزمونش در `LoginForm.test.tsx` (شمارش و
+    // پر شدنِ پنج خانه) اجرا می‌شود — نه با تطبیقِ الگوی CSS.
 
-      const acHtml34 = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'account.html'), 'utf8');
-      check('V34 فرانت: کادرِ رمزِ فعلی در صفحه‌ی حساب هست', acHtml34.includes('id="curPass"'));
-      check('V34 فرانت: هر دو مسیر currentPassword می‌فرستند',
-        (acJs34.match(/currentPassword/g) || []).length >= 2);
-      check('V34 فرانت: کادر فقط برای کسی که رمز دارد باز می‌شود',
-        /fieldCurPass\.classList\.toggle\('hidden', !hasPassword\)/.test(acJs34));
     }
 
     /* ================= V36: حالتِ مشترک بین cluster workers =================
@@ -4083,17 +3639,13 @@ function shutdown(code) {
         /AND window_start = \?/.test(rlCode));
     }
 
-    // ============ V37: پنلِ بازنشسته — ۴۰۴ِ زنده ============
-    // نگهبانِ `tests/panel-retired.js` فقط سورس را می‌خواند و بدونِ سرور اجرا
-    // می‌شود. این یکی خودِ سرور را می‌پرسد و همین تفاوتشان است: اگر روزی کسی
-    // استاب یا ریدایرکتی به آن آدرس‌ها برگرداند، آن نگهبان سبز می‌ماند (چون
-    // ارجاعِ متنی نیست) ولی اینجا قرمز می‌شود. تصمیمِ ثبت‌شده «۴۰۴ِ صریح،
-    // بدونِ استاب و بدونِ ریدایرکت» است، پس با `redirect: 'manual'` پرسیده
-    // می‌شوند تا ۳۰۱/۳۰۲ هم رد شود.
+    // ============ V37: فروشگاهِ بازنشسته — قراردادِ زنده ============
+    // نگهبان‌های سورس (panel-retired، retired-storefront، legacy-links-live)
+    // بدونِ سرور اجرا می‌شوند؛ این یکی خودِ سرور را می‌پرسد و همان چیزی را
+    // می‌سنجد که خواستهٔ اصلیِ بازنشستگی است: «هیچ لینکی ۴۰۴ یا واگرا نشود».
     //
-    // آدرس‌ها عمداً تکه‌تکه ساخته می‌شوند: نگهبانِ سورس هر رشته‌ی کاملی از این
-    // نام‌ها را «ارجاع» می‌شمارد — و باید هم بشمارد. با تکه‌کردن، این تستِ ۴۰۴
-    // تنها جایی است که آن نام‌ها را می‌سازد و نیازی به استثنا نیست.
+    // آدرس‌های پنل عمداً تکه‌تکه ساخته می‌شوند: نگهبانِ سورس هر رشته‌ی کاملِ
+    // آن نام‌ها را «ارجاع» می‌شمارد — و باید هم بشمارد.
     {
       const retired = [
         ['صفحه‌ی پنل', '/' + 'admin' + '.' + 'html'],
@@ -4105,20 +3657,49 @@ function shutdown(code) {
         check(`V37 بازنشسته: ${label} کدِ ۴۰۴ِ خالص می‌دهد`,
           r.status === 404, `${url} → ${r.status}`);
       }
-      // حذف نباید بقیه‌ی سایت را با خودش ببرد: اگر ۴۰۴ها از یک بستنِ گسسته
-      // بیایند (مثلاً استاتیکِ کلِ پوشه خاموش شده باشد)، این دو قرمز می‌شوند.
-      const homeAfter = await fetch(BASE + '/');
-      check('V37 بازنشسته: حذفِ پنل ویترین را نشکست',
-        homeAfter.status === 200, String(homeAfter.status));
-      // عصرِ Express بازنشسته شد: این نام دیگر *صفحه* نیست، پل است. سنجهٔ
-      // درست این است که به همان صفحه‌ی زنده روی همان دامنه برود — نه ۲۰۰
-      // (یعنی صفحهٔ کهنه برگشته) و نه ۴۰۴ (یعنی لینکِ مشتری مرده).
-      const accountAfter = await fetch(BASE + '/account.html', { redirect: 'manual' });
-      check('V37 بازنشسته: نامِ حساب کاربری به مسیرِ تمیز می‌رود',
-        accountAfter.status === 301 && (accountAfter.headers.get('location') || '') === '/account',
-        `${accountAfter.status} → ${accountAfter.headers.get('location')}`);
-      // پنلِ زنده‌ی Next روی همین مبدأ نیست (۳۰۰۱)، پس Express نباید راهِ
-      // دیگری به آن داشته باشد.
+
+      // این سرور دیگر حتی یک فایلِ ثابتِ فروشگاه هم ندارد.
+      for (const gone of ['/offline.html', '/sw.js', '/manifest.webmanifest', '/css/style.css', '/js/main.js', '/assets/favicon.svg']) {
+        const r = await fetch(BASE + gone, { redirect: 'manual' });
+        check(`V37 بازنشسته: ${gone} دیگر از این سرور سرو نمی‌شود`,
+          r.status === 404, String(r.status));
+      }
+
+      // نام‌های عصرِ Express: پلِ ۳۰۱ → مقصدِ تمیز. «۲۰۰» یعنی صفحهٔ کهنه
+      // برگشته و «۴۰۴» یعنی لینکِ مشتری مرده؛ هر دو باید قرمز شوند.
+      const bridge = [['/index.html', '/'], ['/account.html', '/account'], ['/cart.html', '/cart'],
+        ['/checkout.html', '/checkout'], ['/login.html', '/login'], ['/order-success.html', '/order-success'],
+        ['/products.html', '/products'], ['/terms.html', '/terms'], ['/wholesale.html', '/wholesale']];
+      for (const [url, dest] of bridge) {
+        const r = await fetch(BASE + url, { redirect: 'manual' });
+        check(`V37 بازنشسته: ${url} → ۳۰۱ ${dest}`,
+          r.status === 301 && r.headers.get('location') === dest,
+          `${r.status} → ${r.headers.get('location')}`);
+      }
+      const prodQ = await fetch(BASE + '/product.html?id=1', { redirect: 'manual' });
+      check('V37 بازنشسته: product.html شناسه را به مسیرِ تمیز می‌برد',
+        prodQ.status === 301 && prodQ.headers.get('location') === '/product/1',
+        `${prodQ.status} → ${prodQ.headers.get('location')}`);
+      // ترتیبِ پارامترها تصادفی نیست: هر دو پیاده‌سازی (`legacyUrls.ts` در Next و
+      // `lib/legacy-redirects.js` اینجا) `next` را از جای خودش حذف و `redirect`
+      // را به ته اضافه می‌کنند — `URLSearchParams` ترتیبِ درج را نگه می‌دارد.
+      // پس `redirect` *بعد* از `x` می‌آید. آن‌چه مهم است هم‌گراییِ دو دنیاست، نه
+      // ترتیب؛ ولی نگهبان باید شکلِ واقعی را قفل کند تا اگر روزی یکی از دو طرف
+      // عوض شد، همان‌جا دیده شود.
+      const loginQ = await fetch(BASE + '/login.html?next=%2Fcart&x=1', { redirect: 'manual' });
+      check('V37 بازنشسته: پارامترِ next به redirect ترجمه می‌شود و کوئری می‌ماند',
+        loginQ.status === 301 && loginQ.headers.get('location') === '/login?x=1&redirect=%2Fcart',
+        loginQ.headers.get('location') || '—');
+
+      // `/` و `/product/:id` نامِ *پاک* دارند و پل نمی‌گیردشان: در تست
+      // SITE_URL همان میزبانِ درخواست است، پس زنجیره ادامه می‌یابد و ۴۰۴ِ
+      // خودمان می‌آید — نه ۲۰۰ِ صفحهٔ کهنه، نه ریدایرکتِ حلقه‌ساز.
+      const homeAfter = await fetch(BASE + '/', { redirect: 'manual' });
+      check('V37 بازنشسته: این سرور صفحه‌ی اصلی را سرو نمی‌کند (صاحبش Next است)',
+        homeAfter.status === 404, String(homeAfter.status));
+      const prodPage = await fetch(BASE + '/product/1', { redirect: 'manual' });
+      check('V37 بازنشسته: صفحه‌ی محصول هم روی این مبدأ نیست',
+        prodPage.status === 404, String(prodPage.status));
       const adminOnExpress = await fetch(BASE + '/admin', { redirect: 'manual' });
       check('V37 بازنشسته: مبدأِ Express پنلِ زنده ندارد',
         adminOnExpress.status === 404, String(adminOnExpress.status));

@@ -31,9 +31,11 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NEXT_DIR = path.resolve(HERE, "..", ".."); // next-frontend/
-const REPO_DIR = path.resolve(NEXT_DIR, "..");
-const EXPRESS_DIR = path.join(REPO_DIR, "frontend");
-const HAS_EXPRESS = fs.existsSync(path.join(EXPRESS_DIR, "index.html"));
+// اوراکلِ منجمد: نسخه‌ی متنِ کاملِ فروشگاهِ Express، همان‌طور که پیش از
+// حذفِ `frontend/` روی دیسک بود — از این پس منبعِ حقیقت همین fixture است،
+// نه یک پوشه‌ی زنده‌ی در حالِ خروج (وگرنه این نگهبان‌ها بی‌صدا skip می‌شدند).
+const EXPRESS_DIR = path.join(NEXT_DIR, "tests", "fixtures", "legacy-src");
+const HAS_ORACLE = fs.existsSync(path.join(EXPRESS_DIR, "index.html"));
 
 const STATES: DivState[] = ["accepted", "open"];
 const MODES: RenderMode[] = ["server", "client", "redirect", "source"];
@@ -68,6 +70,30 @@ function plain(source: string): string {
     .replace(/\u200c/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * همان «دربرگیریِ توالیِ کلمه‌ای» که خودِ اجراکنندهٔ زنده دارد.
+ *
+ * چرا کلمه‌محور و نه `includes`: جداسازها در متنِ مارک‌آپ می‌مانند و در
+ * استخراجِ جملهٔ اجراکننده نمی‌مانند — مثلاً عنوانِ «محصول | پلاسکو گلی»
+ * در آن‌جا به سه کلمه تبدیل می‌شود، پس needle هم به همان شکل نوشته می‌شود.
+ * با `includes` این needle «مرده» خوانده می‌شد و نگهبان روی خودش قرمز
+ * می‌شد، نه روی واگراییِ واقعی.
+ */
+const WORD = /[\u0621-\u06FF\u200c]+/g;
+// نیم‌فاصله مثلِ خودِ اجراکننده حذف می‌شود (expressText هم همین کار را می‌کند)،
+// وگرنه «همه‌ی» در needle با «همه‌ی» در متن دو کلمهٔ متفاوت می‌شود.
+const wordsOf = (s: string) => s.replace(/\u200c/g, "").match(WORD) || [];
+function containsWords(haystack: string, needle: string): boolean {
+  const h = wordsOf(haystack);
+  const n = wordsOf(needle);
+  if (!n.length) return false;
+  outer: for (let i = 0; i + n.length <= h.length; i++) {
+    for (let j = 0; j < n.length; j++) if (h[i + j] !== n[j]) continue outer;
+    return true;
+  }
+  return false;
 }
 
 /** فایل‌های یک صفحه در سمتِ Express، به متنِ نرمال‌شده. */
@@ -116,7 +142,7 @@ const declaredNextFiles = new Set(
   PARITY_PAGES.flatMap((page) => page.files.next),
 );
 
-const describeExpress = HAS_EXPRESS ? describe : describe.skip;
+const describeExpress = HAS_ORACLE ? describe : describe.skip;
 
 describe("مانیفستِ برابریِ فروشگاه", () => {
   describeExpress("کامل‌بودنِ پوشش", () => {
@@ -238,7 +264,7 @@ describe("مانیفستِ برابریِ فروشگاه", () => {
         const text = expressText(page.files.express);
         for (const miss of page.misses) {
           if (miss.source !== "static") continue; // متنِ دیتابیسی، سورس ندارد
-          if (!text.includes(plain(miss.needle))) {
+          if (!containsWords(text, miss.needle)) {
             dead.push(`${page.id}: «${miss.needle}»`);
           }
         }

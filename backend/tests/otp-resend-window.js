@@ -8,11 +8,21 @@
 // حالی که سرور هنوز همان کدِ قبلی را معتبر می‌داند و درخواستِ تازه را با ۴۲۹
 // رد می‌کند. یعنی فرانت به کاربر دروغ می‌گوید و دکمه هم بی‌دلیل قفل می‌ماند.
 //
-// همین قرارداد **دو بار** نوشته شده و در دو زبان:
-//   • فروشگاهِ Express — `frontend/js/login.js`، کلیدِ `pg_otp_state` (یک شیءِ
-//     JSON با مهلتِ ارسال، کلِ مهلت، و عمرِ خودِ کد).
+// همین قرارداد در دو زبان نوشته شده بود و امروز یک طرفش منجمد است:
 //   • فروشگاهِ Next — `next-frontend/src/components/LoginForm.tsx`، یک عددِ
-//     ساده در `pg_otp_resend_<شماره>`.
+//     ساده در `pg_otp_resend_<شماره>` (تنها طرفِ **زنده**).
+//   • فروشگاهِ Express — `frontend/js/login.js` با کلیدِ `pg_otp_state` (یک
+//     شیءِ JSON با مهلتِ ارسال، کلِ مهلت، و عمرِ خودِ کد). آن فروشگاه بازنشسته
+//     شد و `frontend/` حذف — پس مرجعش **اوراکلِ منجمد** است:
+//     `next-frontend/tests/fixtures/legacy-src/js/login.js`، کپیِ بایت‌به‌بایتِ
+//     همان فایل پیش از حذف.
+//
+// ---------- چرا نیمه‌ی Express حذف نشد ----------
+// وسوسه این است که با بازنشستگیِ فروشگاه، همه‌ی بررسی‌های سمتِ Express هم
+// بروند. ولی این نیمه *پیاده‌سازیِ مرجع* است: همان چیزی که نشان می‌دهد قراردادِ
+// مهلتِ مطلق واقعاً قابلِ رعایت است و عدد درست را می‌دهد. اگر فقط سمتِ Next بماند،
+// «درست بودنِ ریاضیِ عدد» دیگر با هیچ پیاده‌سازیِ شناخته‌شده‌ای مقایسه نمی‌شود و
+// یک بازنویسیِ خوش‌ظاهر می‌تواند هر دو طرفِ سنجش را با هم عوض کند.
 // هیچ کامپایلر، lint، یا typecheckی رابطه‌ی این دو را نمی‌بیند — و هیچ‌کدام از
 // این دو فایل تا امروز آزمونی نداشتند. این نگهبان همان رابطه را قفل می‌کند.
 //
@@ -55,8 +65,9 @@ const {
 const BACKEND = path.join(__dirname, '..');
 const REPO = path.join(BACKEND, '..');
 
+const LEGACY_SRC = path.join(REPO, 'next-frontend', 'tests', 'fixtures', 'legacy-src');
 const FILES = {
-  'frontend/js/login.js': path.join(REPO, 'frontend', 'js', 'login.js'),
+  'frontend/js/login.js': path.join(LEGACY_SRC, 'js', 'login.js'),
   'LoginForm.tsx': path.join(REPO, 'next-frontend', 'src', 'components', 'LoginForm.tsx'),
   // سه فایلِ زیر «سرور = تنها منبعِ حقیقتِ مهلت» را می‌سازند: عدد از این‌جا
   // می‌آید (auth.js)، از لایه‌ی درخواست رد می‌شود (api.ts)، و شکلش اعلام شده
@@ -87,6 +98,10 @@ for (const [label, file] of Object.entries(FILES)) {
 }
 const EXPRESS = SOURCES['frontend/js/login.js'];
 const NEXT = SOURCES['LoginForm.tsx'];
+// مرجعِ بالا از fixture می‌آید، نه از یک پوشه‌ی زنده. اگر `frontend/` برگردد،
+// باید *همین‌جا* معلوم شود: وگرنه دو پیاده‌سازیِ زنده داریم و یکی‌شان هیچ
+// سنجشی نمی‌گیرد — و بدترین حالت این است که آن یکی، نسخه‌ی کهنه باشد.
+const RETIRED_DIR = path.join(REPO, 'frontend');
 
 let pass = 0, fail = 0;
 function ok(label) { pass++; console.log(`  [PASS] ${label}`); }
@@ -94,6 +109,10 @@ function bad(label, detail) { fail++; console.log(`  [FAIL] ${label}${detail ? `
 function check(label, condition, detail = '') {
   if (condition) ok(label); else bad(label, detail);
 }
+
+check('پوشه‌ی بازنشسته‌ی frontend/ برنگشته است (مرجع از fixture می‌آید)',
+  !fs.existsSync(RETIRED_DIR),
+  fs.existsSync(RETIRED_DIR) ? 'پوشه‌ی زنده دوباره ساخته شده — کدام‌یک مرجع است؟' : '');
 
 // ---------- برشِ عبارت‌ها از سورسِ واقعی ----------
 // هر الگو باید **دقیقاً یکی** را پیدا کند. صفر یعنی لنگر جابه‌جا شده و دو یعنی

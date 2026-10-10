@@ -12,9 +12,10 @@
 
 ۲. **مسیرهای `security.txt`**
    طبقِ RFC 9116 در `next-frontend/public/.well-known/security.txt` نگه داشته
-   می‌شود — همان فایلی که سایتِ Next روی دامنه سرو می‌کند. نسخه‌ی Express هم
-   همان را در `frontend/.well-known/security.txt` دارد، با یک تفاوتِ عمدی:
-   `Policy` آن‌جا به `/terms.html` می‌رود چون Express همان نام را سرو می‌کند.
+   می‌شود — همان فایلی که سایتِ Next روی دامنه سرو می‌کند. نسخه‌ی دومِ عصرِ
+   Express (`frontend/.well-known/security.txt`) با حذفِ آن فروشگاه رفت؛ حالا
+   فقط همین یک فایل هست و `Policy` آن به مسیرِ تمیزِ `/terms` می‌رود — همان
+   مقصدی که `/terms.html` امروز با ۳۰۱ به آن می‌رسد.
 
    | فیلد | مقدار |
    |---|---|

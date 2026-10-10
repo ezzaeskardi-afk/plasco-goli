@@ -165,15 +165,15 @@ const done = (code) => {
   check('freeShippingOver در /shop/info هست', typeof info.data.freeShippingOver === 'number');
   check('shippingCost در /shop/info هست', typeof info.data.shippingCost === 'number');
 
-  console.log('\n--- داده‌ی ساختاریافته‌ی صفحه‌ی محصول ---');
-  await api('PUT', `/admin/products/${pid}`, { price: 80000, oldPrice: 100000 });
-  const page = await (await fetch(`${BASE}/product/${pid}`, { headers: { Cookie: cookieHeader() } })).text();
-  check('صفحه یک تگ canonical دارد (نه بیشتر)', (page.match(/rel="canonical"/g) || []).length === 1);
-  check('JSON-LD محصول با نشانه‌ی data-pg-ld تزریق شده', page.includes('data-pg-ld="product"'));
-  check('BreadcrumbList هم نشانه دارد', page.includes('data-pg-ld="crumbs"'));
-  check('قیمت ریالی درست است (۸۰۰٬۰۰۰ ریال = ۸۰٬۰۰۰ تومان)', page.includes('"price":800000'));
-  check('متای product:price:amount هم ریالی است', page.includes('content="800000"'));
-  check('قیمت قبلی به‌صورت متای استاندارد آمده', page.includes('og:price:standard_amount'));
+  // ---------- داده‌ی ساختاریافته‌ی صفحه‌ی محصول ----------
+  // این بخش تا روزِ بازنشستگی صفحه‌ی `/product/:id` را از **Express** می‌گرفت
+  // و نشانه‌های `data-pg-ld` (محصول و مسیرِ راه) و ریالی‌بودنِ قیمت را می‌سنجید.
+  // آن صفحه دیگر روی این مبدأ سرو نمی‌شود (صاحبش Next است)، پس سنجش هم به
+  // خانه‌ی تازه منتقل شد: `next-frontend/src/app/structuredData.test.ts`، بخشِ
+  // «قیمت در داده‌ی ساختاریافته و متاها» — همان سه قراردادِ این‌جا را می‌قفل
+  // می‌کند (قیمت ریالی در JSON-LD، متاهای `product:price:*`، و اینکه قیمتِ
+  // قبلی فقط با تخفیفِ واقعی اعلام شود). «صفحه یک canonical دارد» را
+  // `seoParity.test.ts` می‌سنجد.
 
   console.log('\n--- پاکسازی ---');
   const del = await api('DELETE', `/admin/products/${pid}`);

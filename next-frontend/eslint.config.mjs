@@ -7,7 +7,11 @@ const compat = new FlatCompat();
 
 const eslintConfig = [
   {
-    ignores: [".next/**", "node_modules/**", "out/**", "next-env.d.ts"],
+    // `tests/fixtures/**` عمداً در فهرست است: آن‌ها **متنِ تاریخیِ فروشگاهِ Express**
+    // هستند (کپیِ بایت‌به‌بایتِ پیش از حذفِ `frontend/`) که نگهبان‌های برابری به‌عنوانِ
+    // مرجع می‌خوانند. سورسِ ما نیستند، ویرایش هم نمی‌شوند — لینت‌کردنشان فقط ۳۲
+    // هشدارِ بی‌ربط تولید می‌کند و دردِ «۰ هشدار» را بی‌اعتبار می‌کند.
+    ignores: [".next/**", "node_modules/**", "out/**", "next-env.d.ts", "tests/fixtures/**"],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];

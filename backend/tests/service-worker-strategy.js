@@ -26,9 +26,14 @@
 //   • شبکه قطع + کپیِ همان صفحه → چه می‌بیند؟ (باید همان صفحه)
 //   • شبکه قطع + هیچ کپی‌ای → چه می‌بیند؟ (باید صفحه‌ی آفلاین)
 //
-// و دو کپیِ سرویس‌ورکر: دو برنامه یک سرویس‌ورکر دارند و فایل دو جا می‌نشیند
-// (`frontend/sw.js` و `next-frontend/public/sw.js`). اگر یکی ویرایش شود و
-// دیگری نه، دو فروشگاه دو رفتارِ متفاوت به کاربر می‌دهند و هیچ نگهبانی نمی‌فهمد.
+// ---------- یک کپی، و یک نگهبان برای نبودِ کپیِ دوم ----------
+// تا دیروز این سرویس‌ورکر دو جا می‌نشست (`frontend/sw.js` و
+// `next-frontend/public/sw.js`) و آزمون بایت‌به‌بایت یکی‌بودنشان را می‌سنجید.
+// با بازنشستگیِ فروشگاهِ Express کپیِ اول حذف شد؛ تنها کپیِ زنده همان
+// `next-frontend/public/sw.js` است و همینجا اجرا و سنجیده می‌شود.
+// برگشتِ کپیِ دوم یک تله‌ی واقعی است — دو سرویس‌ورکر با دو رفتار یعنی
+// کاربرها بسته به این‌که کدام را گرفته‌اند چیزهای متفاوتی می‌بینند — پس
+// همان چیزی که قبلاً «یکی بودن» را می‌سنجید، حالا «نبودن» را می‌سنجد.
 //
 // اجرا: node tests/service-worker-strategy.js
 
@@ -38,10 +43,8 @@ const path = require('path');
 const BACKEND = path.join(__dirname, '..');
 const REPO = path.join(BACKEND, '..');
 
-const FILES = {
-  'frontend/sw.js': path.join(REPO, 'frontend', 'sw.js'),
-  'next-frontend/public/sw.js': path.join(REPO, 'next-frontend', 'public', 'sw.js'),
-};
+const SW_FILE = path.join(REPO, 'next-frontend', 'public', 'sw.js');
+const RETIRED_COPY = path.join(REPO, 'frontend', 'sw.js');
 
 let pass = 0, fail = 0;
 function ok(label) { pass++; console.log(`  [PASS] ${label}`); }
@@ -52,28 +55,18 @@ function check(label, condition, detail = '') {
 
 console.log('\n=== Service worker strategy guard (fresh pages + background refresh) ===\n');
 
-// ---------- ۰) هر دو کپی باید باشند و یکی باشند ----------
-let sources = {};
-let missing = false;
-for (const [label, file] of Object.entries(FILES)) {
-  if (!fs.existsSync(file)) {
-    console.error(`  [FAIL] ${label} وجود ندارد — ${file}`);
-    missing = true;
-  } else {
-    sources[label] = fs.readFileSync(file);
-  }
-}
-if (missing) {
-  console.error('  ⚠ یکی از دو کپی پیدا نشد — نمی‌شود چیزی نسنجید.');
+// ---------- ۰) تک‌کپیِ زنده باید باشد، کپیِ بازنشسته نباید برگردد ----------
+if (!fs.existsSync(SW_FILE)) {
+  console.error(`  [FAIL] next-frontend/public/sw.js وجود ندارد — ${SW_FILE}`);
+  console.error('  ⚠ سرویس‌ورکر پیدا نشد — نمی‌شود چیزی نسنجید.');
   process.exit(1);
 }
 
-const [EXPRESS_COPY, NEXT_COPY] = Object.values(sources);
-check('دو کپیِ سرویس‌ورکر بایت‌به‌بایت یکی‌اند (دو فروشگاه، یک رفتار)',
-  EXPRESS_COPY.equals(NEXT_COPY),
-  `frontend/sw.js=${EXPRESS_COPY.length}B · public/sw.js=${NEXT_COPY.length}B`);
+check('کپیِ دومِ سرویس‌ورکر (frontend/sw.js) برنگشته است (دو کپی = دو رفتار)',
+  !fs.existsSync(RETIRED_COPY),
+  fs.existsSync(RETIRED_COPY) ? RETIRED_COPY : 'تک‌کپی');
 
-const SRC = EXPRESS_COPY.toString('utf8');
+const SRC = fs.readFileSync(SW_FILE, 'utf8');
 
 // ---------- ۱) جعبه‌ی شبیه‌سازی ----------
 const ORIGIN = 'http://127.0.0.1:3000';

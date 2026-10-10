@@ -53,7 +53,12 @@ const {
 const read = (p) => fs.readFileSync(p, 'utf8');
 const AUTH = read(path.join(DIR, 'routes', 'auth.js'));
 const DB = read(path.join(DIR, 'lib', 'db.js'));
-const EXPRESS_LOGIN = read(path.join(REPO, 'frontend', 'js', 'login.js'));
+// سمتِ Expressِ این مقایسه از اوراکلِ منجمد می‌خواند، نه از یک پوشه‌ی زنده:
+// `frontend/` با بازنشستگیِ فروشگاه حذف شد و این کپیِ بایت‌به‌بایت پیش از حذف
+// گرفته شده است. چرا حذف نشد: قراردادِ «سقف، ترتیبِ شمارش، و لحنِ پیامِ خطا»
+// را دو پیاده‌سازی مقایسه می‌کنند؛ با یک پیاده‌سازی، «درست بودن» بی‌مرجع می‌شود.
+const LEGACY_SRC = path.join(REPO, 'next-frontend', 'tests', 'fixtures', 'legacy-src');
+const EXPRESS_LOGIN = read(path.join(LEGACY_SRC, 'js', 'login.js'));
 const NEXT_LOGIN = read(path.join(REPO, 'next-frontend', 'src', 'components', 'LoginForm.tsx'));
 const ACTIVITY = read(path.join(REPO, 'next-frontend', 'src', 'components', 'admin', 'ActivityContent.tsx'));
 
