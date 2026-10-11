@@ -19,7 +19,7 @@
 
 - Node.js `>=22.5`، Express و SQLite داخلی Node — **فقط ۳ وابستگیِ اجرا** (`express`، `express-session`، `dotenv`)
 - **Next.js 15.5** با App Router، React 19، TanStack Query 5، Tailwind v4 — آزمونِ فرانت‌اند با Vitest 5 + jsdom
-- **۱۵۵ تابع** در `db.js` (۲,۹۷۵ خط) — ۲۶ فایل کتابخانه + ۹ مسیر API + ۵ ابزار مدیریتی
+- **۱۵۶ تابع** در `db.js` (۲,۹۸۷ خط) — ۲۶ فایل کتابخانه + ۹ مسیر API + ۵ ابزار مدیریتی
 - پنل ادمین: **۱۳ نما از ۱۳** در Next.js — پنلِ Express حذف شد؛ یک‌منبعِ حقیقت در `next-frontend/src/lib/adminSections.ts`
 - **بازنشستگیِ نام‌های قدیمی**: هر `.html` عصرِ Express روی همان دامنه ۳۰۱ به مسیرِ تمیز می‌رود (نگاشتِ یکتا در `backend/lib/legacy-redirects.js`)، sitemap و کانونیکال‌ها همان مسیرهای تمیز را می‌گویند، و بازگشتِ درگاهِ پرداخت مستقیم به `/order-success` می‌رسد — بدونِ پرشِ اضافه برای مشتریِ پول‌داده
 - **اوراکلِ منجمد**: متنِ ۹ صفحهٔ بازنشسته با کارنامهٔ SHA-256 در `next-frontend/tests/fixtures/legacy-oracle/` و متنِ کاملِ سورسِ عصرِ Express در `next-frontend/tests/fixtures/legacy-src/` نگه داشته شده؛ سنجشِ برابری بدنه را از فایل می‌خواند و کدِ وضعیت را زنده می‌سنجد
@@ -571,7 +571,7 @@ polasco-goli/
 │   ├── benchmark-report.md    ← گزارش مقایسه‌ای بنچمارک
 │   ├── SECURITY-REPORT.md     ← گزارش کامل اسکن OWASP Top 10
 │   ├── lib/
-│   │   ├── db.js              ← دیتابیس SQLite (۲,۹۷۵ خط، ۱۵۵ تابع)
+│   │   ├── db.js              ← دیتابیس SQLite (۲,۹۸۷ خط، ۱۵۶ تابع)
 │   │   ├── cache.js           ← کش درون‌حافظه با TTL
 │   │   ├── cluster.js         ← Node.js cluster (لینوکس)
 │   │   ├── rate-limit-sqlite.js ← rate-limit مشترک بین workers

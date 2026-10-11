@@ -372,7 +372,18 @@ CREATE TABLE IF NOT EXISTS categories (
 );
 `);
 // seed یک‌باره از دسته‌های موجود محصولات (با همان آیکون‌های تاریخی سایت)
-if (db.prepare('SELECT COUNT(*) AS n FROM categories').get().n === 0) {
+//
+// ⚠ ترتیبِ اجرا بخشی از قرارداد است: این تابع فقط **بعد از** کاشته‌شدنِ
+// محصولات معنا دارد و `initDb` دقیقاً همان‌جا صدایش می‌زند (بعد از
+// `seedIfEmpty`). تا پیش از این، همین منطق در زمانِ *لودِ ماژول* اجرا می‌شد —
+// یعنی وقتی جدولِ products هنوز خالی بود؛ پس در اولین استارتِ یک دیتابیسِ
+// تازه صفر دسته کاشته می‌شد و `/api/shop/categories` (منبعِ منوی هدر و
+// کارت‌های «دسته‌بندی‌ها»ی صفحهٔ اصلی) تا ری‌استارتِ بعدی خالی می‌ماند.
+// باگ فقط اجرای *اول* را می‌گرفت و در اجرای دوم (که محصولات از قبل بودند)
+// خودش را درمان می‌کرد — برای همین تا امروز پنهان مانده بود؛ نگهبانِ برابریِ
+// زنده آن را روی بیلدِ تازهِ CI لو داد.
+function seedCategoriesIfEmpty() {
+  if (db.prepare('SELECT COUNT(*) AS n FROM categories').get().n > 0) return;
   const CAT_ICONS = {
     'تشت و لگن': 'i-tub', 'صندلی و میز': 'i-chair', 'ظروف نگهداری': 'i-box',
     'سبد و جالباسی': 'i-basket', 'لوازم آشپزخانه': 'i-dishrack', 'لوازم نظافت': 'i-broom'
@@ -694,6 +705,7 @@ function initDb(log = console) {
     ['users', 'addresses', 'orders', 'products'].forEach(archiveLegacyJson);
   }
   seedIfEmpty();
+  seedCategoriesIfEmpty();
   ensureQueryStats(log);
   (log.info || console.log).call(log, '[OK] SQLite database (built into Node) is ready');
 }
