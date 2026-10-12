@@ -933,6 +933,72 @@ const GUARDS = [
         replace: 'error_page 500 502 503 504 /oops.html;',
         failedTest: 'nginx واقعاً به همین فایل وصل است',
       },
+      {
+        // ---------- بودجهٔ صبرِ لبهٔ دامنه ----------
+        // همان رگرسیونی که این سنجش‌ها برای گرفتنش نوشته شده‌اند: مهلتِ اتصال
+        // به پیش‌فرضِ ۶۰ ثانیه‌ای nginx برگردد. با آن عدد، وقتی Next زیرِ بار
+        // جواب نمی‌دهد مشتری یک دقیقه به صفحهٔ سفید نگاه می‌کند و بعد کارتِ خطا
+        // را می‌بیند — دقیقاً چیزی که این پیکربندی می‌بندد.
+        label: 'مهلتِ اتصال به پیش‌فرضِ ۶۰ ثانیه‌ای برگردد (مشتری یک دقیقه معطل می‌شود)',
+        file: 'HTTPS-GUIDE.md',
+        find: 'proxy_connect_timeout 2s;',
+        replace: 'proxy_connect_timeout 60s;',
+        all: true,
+        failedTest: 'بودجهٔ صبرِ صفحه‌ها کوتاه است',
+      },
+      {
+        // این یکی بدترین حالتِ واقعی را می‌گیرد: درگاهِ Next باز است و
+        // درخواست قبول می‌شود ولی پاسخی نمی‌آید؛ آن‌وقت این مهلت است که
+        // تمام می‌شود، نه مهلتِ اتصال. با ۱۲۰ ثانیه، مشتری دو دقیقه معطل
+        // می‌ماند و بعد کارتِ خطا را می‌بیند.
+        label: 'مهلتِ خواندنِ صفحه‌ها به ۱۲۰ ثانیه برگردد (درگاهِ باز و بی‌پاسخ، مشتری را دو دقیقه نگه می‌دارد)',
+        file: 'HTTPS-GUIDE.md',
+        find: 'proxy_read_timeout 15s;',
+        replace: 'proxy_read_timeout 120s;',
+        failedTest: 'بودجهٔ صبرِ صفحه‌ها کوتاه است',
+      },
+      {
+        label: 'تلاشِ دوباره روشن شود (انتظارِ مشتری دو برابر می‌شود)',
+        file: 'HTTPS-GUIDE.md',
+        find: 'proxy_next_upstream_tries 1;',
+        replace: 'proxy_next_upstream_tries 3;',
+        all: true,
+        failedTest: 'بودجهٔ صبرِ صفحه‌ها کوتاه است',
+      },
+      {
+        // بدونِ این دو پارامتر، nginx هر بار دوباره و کورکورانه اتصال می‌گیرد؛
+        // یعنی در بازهٔ خرابی، هر درخواست یک انتظارِ تازه است.
+        label: 'حافظهٔ خرابیِ upstream پاک شود (هر درخواست دوباره معطل می‌ماند)',
+        file: 'HTTPS-GUIDE.md',
+        find: 'server 127.0.0.1:3001 max_fails=2 fail_timeout=10s;',
+        replace: 'server 127.0.0.1:3001;',
+        failedTest: 'upstream حافظهٔ خرابی دارد',
+      },
+      {
+        // ظرافتِ اصلی: ۴۰۴ِ *استایل‌دارِ* Next (`app/not-found.tsx`) نباید به
+        // کارتِ ۵۰۰ تبدیل شود. یک خط `error_page` کافی است تا با سوئیچِ
+        // `proxy_intercept_errors` همان صفحهٔ درستِ Next قربانی شود.
+        label: 'در خطِ error_page، کدِ ۴۰۴ هم اضافه شود (صفحهٔ not-found قربانی شود)',
+        file: 'HTTPS-GUIDE.md',
+        append: '\n    error_page 404 /error-500.html;\n',
+        failedTest: 'قربانیِ کارتِ ۵۰۰ نمی‌شود',
+      },
+      {
+        label: 'زیرِ /api/ هم کارتِ HTML سرو شود (کلاینتِ fetch می‌شکند)',
+        file: 'HTTPS-GUIDE.md',
+        find: 'proxy_intercept_errors off;',
+        replace: 'proxy_intercept_errors on;',
+        failedTest: 'به JSON می‌رسد',
+      },
+      {
+        // خودکفاییِ لبه: کارتِ خطا اگر از خودِ Next پروکسی شود، دقیقاً وقتی
+        // نمی‌آید که لازم است — یعنی همان چیزی که خراب است صدایش می‌زنیم.
+        label: 'کارتِ ۵۰۰ از خودِ Next پروکسی شود (وابستگیِ حلقه‌ای)',
+        file: 'HTTPS-GUIDE.md',
+        find: '    location = /error-500.html {\n        root /var/www/',
+        replace: '    location = /error-500.html {\n        proxy_pass http://polasco_next;\n        root /var/www/',
+        failedTest: 'از دیسک سرو می‌شود',
+      },
     ],
   },
   {
