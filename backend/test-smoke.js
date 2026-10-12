@@ -3805,11 +3805,25 @@ function shutdown(code) {
       check('V38 قرارداد: مبلغِ ردیفِ پرخرج عددی و مثبت است (ناعدد نمی‌شود)',
         tops.length > 0 && tops.every(c => Number.isFinite(c.spent) && c.spent > 0),
         `بیشترین: ${Math.max(...tops.map(c => Number(c.spent) || 0))}`);
-      // `String(...)` عمدی است: اگر روزی فیلد غایب شود، این سنجش باید «قرمز»
-      // بدهد نه اینکه وسطِ بلوک استثنا پرت کند و بقیه‌ی V38 را از کار بیندازد.
-      check('V38 قرارداد: نامِ مشتری جایی هست که رابط انتظار دارد (نه فقط شماره)',
-        tops.some(c => String(c.fullName || '').trim().length > 0),
-        `${tops.filter(c => String(c.fullName || '').trim()).length} از ${tops.length} نام‌دار`);
+      // ---------- خودِ «نام» را می‌سنجیم، نه وجودِ نام در داده ----------
+      // چرا این‌طور: نسخه‌ی اول این سنجش «یکی از ردیف‌ها نام دارد» بود و به
+      // *داده* وابسته بود — روی دیتابیسِ تازه‌ی CI (که کاربرانش نام ندارند)
+      // قرمز می‌شد و روی ماشینِ توسعه‌دهنده سبز. همان لغزشی که `wipeScores`
+      // بالاتر بست: نگهبان باید وضعیت را خودش بسازد، نه به داده تکیه کند.
+      // این‌جا نام روی یکی از همین مشتریانِ برتر نوشته و از رابط خوانده می‌شود؛
+      // اگر کوئری `full_name` بدهد و رابط `c.fullName` بخواهد، مقدار
+      // `undefined` می‌شود و همین سنجش (بدونِ هیچ خطایی) قرمز می‌شود.
+      const named = tops[0];
+      const CONTRACT_NAME = 'مشتریِ آزمونِ V38';
+      {
+        const d = new DatabaseSync(sqliteFile);
+        try { d.prepare('UPDATE users SET full_name = ? WHERE id = ?').run(CONTRACT_NAME, named.id); } finally { d.close(); }
+      }
+      const namedRes = await api('GET', '/admin/crm/top?limit=100');
+      const namedRow = (namedRes.data.customers || []).find(c => c.id === named.id) || {};
+      check('V38 قرارداد: نامِ مشتری با همان کلیدِ رابط برمی‌گردد (نه شماره، نه undefined)',
+        namedRow.fullName === CONTRACT_NAME,
+        `fullName=${JSON.stringify(namedRow.fullName)} از ${JSON.stringify(Object.keys(namedRow))}`);
 
       // ---------- قراردادِ فیلدها: کارتِ «درآمد ماهانه» ----------
       // دو ایرادِ هم‌جنس: `label` نبود (زیر هر میله جای خالی) و ترتیب نزولی بود
