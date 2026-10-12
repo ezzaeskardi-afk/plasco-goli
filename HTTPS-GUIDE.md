@@ -158,6 +158,24 @@ sudo systemctl status certbot.timer
 #### پیکربندی nginx (هر دو برنامه روی یک دامنه):
 
 ```nginx
+# ---- سرورهای پشتی + حافظهٔ خرابی ------------------------------------------
+# ⚠️ این دو بلوک `upstream` باید در سطحِ `http` باشند، یعنی *بالای* `server`
+# و در همان فایلی که در `sites-available/` می‌گذارید (آن فایل داخلِ `http {}`
+# include می‌شود). اگر داخلِ `server {}` کپی شوند، `nginx -t` با پیامِ
+# «upstream directive is not allowed here» رد می‌کند.
+# چرا `upstream` و نه `proxy_pass` مستقیم به `127.0.0.1:3001`:
+# با `max_fails` و `fail_timeout`، nginx شکستِ چند درخواستِ اول را *به خاطر
+# می‌سپارد* و از آن به بعد تا ۱۰ ثانیه درخواست‌ها را **بی‌هیچ تلاشِ اتصالی**
+# با ۵۰۲ برمی‌گرداند. بدونِ این دو گزینه، هر مشتریِ بعدی هم دوباره تمامِ
+# `proxy_connect_timeout` را منتظر می‌مانْد — یعنی موقعِ خرابیِ Next، صف
+# درخواست‌ها تبدیل به صفِ انتظارِ ۲ ثانیه‌ای می‌شد.
+upstream polasco_next {
+    server 127.0.0.1:3001 max_fails=2 fail_timeout=10s;
+}
+upstream polasco_api {
+    server 127.0.0.1:3000 max_fails=2 fail_timeout=10s;
+}
+
 server {
     listen 80;
     server_name yourdomain.com www.yourdomain.com;
@@ -179,21 +197,44 @@ server {
 
     # ---- API و عکس‌ها: Express روی ۳۰۰۰ ----
     location /api/ {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://polasco_api;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        # مهلتِ *خواندن* عمداً بلند می‌ماند (درگاهِ پرداخت و پیامک کند هستند)،
+        # ولی مهلتِ *اتصال* کوتاه است: سرویسِ خوابیده در ۳ ثانیه جواب می‌دهد،
+        # نه در ۶۰ ثانیه‌ی پیش‌فرض.
+        proxy_connect_timeout 3s;
         proxy_read_timeout 120s;
         proxy_send_timeout 120s;
+        proxy_next_upstream_tries 1;
+        # برخلافِ `location /`، این‌جا خطای ۵xx را به HTML تبدیل نمی‌کنیم:
+        # کلاینتِ `fetch` قراردادِ JSON می‌خواند (`{ error: … }`)، و صفحهٔ
+        # کارتِ ۵۰۰ برایش بی‌مصرف است. فقط وقتی *خودِ Express* بالا نیست و
+        # nginx عددِ ۵۰۲/۵۰۳/۵۰۴ می‌سازد، بدنه همان قراردادِ JSON می‌شود.
+        proxy_intercept_errors off;
+        error_page 502 503 504 = @api_down;
+    }
+
+    # پاسخِ «سرویس بالا نیست» به زبانِ خودِ API (شکلِ همان `{ error: … }` که
+    # `next-frontend/src/lib/api.ts` می‌شناسد)، نه کارتِ HTML.
+    location @api_down {
+        internal;
+        default_type application/json;
+        return 503 '{"error":"سرویس موقتاً در دسترس نیست؛ چند لحظه بعد دوباره تلاش کنید"}';
     }
 
     location /picture/ {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://polasco_api;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        # عکس‌ها هم از همان سرویس می‌آیند، پس همان بودجه‌ی اتصال را دارند.
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 30s;
+        proxy_next_upstream_tries 1;
     }
 
     # ---- صفحه‌ی خطای خودِ nginx: از دیسک، نه از Next ----
@@ -219,7 +260,7 @@ server {
 
     # ---- فروشگاه و پنل: Next روی ۳۰۰۱ ----
     location / {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://polasco_next;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -228,8 +269,46 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
-        proxy_read_timeout 120s;
-        proxy_send_timeout 120s;
+
+        # ---- بودجه‌ی صبرِ مشتری: ۲ ثانیه، نه ۶۰ ----
+        # پیش‌فرضِ `proxy_connect_timeout` در nginx یک دقیقه است. یعنی وقتی
+        # درگاهِ ۳۰۰۱ باز است ولی کسی جواب نمی‌دهد (پروسه‌ی قفل‌شده، ری‌استارتِ
+        # نیمه‌کاره، یا ماشینی که سوکتش را نگه داشته)، مشتری یک دقیقه به
+        # صفحه‌ی سفید نگاه می‌کرد و تازه بعد خطا می‌گرفت. با ۲ ثانیه، همان
+        # وضعیت در ۲ ثانیه به کارتِ استایل‌دار می‌رسد.
+        proxy_connect_timeout 2s;
+        proxy_send_timeout 30s;
+        # سقفِ انتظار برای خواندنِ پاسخ. این عدد *غالب‌ترین* انتظار در خرابیِ
+        # Next است: وقتی درگاه باز است و درخواست قبول می‌شود ولی پاسخی نمی‌آید
+        # (پروسهٔ قفل‌شده)، این مهلت است که تمام می‌شود — نه مهلتِ اتصال.
+        # صفحهٔ Next در عمل زیر یک ثانیه رندر می‌شود، پس ۱۵ ثانیه یعنی
+        # «اگر رندرِ یک صفحه از پانزده ثانیه گذشت، همان کارتِ خطا را بده».
+        #
+        # دو نکته که دانستنش لازم است:
+        #   • اگر روزی صفحه‌ای *واقعاً* کند داشتید (گزارشِ سنگین روی VPSِ کوچک)،
+        #     بلندکردنِ همین عدد راهِ درست است — ولی بدانید که سقفِ انتظارِ
+        #     *همهٔ* کاربران را در لحظهٔ خرابی بالا می‌برد.
+        #   • اگر روزی WebSocket/SSE زیرِ همین دامنه اضافه شد، همین مهلت،
+        #     اتصالِ بی‌ترافیک را بعد از ۱۵ ثانیه می‌بندد؛ آن‌وقت برای آن مسیر
+        #     یک `location` جدا با مهلتِ بلندتر لازم است.
+        proxy_read_timeout 15s;
+
+        # کدام شکست «شکست» حساب شود (و در حافظهٔ خرابیِ upstream بنشیند):
+        # خطای اتصال، مهلتِ تمام‌شده، و ۵xxی که خودِ upstream برگرداند.
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        # سقفِ تلاش عمداً یک است. با یک سرور در استخر، nginx امروز خودش هم
+        # دوباره سراغِ همان سرور نمی‌رود؛ ولی این خط (الف) قصد را صریح می‌کند
+        # و (ب) اگر روزی سرورِ دومی اضافه شد، مشتری به‌جای دو برابر شدنِ
+        # انتظار، فوری کارتِ خطا می‌بیند. مقدارِ بزرگ‌تر در اینجا هیچ چیزی را
+        # بهتر نمی‌کند و فقط انتظار را ضرب می‌کند.
+        proxy_next_upstream_tries 1;
+
+        # خطای ۵xxی که *خودِ Next* برمی‌گرداند هم به همان کارتِ لبه می‌رسد تا
+        # لبه‌ی دامنه یک شکل داشته باشد. عمداً هیچ `error_page … 404` نداریم:
+        # ۴۰۴ِ استایل‌دارِ Next (`app/not-found.tsx`) نباید با کارتِ ۵۰۰ عوض
+        # شود — و بدونِ خطِ `404` در `error_page`، حتی با این سوئیچ هم دست‌نخورده
+        # رد می‌شود.
+        proxy_intercept_errors on;
     }
 }
 ```
@@ -248,6 +327,26 @@ server {
 >     با کدِ درست می‌دهد تا کلاینت‌های `fetch` نشکنند.
 >   • **nginx** — ۵۰۲/۵۰۳/۵۰۴ (وقتی یکی از دو سرویس بالا نیست) از
 >     `public/error-500.html` سرو می‌شود؛ همان کارتِ ۵۰۰ با پالتِ خودِ سایت.
+>     یک استثنا عمدی: زیرِ `/api/` همین خطا بدنهٔ JSON می‌گیرد
+>     (`{"error":…}`)، چون مصرف‌کننده‌اش `fetch` است نه چشمِ آدم.
+
+> **وقتی Next بالا نیست، مشتری چقدر منتظر می‌مانَد؟** سه شکلِ خرابی هست و
+> بودجه‌ی هر کدام عمداً متفاوت است:
+>
+> | شکلِ خرابی | چقدر طول می‌کشد | چرا |
+> |---|---|---|
+> | پروسه مرده / درگاه بسته | چند میلی‌ثانیه | اتصال فوراً رد می‌شود؛ خطای ۵۰۲ همان لحظه ساخته می‌شود |
+> | درگاه باز ولی بی‌جواب (قفل، ری‌استارتِ نیمه‌کاره) | حداکثر ۲ ثانیه | `proxy_connect_timeout 2s` |
+> | درخواست پذیرفته شد و پاسخ نمی‌آید | حداکثر ۱۵ ثانیه | `proxy_read_timeout 15s` |
+> | درخواست‌های *بعدی* در همان بازه | فوری (بدونِ تلاشِ اتصال) | `max_fails=2 fail_timeout=10s` — nginx سرویس را «خوابیده» علامت می‌زند |
+>
+> پیش‌فرضِ nginx در هر یک از این حالتها ۶۰ ثانیه بود و `proxy_read_timeout`ِ
+> قبلیِ همین پیکربندی ۱۲۰ ثانیه — یعنی مشتری می‌توانست دو دقیقه منتظر بماند و
+> تازه بعد صفحهٔ خطا ببیند. عددِ `2s` برای اتصالِ لوکال (حلقه‌ی برگشتی) بسیار
+> سخاوتمندانه است: اتصالِ سالم روی همین ماشین زیر یک میلی‌ثانیه برقرار می‌شود.
+>
+> توجه: وقتی سرویس برمی‌گردد، nginx خودش بعد از `fail_timeout` (۱۰ ثانیه)
+> دوباره امتحان می‌کند؛ نیازی به `reload` نیست.
 
 >
 > **چرا `X-Forwarded-Proto` را خودمان می‌گذاریم؟** پروکسیِ داخلیِ Next (که
@@ -261,6 +360,29 @@ server {
 sudo nginx -t          # بررسی پیکربندی
 sudo systemctl reload nginx
 ```
+
+#### سنجیدنِ «سریع به صفحه‌ی خطا رسیدن» روی سرورِ خودتان:
+```bash
+# ۱) Next را عمداً بخوابانید و زمانِ پاسخِ یک صفحه را بگیرید
+sudo systemctl stop polasco-next
+curl -s -o /dev/null -w 'کد: %{http_code}   زمان: %{time_total}s\n' https://yourdomain.com/products
+# انتظار: کدِ ۵۰۲ و زمانِ کمتر از ~۲ ثانیه
+
+# ۲) بدنه همان کارتِ استایل‌دار باشد، نه صفحه‌ی پیش‌فرضِ nginx
+curl -s https://yourdomain.com/products | grep -c 'خطای ۵۰۰'
+# انتظار: ۱
+
+# ۳) و API به زبانِ خودش جواب بدهد (JSON، نه HTML)
+curl -s -i https://yourdomain.com/api/health | head -3
+# انتظار: 503 و Content-Type: application/json
+
+sudo systemctl start polasco-next
+```
+
+> اگر مرحله‌ی ۱ عددِ ۵۰۲ داد ولی `time_total` نزدیکِ یک دقیقه بود، یعنی خطوطِ
+> `proxy_connect_timeout` در فایلِ فعالِ nginx نیستند (پیکربندیِ قدیمی
+> reload نشده). و اگر بدنه‌ی مرحله‌ی ۲ خالی بود، مسیرِ `root` در بلوکِ
+> `location = /error-500.html` با مسیرِ واقعیِ مخزن روی سرور نمی‌خواند.
 
 ### روش C: Railway / Render / Vercel
 

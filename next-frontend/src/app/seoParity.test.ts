@@ -391,6 +391,89 @@ describe("صفحه‌ی ۵۰۰ِ لبه‌ی دامنه (سروِ مستقیمِ
     expect(nextSource("app/robots.ts")).toContain("/error-500.html");
   });
 
+  // ---------- قراردادِ «سریع به خطا رسیدن» ----------
+  // این پنج سنجش روی *خودِ پیکربندیِ مستند* کار می‌کنند، نه روی یک nginxِ
+  // زنده: روی ماشینِ توسعه nginx نصب نیست، پس تنها جایی که این قرارداد قابلِ
+  // قفل‌کردن است همین متن است. چیزی که قفل می‌شود عددهای بودجه‌ی صبر و
+  // استثناهای عمدی است — اگر کسی مهلتِ اتصال را به پیش‌فرضِ ۶۰ ثانیه
+  // برگردانَد یا `error_page` را روی ۴۰۴ بگذارد، همین‌جا قرمز می‌شود؛ پیش از
+  // آنکه مشتری یک دقیقه پشتِ صفحه‌ی سفید بنشیند.
+  const guideRaw = fs.readFileSync(path.resolve(NEXT_DIR, "..", "HTTPS-GUIDE.md"), "utf8");
+  // بلوک‌ها با شمارشِ آکولاد جدا می‌شوند، نه با regex: داخلِ همین بلوک‌ها
+  // آکولادِ تودرتو هست (مثلاً بدنهٔ JSON در `@api_down`) و یک regex تنبل بلوکِ
+  // اشتباه را برمی‌دارد.
+  const blockOf = (marker: string): string => {
+    const at = guideRaw.indexOf(marker);
+    if (at === -1) return "";
+    const open = guideRaw.indexOf("{", at);
+    let depth = 0;
+    for (let i = open; i < guideRaw.length; i += 1) {
+      if (guideRaw[i] === "{") depth += 1;
+      else if (guideRaw[i] === "}") {
+        depth -= 1;
+        if (depth === 0) return guideRaw.slice(open, i + 1);
+      }
+    }
+    return "";
+  };
+  const secondsIn = (block: string, name: string): number | null => {
+    const m = block.match(new RegExp(`${name}\\s+(\\d+)(?:s)?;`));
+    return m ? Number(m[1]) : null;
+  };
+  const pageBlock = blockOf("location / {");
+  const apiBlock = blockOf("location /api/ {");
+  const cardBlock = blockOf("location = /error-500.html");
+  const nextUpstream = blockOf("upstream polasco_next");
+
+  it("بودجهٔ صبرِ صفحه‌ها کوتاه است و «تلاشِ دوباره» ندارد", () => {
+    const connect = secondsIn(pageBlock, "proxy_connect_timeout");
+    const read = secondsIn(pageBlock, "proxy_read_timeout");
+    expect(connect, "proxy_connect_timeout در بلوکِ صفحه‌ها نیست").not.toBeNull();
+    expect(connect as number, "اتصالِ کند یعنی مشتری پشتِ صفحهٔ سفید می‌ماند").toBeLessThanOrEqual(5);
+    expect(read, "proxy_read_timeout در بلوکِ صفحه‌ها نیست").not.toBeNull();
+    // سقفِ ۳۰ ثانیه عمداً تنگ است: این عدد غالب‌ترین انتظار در خرابیِ Next
+    // است (درگاه باز، پاسخ نیامده)، پس برگشتنِ آن به ۶۰/۱۲۰ ثانیه یعنی
+    // برگشتنِ همان باگی که این سنجش برای گرفتنش نوشته شده.
+    expect(read as number, "خواندنِ بلند یعنی انتظارِ بلند").toBeLessThanOrEqual(30);
+    expect(secondsIn(pageBlock, "proxy_next_upstream_tries")).toBe(1);
+  });
+
+  it("upstream حافظهٔ خرابی دارد (max_fails و fail_timeout)", () => {
+    expect(nextUpstream, "بلوکِ upstream polasco_next پیدا نشد").not.toBe("");
+    // پارامترهای `server` در nginx با `=` می‌آیند (`max_fails=2`)، پس الگو
+    // هر دو شکل را می‌پذیرد — وگرنه نگهبان به‌خاطرِ نحوهٔ نوشتنِ درست قرمز می‌شد.
+    expect(/fail_timeout\s*=\s*\d+/.test(nextUpstream)).toBe(true);
+    expect(/max_fails\s*=\s*\d+/.test(nextUpstream)).toBe(true);
+  });
+
+  it("۴۰۴ِ استایل‌دارِ Next قربانیِ کارتِ ۵۰۰ نمی‌شود (خطِ ۴۰۴ در error_page نیست)", () => {
+    const errorPageLines = guideRaw.split("\n").filter((l) => /^\s*error_page\b/.test(l));
+    expect(errorPageLines.length).toBeGreaterThan(0);
+    expect(
+      errorPageLines.some((l) => /(^|\s)404(\s|;)/.test(l)),
+      "error_page روی ۴۰۴ یعنی صفحهٔ not-found به کارتِ ۵۰۰ تبدیل می‌شود",
+    ).toBe(false);
+    expect(pageBlock).toContain("proxy_intercept_errors on;");
+  });
+
+  it("۵xxِ API به JSON می‌رسد، نه به کارتِ HTML", () => {
+    expect(apiBlock).toContain("proxy_intercept_errors off;");
+    expect(/error_page\s+502\s+503\s+504\s+=\s+@api_down;/.test(apiBlock)).toBe(true);
+    const down = blockOf("location @api_down");
+    expect(down, "بلوکِ @api_down پیدا نشد").not.toBe("");
+    expect(down).toContain("internal;");
+    expect(down).toContain("application/json");
+    expect(/return\s+503/.test(down)).toBe(true);
+    // و بدنه باید همان شکلِ قراردادی باشد که `lib/api.ts` می‌خواند.
+    expect(down).toContain('{"error":');
+  });
+
+  it("کارتِ ۵۰۰ از دیسک سرو می‌شود، نه از چیزی که همین حالا خراب است", () => {
+    expect(cardBlock, "بلوکِ `location = /error-500.html` پیدا نشد").not.toBe("");
+    expect(cardBlock).toContain("root ");
+    expect(cardBlock).not.toContain("proxy_pass");
+  });
+
   it("nginx واقعاً به همین فایل وصل است (مستند ↔ فایل)", () => {
     // راهنمای استقرار در ریشه‌ی مخزن است، نه داخلِ `next-frontend`.
     const guidePath = path.resolve(NEXT_DIR, "..", "HTTPS-GUIDE.md");
