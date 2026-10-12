@@ -90,7 +90,7 @@ const STEPS = [
   },
   {
     label: 'جهش‌های نگهبان‌های بک‌اند',
-    why: 'یازده نگهبان، از جمله هر دو جهشِ عددهای README',
+    why: 'چهارده نگهبان، از جمله هر دو جهشِ عددهای README',
     cwd: join(ROOT, 'backend'),
     args: ['tests/guard-mutations.js', '--scope=backend'],
   },

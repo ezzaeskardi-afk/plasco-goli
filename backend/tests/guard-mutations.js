@@ -849,6 +849,68 @@ const GUARDS = [
     ],
   },
 
+  {
+    // چهار جهش روی چهار لایهٔ متفاوتِ همان هارنس — چون «سبز ماند» می‌تواند
+    // یعنی «سایت سالم» یا «هارنس کور». هستهٔ اصلی اینجا آزموده می‌شود:
+    // سدِ مبدأ (CSRF)، هدرِ کشِ پاسخ‌های حساس، پرچمِ کوکی، مرزِ پوشهٔ عکس‌ها،
+    // دروازهٔ ادمین و مالکیتِ سفارش. هر شش‌تا رفتارِ متفاوتی می‌سنجند.
+    name: 'wstg',
+    scope: 'backend',
+    title: 'آزمونِ نفوذِ WSTG یک یافتهٔ واقعی را می‌گیرد',
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/wstg.js'] },
+    mutations: [
+      {
+        label: 'سدِ مبدأ (CSRF) باز شود',
+        file: 'backend/server.js',
+        find: '  if (!ok.has(host)) {',
+        replace: '  if (false) {',
+        expect: /Originِ بیگانه/,   // SESS-05
+      },
+      {
+        label: 'هدرِ no-store از پاسخ‌های API برداشته شود',
+        file: 'backend/server.js',
+        find: "app.use('/api', (req, res, next) => {\n  res.setHeader('Cache-Control', 'no-store');\n  next();\n});",
+        replace: "app.use('/api', (req, res, next) => {\n  next();\n});",
+        expect: /کش\u200cنشدنی/,   // ATHN-06
+      },
+      {
+        label: 'پرچمِ HttpOnly از کوکیِ نشست برداشته شود',
+        file: 'backend/server.js',
+        find: '    httpOnly: true,',
+        replace: '    httpOnly: false,',
+        expect: /HttpOnly/,   // SESS-02
+      },
+      {
+        // همان اشتباهِ کلاسیکِ «ریشه یک پله بالاتر»: پوشهٔ عکس یک درجه بالاتر
+        // سرو می‌شود. جهش روی خودِ ریشه زده می‌شود و نه روی نگهبانِ path:
+        // نگهبانِ webp با normalizeِ posix قفل شده و روی لینوکس از پیش هم
+        // نفوذناپذیر است، پس جهش روی آن در CI (اوبونتو) هیچوقت گرفته نمی‌شد.
+        label: 'ریشهٔ عکس‌ها یک پله بالاتر سرو شود',
+        file: 'backend/lib/paths.js',
+        find: 'const PICTURE_DIR = process.env.PG_PICTURE_DIR\n  ? path.resolve(process.env.PG_PICTURE_DIR)',
+        replace: 'const PICTURE_DIR = process.env.PG_PICTURE_DIR\n  ? path.resolve(process.env.PG_PICTURE_DIR, "..")',
+        expect: /بیرون/,   // ATHZ-01
+      },
+      {
+        label: 'دروازهٔ ادمین برای هر کاربرِ واردشده باز شود',
+        file: 'backend/routes/admin.js',
+        find: '  if (!user || !user.is_admin) {',
+        replace: '  if (false) {',
+        expect: /۴۰۳/,   // ATHZ-03
+      },
+      {
+        // بدونِ فاصله‌ی ابتدای خط نوشته می‌شود تا *هر چهار* روتِ مالکیت‌دار
+        // (بازخوانی، لغو، بازگردانی، خرید دوباره) باهم جهش بخورند.
+        label: 'مالکیتِ سفارش در لغو/خواندن نادیده گرفته شود',
+        file: 'backend/routes/orders.js',
+        find: 'if (!order || order.userId !== req.session.userId) {',
+        replace: 'if (!order) {',
+        all: true,
+        expect: /لغو کند|نمی\u200cبیند/,   // ATHZ-02/04
+      },
+    ],
+  },
+
   // ----------------------------------------------------------
   // نگهبان‌های Vitest (منبع را عوض می‌کنیم، نگهبان باید قرمز شود)
   // ----------------------------------------------------------
