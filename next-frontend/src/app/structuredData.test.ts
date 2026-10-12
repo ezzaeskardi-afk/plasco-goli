@@ -28,6 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { safeJsonLd } from "@/components/JsonLd";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NEXT_DIR = path.resolve(HERE, "..", ".."); // next-frontend/
@@ -328,5 +329,39 @@ describe("عکس‌ها: alt و ابعادِ صریح", () => {
       }
     }
     expect(bad).toEqual([]);
+  });
+});
+
+// ============================================================
+// JSON-LD داخلِ <script> — رمزگذاری، نه فقط وجودِ تابع
+// ============================================================
+// چرا این آزمون لازم بود: `JsonLd.tsx` دادهٔ خودش را با
+// `dangerouslySetInnerHTML` داخلِ یک عنصرِ `<script>` می‌گذارد و بخشی از آن
+// داده — نام و توضیحِ محصول — از پنل مدیریت می‌آید. `JSON.stringify` تنها `"` و
+// `\` را فرار می‌دهد و `<` را دست‌نخورده می‌گذارد، پس یک نامِ محصولِ حاویِ
+// `</script><script>…` رشتهٔ JSON را می‌بست و اسکریپت اجرا می‌شد. `safeJsonLd`
+// همان `<` را به `\u003c` تبدیل می‌کند که برای JSON دقیقاً به همان معناست ولی
+// رشته را نمی‌بندد.
+//
+// سنجشِ *رفتاری* است نه الگویی: خودِ تابع اجرا می‌شود و خروجی‌اش کمّی می‌شود.
+// اگر کسی دوباره `JSON.stringify` را مستقیم جا بگذارد، همان‌جا قرمز می‌شود.
+describe("JSON-LD: درجِ امن در HTML", () => {
+  it("تگِ بستهٔ script از دادهٔ کاربر بیرون نمی‌زند", () => {
+    const hostile = { name: "</script><script>alert(1)</script>", description: "ok" };
+    const out = safeJsonLd(hostile);
+    expect(out).not.toContain("</script>");
+    expect(out).not.toContain("<script>");
+    expect(out).toContain("\\u003c");
+  });
+
+  it("خروجی همچنان JSONِ معتبر و با همان داده است", () => {
+    const hostile = { name: "a<b>c", nested: { x: "</script>" } };
+    const parsed = JSON.parse(safeJsonLd(hostile));
+    expect(parsed).toEqual(hostile);
+  });
+
+  it("متنِ سالم دست‌نخورده می‌ماند (فارسی و ارز و شماره)", () => {
+    const clean = { name: "سبد پلاستیکی", price: "۱۲۰۰۰۰", currency: "IRR" };
+    expect(safeJsonLd(clean)).toBe(JSON.stringify(clean));
   });
 });

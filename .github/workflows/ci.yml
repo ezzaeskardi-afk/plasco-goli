@@ -88,6 +88,13 @@ jobs:
       - name: OWASP Top 10 scan
         run: node tests/owasp-scan.js
 
+      # نقشهٔ ASVS 5.0.0: هر بند یا یک سنجشِ گره‌خورده به کد دارد، یا با دلیلِ
+      # مستند به‌عنوانِ شکاف اعلام می‌شود. بدونِ سرور اجرا می‌شود (چند صد
+      # میلی‌ثانیه) و همان چیزی را نگه می‌دارد که تا امروز فقط در سرِ کسی بود:
+      # «کدام کنترلِ امنیتی را داریم و کدام را نه».
+      - name: ASVS 5.0 map
+        run: node tests/asvs.js
+
       - name: Security tests
         run: node tests/security.js
 

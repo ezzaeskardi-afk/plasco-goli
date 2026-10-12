@@ -45,7 +45,9 @@ const HTTPS_MODE = /^(1|true|yes|on)$/i.test(String(process.env.COOKIE_SECURE ||
 const CSP = [
   // بی‌اثر کردنِ <base href> تزریقی؛ وگرنه همه‌ی لینک‌های نسبیِ صفحه را
   // می‌توان به دامنه‌ی مهاجم برد
-  "base-uri 'self'",
+  // ASVS 3.4.3: `'none'` و نه `'self'`. با `'self'` یک `<base href>` تزریق‌شده
+  // مجاز می‌مانْد؛ با `'none'` عنصرِ `<base>` در این مبدأ هیچ اثری ندارد.
+  "base-uri 'none'",
   "object-src 'none'",
   // نسخه‌ی مدرنِ X-Frame-Options — جلوی clickjacking
   "frame-ancestors 'self'",

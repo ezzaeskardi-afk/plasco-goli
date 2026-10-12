@@ -114,7 +114,7 @@ const kill = (srv) => { try { srv.child.kill(); } catch (e) {} };
   const csp = h('content-security-policy');
   check('CSP وجود دارد', !!csp, csp);
   for (const part of ["default-src 'self'", "script-src 'self'", "object-src 'none'",
-    "base-uri 'self'", "frame-src 'none'", "worker-src 'self'", "manifest-src 'self'"]) {
+    "base-uri 'none'", "frame-src 'none'", "worker-src 'self'", "manifest-src 'self'"]) {
     check(`CSP شامل ${part}`, csp.includes(part));
   }
   check('CSP اسکریپت درون‌خطی را مجاز نکرده', !/script-src[^;]*unsafe-inline/.test(csp));

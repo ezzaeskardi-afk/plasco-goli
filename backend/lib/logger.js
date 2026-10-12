@@ -15,6 +15,21 @@ const LOG_DIR = process.env.PG_DATA_DIR
   : path.join(__dirname, '..', 'logs');
 fs.mkdirSync(LOG_DIR, { recursive: true });
 
+/* الگویِ حذفِ نویسه‌های کنترلی از لاگ (ASVS 16.4.1).
+
+   اینجا یک باگِ واقعی بود: الگویِ قبلی در عمل یک کلاسِ نویسه با چهار عضوِ
+   *تحت‌اللفظی* بود — بک‌اسلش و حروفِ r و n و t — نه CR/LF/TAB. دو اثرِ
+   قابلِ‌اندازه‌گیری داشت و هر دو در لاگ‌های همین مخزن دیده می‌شوند:
+
+     • خطِ جدید و تب از متن پاک نمی‌شد، پس مقدارِ حاویِ \n می‌توانست یک
+       خطِ جعلیِ کامل داخلِ فایلِ لاگ بسازد (log injection).
+     • در عوض، هر حرفِ r/n/t در *همه‌ی* رشته‌های لاگ با فاصله عوض می‌شد:
+       `GET /admin.html` در access-*.log به‌شکلِ `GET /admi .h ml` ذخیره شده.
+
+   الگویِ درست همه‌ی نویسه‌های کنترلیِ C0 و DEL را می‌پوشاند: بی‌صدا، بی‌حذفِ
+   حرف، و همان چیزی که استاندارد می‌خواهد. */
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+
 const RETENTION_DAYS = 14;
 
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -34,7 +49,7 @@ function streamFor(name) {
 function safeValue(value, depth = 0) {
   if (depth > 4) return '[truncated]';
   if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack };
-  if (typeof value === 'string') return value.replace(/[\\r\\n\\t]/g, ' ').slice(0, 1000);
+  if (typeof value === 'string') return value.replace(CONTROL_CHARS, ' ').slice(0, 1000);
   if (Array.isArray(value)) return value.slice(0, 30).map((v) => safeValue(v, depth + 1));
   if (value && typeof value === 'object') {
     const out = {};
@@ -52,7 +67,7 @@ function safeValue(value, depth = 0) {
 
 function line(level, msg, extra) {
   const time = new Date().toISOString();
-  const cleanMsg = String(msg ?? '').replace(/[\\r\\n\\t]/g, ' ').slice(0, 1000);
+  const cleanMsg = String(msg ?? '').replace(CONTROL_CHARS, ' ').slice(0, 1000);
   const cleanExtra = extra === undefined ? undefined : safeValue(extra);
   const rest = cleanExtra === undefined ? '' : ' ' + JSON.stringify(cleanExtra);
   return `${time} [${level}] ${cleanMsg}${rest}\\n`;
@@ -61,13 +76,13 @@ function line(level, msg, extra) {
 function info(msg, extra) {
   const l = line('INFO', msg, extra);
   streamFor('app').write(l);
-  if (process.env.LOG_CONSOLE !== 'false') console.log(String(msg ?? '').replace(/[\\r\\n\\t]/g, ' ').slice(0, 1000));
+  if (process.env.LOG_CONSOLE !== 'false') console.log(String(msg ?? '').replace(CONTROL_CHARS, ' ').slice(0, 1000));
 }
 
 function warn(msg, extra) {
   const l = line('WARN', msg, extra);
   streamFor('app').write(l);
-  if (process.env.LOG_CONSOLE !== 'false') console.warn(`[WARN] ${String(msg ?? '').replace(/[\\r\\n\\t]/g, ' ').slice(0, 1000)}`);
+  if (process.env.LOG_CONSOLE !== 'false') console.warn(`[WARN] ${String(msg ?? '').replace(CONTROL_CHARS, ' ').slice(0, 1000)}`);
 }
 
 function error(msg, err) {
@@ -75,7 +90,7 @@ function error(msg, err) {
   const l = line('ERROR', msg, detail);
   streamFor('app').write(l);
   streamFor('error').write(l);
-  if (process.env.LOG_CONSOLE !== 'false') console.error(`[ERROR] ${String(msg ?? '').replace(/[\\r\\n\\t]/g, ' ').slice(0, 1000)}`, err?.message || '');
+  if (process.env.LOG_CONSOLE !== 'false') console.error(`[ERROR] ${String(msg ?? '').replace(CONTROL_CHARS, ' ').slice(0, 1000)}`, err?.message || '');
 }
 
 // لاگ درخواست‌های HTTP (خطاها و درخواست‌های کند برای عیب‌یابی کافی‌اند)

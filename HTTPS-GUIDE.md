@@ -193,7 +193,10 @@ server {
     ssl_prefer_server_ciphers on;
 
     # HSTS — فقط بعد از تأیید HTTPS کار می‌کند
-    add_header Strict-Transport-Security "max-age=15552000; includeSubDomains" always;
+    # یک سال (۳۱۵۳۶۰۰۰) و نه ۱۸۰ روز: ASVS 3.4.1 حداقلِ یک سال را می‌خواهد و
+    # مبدأِ Next هم از قبل یک‌ساله است. یعنی هم مقدارِ مستندِ Express بالا آمد
+    # (server.js) و هم همین لبه — وگرنه دو مقدارِ مختلف روی یک دامنه می‌نشست.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     # ---- API و عکس‌ها: Express روی ۳۰۰۰ ----
     location /api/ {
@@ -493,7 +496,7 @@ curl -s -I https://yourdomain.com/api/health | grep -iE 'strict-transport|conten
 
 خروجی مورد انتظار **روی Express** (`/api/*`):
 ```
-Strict-Transport-Security: max-age=15552000; includeSubDomains
+Strict-Transport-Security: max-age=31536000; includeSubDomains
 Content-Security-Policy: default-src 'self'; script-src 'self'; ... ; object-src 'none'
 X-Frame-Options: SAMEORIGIN
 ```

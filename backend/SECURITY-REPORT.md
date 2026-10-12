@@ -108,7 +108,7 @@ form-action 'self' https://www.zarinpal.com
 - `TRUST_PROXY=0` (پیش‌فرض) → جلوی spoofing IP
 - `COOKIE_SECURE=true` → فقط HTTPS
 - `SESSION_SECRET` حداقل ۳۲ کاراکتر اجباری
-- `HSTS max-age=15552000` وقتی HTTPS فعال
+- `HSTS max-age=31536000` (یک سال — ASVS 3.4.1) وقتی HTTPS فعال
 
 ---
 
