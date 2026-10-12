@@ -165,6 +165,14 @@ const WHY = {
     "فروشگاهِ Express بازنشسته شد: این نشانی که پیش‌تر خودِ صفحه را ۲۰۰ می‌داد، حالا ۳۰۱ به همان صفحه روی Next می‌دهد — ۳۰۱ چون این نام‌ها هرگز برنمی‌گردند، ۳۰۷ روی Next چون دوره‌ی گذار است. متن و متادیتای مقایسه از اوراکلِ منجمد خوانده می‌شود (tests/fixtures/legacy-oracle برای HTMLِ سروشده، و tests/fixtures/legacy-src برای خودِ فایل‌های frontend/) و نگهبانِ زندهٔ legacy-links-live مقصدِ دو طرف را یکی‌یکی می‌سنجد.",
   hostBridge:
     "فروشگاه روی Next است: Express برای دو مسیرِ تمیزی که خودش سرو می‌کرد (`/` و `/product/:id`) با ۳۰۲ به همان مسیر روی میزبانِ سایت می‌فرستد — فقط وقتی SITE_URL روی میزبانِ دیگری باشد؛ وگرنه در استقرارِ تک‌دامنه‌ای همان مسیر را nginx به Next می‌دهد و این پل خاموش است. ۳۰۲ و نه ۳۰۱: مقصد ممکن است بعداً عوض شود و مرورگر نباید مسیر را برای همیشه کش کند. نتیجه برای کاربر یکی است: همان صفحه، ۲۰۰ از Next.",
+  // وقتی `lib/error-handoff.js` اضافه شد، کدِ وضعیتِ این مبدأ برای هر مسیرِ
+  // صفحه‌شکلِ *ناموجود* عوض شد: از ۴۰۴ِ متنی به ۳۰۲ به همان مسیر روی سایت.
+  // این دلیل مشترکِ همه‌ی آن ردیف‌هاست — نه یک اختلافِ تازه، بلکه همان قراردادِ
+  // «صفحه‌ی خطا صاحب دارد و صاحبش Next است» که الان روی خودِ کدِ وضعیت این‌جا
+  // هم دیده می‌شود. کنارِ هر ردیف append می‌شود تا دلیلِ تاریخی‌اش (چرا این
+  // مسیر در جدولِ ریدایرکت نیست) از دست نرود.
+  errorHandoff:
+    "صفحه‌ی خطا صاحب دارد و صاحبش Next است: روی میزبانِ دیگری این سرور برای مسیرِ صفحه‌شکلِ ناموجود دیگر ۴۰۴ِ متنی نمی‌دهد و با ۳۰۲ همان مسیر (و همان کوئری) را به سایت می‌فرستد تا مشتری و کراولر همان صفحه‌ی استایل‌دارِ Next را ببینند — `not-found.tsx`، یا خودِ صفحه اگر آن مسیر روی سایت وجود داشته باشد (`backend/lib/error-handoff.js`، حالتِ storefront). پس کدِ وضعیتِ این مبدأ از ۴۰۴ به ۳۰۲ رفته و مقصد و *متنِ نهایی* همان چیزی است که همین ردیف پیش‌تر توصیف می‌کرد. روی دامنه‌ی واحد این شاخه دیده نمی‌شود (nginx مسیرهای غیرِ `/api` و `/picture` را به Next می‌دهد). ۳۰۲ و نه ۳۰۱: مسیری که امروز نیست ممکن است فردا باشد و مرورگر نباید نسخه‌ی «نیست» را کش کند.",
   retiredNoAlias:
     "این نام عمداً در جدولِ ریدایرکت نیست (دلیلش در legacyUrls.ts آمده: هرگز لینکِ کاربر نبود، فقط حاملِ پاسخِ ۴۱۰). پیش از بازنشستگی خودِ Express همین فایل را ۲۰۰ می‌داد؛ امروز خودش هم ۴۰۴ می‌دهد، پس هر دو طرف یک حرف می‌زنند و صفحه‌ی Next با نسخهٔ منجمدِ بازنشسته سنجیده می‌شود.",
   singleSourceAsset:
@@ -721,11 +729,11 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "clean-login-route",
         url: "/login",
-        express: 404,
+        express: 302,
         next: 200,
         axis: "capability",
         state: "accepted",
-        reason: WHY.cleanRoute,
+        reason: `${WHY.cleanRoute} ${WHY.errorHandoff}`,
       },
     ],
     files: {
@@ -767,11 +775,11 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "clean-account-gate",
         url: "/account",
-        express: 404,
+        express: 302,
         next: 307,
         axis: "capability",
         state: "accepted",
-        reason: WHY.cleanRoute,
+        reason: `${WHY.cleanRoute} ${WHY.errorHandoff}`,
       },
     ],
     files: {
@@ -896,8 +904,8 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "product-gone",
     label: "محصولِ حذف‌شده (۴۱۰)",
-    express: { url: "/product-gone.html", status: 404 },
-    statusReason: { state: "accepted", reason: WHY.retiredNoAlias },
+    express: { url: "/product-gone.html", status: 302 },
+    statusReason: { state: "accepted", reason: `${WHY.retiredNoAlias} ${WHY.errorHandoff}` },
     next: { url: "/product-gone", status: 200 },
     mode: "server",
     textFloor: 0.95,
@@ -922,11 +930,11 @@ export const PARITY_PAGES: ParityPage[] = [
       {
         id: "legacy-product-gone-html",
         url: "/product-gone.html",
-        express: 404,
+        express: 302,
         next: 404,
         axis: "capability",
         state: "accepted",
-        reason: WHY.goneLegacy,
+        reason: `${WHY.goneLegacy} ${WHY.errorHandoff}`,
       },
     ],
     files: {
@@ -942,9 +950,12 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "not-found",
     label: "صفحهٔ ۴۰۴",
-    express: { url: "/zzz-nope", status: 404 },
+    express: { url: "/zzz-nope", status: 302 },
     next: { url: "/zzz-nope", status: 404 },
     mode: "server",
+    // دو طرف دیگر یک کدِ وضعیت ندارند و این *عمدی* است: Express برای مسیرِ
+    // صفحه‌شکلِ ناموجود ۳۰۲ به سایت می‌دهد و ۴۰۴ِ استایل‌دار آن‌جاست.
+    statusReason: { state: "accepted", reason: WHY.errorHandoff },
     // ۷۹.۴٪ اندازه‌گیری شد (هفت جملهٔ گم: شش دستهٔ کشو + یک دعوت به ادامه).
     textFloor: 0.75,
     // مقایسهٔ متن این‌جا نیم‌فاصله‌نرمال است (مثلِ seoParity): تفاوتِ
@@ -990,7 +1001,7 @@ export const PARITY_PAGES: ParityPage[] = [
   {
     id: "offline",
     label: "صفحهٔ آفلاین",
-    express: { url: "/offline.html", status: 404 },
+    express: { url: "/offline.html", status: 302 },
     next: { url: "/offline.html", status: 200 },
     mode: "server",
     textFloor: 0.95,
@@ -998,7 +1009,7 @@ export const PARITY_PAGES: ParityPage[] = [
     meta: [],
     probes: [],
     // دو تفاوتِ هم‌زمان: کدِ وضعیت (Express دیگر صفحه را ندارد) و یک لینکِ داخلی.
-    statusReason: { state: "accepted", reason: `${WHY.retiredNoAlias} ${WHY.offlineHome}` },
+    statusReason: { state: "accepted", reason: `${WHY.retiredNoAlias} ${WHY.offlineHome} ${WHY.errorHandoff}` },
     files: {
       express: ["offline.html"],
       next: ["public/offline.html"],
@@ -1032,20 +1043,20 @@ export const STORE_PROBES: Probe[] = [
   {
     id: "webmanifest",
     url: "/manifest.webmanifest",
-    express: 404,
+    express: 302,
     next: 200,
     axis: "capability",
     state: "accepted",
-    reason: WHY.singleSourceAsset,
+    reason: `${WHY.singleSourceAsset} ${WHY.errorHandoff}`,
   },
   {
     id: "service-worker",
     url: "/sw.js",
-    express: 404,
+    express: 302,
     next: 200,
     axis: "capability",
     state: "accepted",
-    reason: WHY.singleSourceAsset,
+    reason: `${WHY.singleSourceAsset} ${WHY.errorHandoff}`,
   },
   {
     id: "admin-gate",
