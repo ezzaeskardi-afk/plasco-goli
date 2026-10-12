@@ -35,9 +35,12 @@
 //
 // کدِ خروج: ۰ = همه ۲۰۰ · ۱ = مسیرِ غیرِ۲۰۰ · ۲ = پیش‌شرط برقرار نیست
 
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// فهرستِ مسیرها و منطقِ کشفش در یک ماژولِ جدا زندگی می‌کنند تا نگهبانِ
+// `src/app/staticPathsCoverage.test.ts` همان را import کند و دو فهرستِ
+// واگرا نداشته باشیم (آن آزمون می‌سنجد که هر ارجاعِ سورس سنجیده شود).
+import { collectTargets } from "./static-paths.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIR = path.resolve(HERE, "..");
@@ -55,73 +58,12 @@ const BACKEND = String(flag("backend", "http://127.0.0.1:3000")).replace(/\/+$/,
 const ALLOW_BACKEND = flag("allow-backend", false) === true;
 
 // ------------------------------------------------------------
-// فهرستِ مسیرها — هر ردیف با دلیلش، تا حذفِ یک ردیف یک تصمیم باشد نه فراموشی
+// فهرستِ مسیرها — از ماژولِ مشترک (هر ردیف با دلیلش؛ چرا جدا شد بالای آن)
 // ------------------------------------------------------------
-const PATHS = [
-  ["/manifest.webmanifest", "مانیفستِ PWA؛ layout به آن لینک می‌دهد"],
-  ["/sw.js", "سرویس‌ورکرِ فروشگاه"],
-  ["/offline.html", "صفحه‌ی آفلاین — تنها چیزی که قطعیِ اینترنت را مدیریت می‌کند"],
-  ["/.well-known/security.txt", "RFC 9116"],
-  ["/assets/favicon.svg", "آیکونِ layout (icon)"],
-  ["/assets/apple-touch-icon.png", "آیکونِ layout (apple)"],
-  ["/assets/icons.svg", "اسپرایتِ آیکون‌ها — `IconSprite` در زمانِ اجرا fetch می‌کند و نبودش بی‌صدا به نسخه‌ی درون‌خطی می‌افتد"],
-  ["/robots.txt", "مسیرِ متادیتای App Router (`app/robots.ts`)"],
-  ["/sitemap.xml", "مسیرِ متادیتای App Router — باید بدونِ API هم ۲۰۰ بدهد"],
-];
-
-// آیکون‌های مانیفست از *خودِ مانیفست* خوانده می‌شوند، نه دستی تکرار: اگر فردا
-// آیکونی اضافه شود، همین سنجش خودبه‌خود پوشش می‌دهد و لازم نیست کسی یادش باشد.
-let manifestError = null; // خوانده یا تجزیه نشد
-let iconsEmpty = false; // خوانده شد، ولی فهرستِ اصلیِ آیکون‌ها تهی بود
-try {
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(FRONTEND_DIR, "public", "manifest.webmanifest"), "utf8"),
-  );
-  const mainIcons = Array.isArray(manifest.icons) ? manifest.icons : [];
-  // چرا اینجا **تهی‌بودنِ فهرستِ آیکون‌ها قرمز است**، حال آنکه مانیفستِ
-  // بی‌آیکون از نظرِ خودِ استاندارد «نامعتبر» نیست: مشکل خودِ آیکون نیست،
-  // *سنجش* است. این فهرست از مانیفست خوانده می‌شود تا دستی تکرار نشود؛ اگر
-  // تهی شود، سنجش سه مسیرِ کمتری می‌سنجد و آخرِ کار با همان اطمینان می‌نویسد
-  // «هر N مسیر ۲۰۰ داد». با جهشِ تخریبی اثبات شد: مانیفست با `"icons": []`
-  // عوض شد و سنجش **سبز** ماند. حالا مثلِ فونت‌ها، صفر تا یعنی کدِ خروج ۲ تا
-  // «سبزِ خالی» از «سنجیده شد» جدا بماند. (میان‌بُرها جای این فهرست را
-  // نمی‌گیرند: آیکونِ فهرستِ اصلی همان چیزی است که مرورگر برای نصب می‌خواهد.)
-  iconsEmpty = mainIcons.length === 0;
-  if (!iconsEmpty) {
-    // و آیکون‌های میان‌بُرها هم سنجیده می‌شوند، نه فقط فهرستِ اصلی: خواهرِ
-    // ایستای همین سنجش (`src/app/internalLinks.test.ts`) از هر دو جا می‌خواند
-    // — و همان‌جا هم نوشته شده که سنجشِ ایستا «فایل روی دیسک هست؟» را می‌پرسد
-    // نه «سرور ۲۰۰ می‌دهد؟». آیکونِ اختصاصیِ یک میان‌بُر هم داراییِ واقعیِ
-    // کاربر است و اگر ۴۰۴ شود، میان‌بُرِ نصب‌شده بی‌آیکون می‌ماند.
-    const shortcutIcons = (manifest.shortcuts ?? []).flatMap((s) => s.icons ?? []);
-    for (const icon of [...mainIcons, ...shortcutIcons]) {
-      if (!icon || typeof icon.src !== "string" || !icon.src) continue;
-      PATHS.push([icon.src, "آیکونِ اعلام‌شده در مانیفستِ PWA"]);
-    }
-  }
-} catch (e) {
-  manifestError = e.message;
-}
-
-// فونت‌های وزیر هم از *خودِ `globals.css`* خوانده می‌شوند، نه دستی تکرار. اگر
-// فردا یک وزن اضافه یا کم شود، فهرست خودبه‌خود عوض می‌شود — و صفر تا یعنی
-// regex از کار افتاده، که مثلِ نبودِ مانیفست قرمز می‌شود (وگرنه پوشش بی‌صدا
-// کوچک می‌شد، دقیقاً همان چیزی که این سنجش برای گرفتنش نوشته شده).
-let fontError = null;
-const FONT_CSS = path.join(FRONTEND_DIR, "src", "app", "globals.css");
-try {
-  const css = fs.readFileSync(FONT_CSS, "utf8");
-  const urls = [...css.matchAll(/url\(\s*['"]([^'"]+\.woff2)['"]\s*\)/g)].map((m) => m[1]);
-  const uniq = [...new Set(urls)];
-  if (!uniq.length) throw new Error("هیچ url(...woff2) در globals.css پیدا نشد");
-  for (const u of uniq) PATHS.push([u, "فونتِ وزیر — `@font-face` در globals.css"]);
-} catch (e) {
-  fontError = e.message;
-}
-
-// یکتا کردن، با نگه‌داشتنِ ترتیب
-const seen = new Set();
-const targets = PATHS.filter(([p]) => (seen.has(p) ? false : (seen.add(p), true)));
+const { targets, manifestError, iconsEmpty, fontError } = collectTargets({
+  manifestPath: path.join(FRONTEND_DIR, "public", "manifest.webmanifest"),
+  cssPath: path.join(FRONTEND_DIR, "src", "app", "globals.css"),
+});
 
 // ------------------------------------------------------------
 // پیش‌شرط: بک‌اند نباید بالا باشد
