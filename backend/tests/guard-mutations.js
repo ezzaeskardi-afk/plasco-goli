@@ -55,7 +55,20 @@
      node tests/guard-mutations.js --scope=all        # همه‌ی دامنه‌های سازگار
      node tests/guard-mutations.js --only=panel       # فقط نگهبان‌هایی که نامشان این را دارد
      node tests/guard-mutations.js --list             # فهرستِ نگهبان‌ها و جهش‌ها بدونِ اجرا
+     node tests/guard-mutations.js --registry         # رجیستری به‌صورتِ JSON (برای نگهبانِ پوشش)
      node tests/guard-mutations.js --self-test      # خودآزمونِ لنگرهای مشتق‌شده‌ی README
+
+   `--registry` تنها خروجیِ ماشین‌خوانِ همین فایل است و دامنه (`--scope`) را نادیده
+   می‌گیرد: پرسشِ «چه کسی در رجیستری هست» دامنه‌ای نیست. مصرف‌کننده‌اش تنها یک
+   نگهبان است — `tests/guard-anchors.js` — که می‌پرسد «آیا هر فایلِ آزمون/نگهبان
+   در همین رجیستری لنگر دارد؟». پس این خروجی یک *قرارداد* است، نه لاگِ انسانی:
+   نام، دامنه، عنوان، نوعِ اجرا، مسیرِ فایلِ خودِ نگهبان و شمارشِ جهش‌ها. شمارشِ
+   جهش‌ها عمداً هست: عضویتِ خالی (نگهبانی در رجیستری با صفر جهش) هم یک حفره است
+   و آن نگهبان باید بگیردش.
+
+   برای همین، نگاشتِ «نگهبان → فایلِ خودش» یک‌جا و مشتق می‌شود (`guardFileOf`)
+   نه دستی؛ و `preflight` هم همان را می‌سنجد تا اگر روزی نگهبانی به فایلی
+   اشاره کند که نیست، پیامِ روشن بدهیم و نه یک اسپاونِ خاموشِ ناموفق.
 
    `live` هر دو سرور را می‌خواهد: Express روی ۳۰۰۰ و Next روی ۳۰۰۱. اگر بالا
    نباشند، با پیامِ روشن رد می‌شود — نه اینکه بی‌صدا رد شود.
@@ -92,6 +105,7 @@ const flagValue = (name) => {
 const SCOPE = flagValue('scope') || 'offline';
 const ONLY = flagValue('only');
 const LIST = argv.includes('--list');
+const REGISTRY = argv.includes('--registry');
 
 const SCOPES = {
   backend: ['backend'],
@@ -619,6 +633,143 @@ const GUARDS = [
     ],
   },
 
+  {
+    name: 'guard-anchors',
+    scope: 'backend',
+    title: 'هیچ آزمون/نگهبانی بی‌لنگرِ جهش نمی‌ماند (هر فایل لنگر یا دلیلِ مستند دارد)',
+    // چرا این نگهبان لنگر می‌خواهد: خودش حفره‌ی «دستی‌بودنِ رجیستری» را می‌بندد،
+    // پس اگر خودش کار نکند همان حفره با یک لایه اطمینانِ قلابی برمی‌گردد.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/guard-anchors.js'] },
+    mutations: [
+      {
+        // حفره‌ی اصلی: نگهبانی تازه به مخزن می‌آید و هیچ‌کس به رجیستری اضافه‌اش
+        // نمی‌کند. این جهش همان اتفاق را می‌سازد (فایلِ آزمونِ بی‌آزار، بی‌لنگر
+        // و بی‌دلیل) و انتظار دارد نگهبان اسمِ همان فایل را قرمز کند.
+        label: 'یک آزمونِ تازه بدونِ لنگر و بدونِ دلیل اضافه شود',
+        file: 'next-frontend/src/lib/orphan-mutation.test.ts',
+        create: 'import { expect, it } from "vitest";\n\nit("فقط برای جهش", () => {\n  expect(1).toBe(1);\n});\n',
+        expect: /orphan-mutation\.test\.ts/,
+      },
+      {
+        // «معافیت» نباید راهِ فرار باشد: ردیفِ بی‌دلیل یعنی «نمی‌دانیم چرا
+        // این‌جاست» — همان چیزی که این نگهبان برای کشفش نوشته شده.
+        label: 'دلیلِ یک معافیت خالی شود',
+        file: 'backend/tests/guard-anchors.js',
+        find: "why: 'ساختِ PNGِ معتبر با ابعادِ دلخواه برای آزمونِ آپلود — فیکسچر، نه سنجش.',",
+        replace: "why: '   ',",
+        expect: /دلیل ندارد/,
+      },
+      {
+        // جهتِ برعکس: لنگرِ سرگردان. نگاشتِ حرکتیِ رجیستری به فایلی می‌رسد که
+        // نیست، یعنی هارنس دارد چیزی را می‌سنجد که وجود ندارد — و خودش هم هیچ
+        // چیز دیگری از این فایل را نمی‌فهمد.
+        label: 'لنگرِ یک نگهبان به فایلی برود که وجود ندارد',
+        file: 'backend/tests/guard-mutations.js',
+        // `all` اینجا اجباری است و دلیلش خودِ همان چیزی است که این جهش می‌سنجد:
+        // هدف، خودِ همین فایل است و هر لنگرِ متنی‌ای که بنویسیم، در تعریف همین
+        // جهش هم تکرار می‌شود. پس هر دو جا عوض می‌شوند؛ آن‌که مهم است خطِ ۲۷۸
+        // (ورودیِ رجیستریِ panel-retired) است و بازگردانی بایت‌به‌بایت از حافظه
+        // انجام می‌شود. لنگرِ کوتاه‌تر هم امتحان شد: به دو تطبیق می‌رسید و
+        // پیش‌پروازِ هارنس همان را گرفت.
+        find: "runner: { kind: 'node', cwd: BACKEND, args: ['tests/panel-retired.js'] },",
+        // جایگزین عمداً پسوندِ `.js` را نگه می‌دارد: نگاشتِ نگهبان→فایل باید فایلِ
+        // بی‌وجود را ببیند (کد ۱)، نه اینکه خودِ مشتق‌گیری رد شود (کد ۲).
+        replace: "runner: { kind: 'node', cwd: BACKEND, args: ['tests/panel-retired-hazf-shode.js'] },",
+        all: true,
+        expect: /روی دیسک نیست/,
+      },
+      {
+        // فرمِ گروهی شمارشِ صریح دارد؛ این جهش نشان می‌دهد آن شمارش واقعاً
+        // قفل است و یک الگو نمی‌تواند بی‌صدا فایل‌های تازه را ببلعد.
+        label: 'شمارشِ صریحِ یک معافیتِ گروهی با تطبیق‌ها نخواند',
+        file: 'backend/tests/guard-anchors.js',
+        find: '    count: 10,',
+        replace: '    count: 11,',
+        expect: /یکی نیست/,
+      },
+      {
+        // عضویتِ خالی: نگهبانی در رجیستری باشد ولی صفر جهش داشته باشد. آن‌وقت
+        // هارنس رویش «پاک ✔ | جهش ۰/۰» می‌نویسد — یک سبزِ بی‌معنی.
+        label: 'خروجیِ رجیستری همه‌ی شمارش‌های جهش را صفر بدهد',
+        file: 'backend/tests/guard-mutations.js',
+        // باز هم تمام‌خطِ دو سطری، نه قطعهٔ کوتاه‌تر: همان قطعه در تعریفِ همین
+        // جهش هم هست. `\n` اینجا یک نویسهٔ واقعی است، پس لنگر یکتاست.
+        find: '        file: guardFileOf(g),\n        mutations: g.mutations.length,',
+        replace: '        file: guardFileOf(g),\n        mutations: 0,',
+        expect: /عضویتِ خالی/,
+      },
+    ],
+  },
+
+  {
+    name: 'error-handoff',
+    scope: 'backend',
+    title: 'خطای صفحه‌ای به Next می‌رود (نه صفحه‌ی HTMLِ دوم روی Express)',
+    // چرا این نگهبان لنگر می‌خواهد: تصمیم‌هایش سه دامِ واقعی دارند و هر سه
+    // بی‌صدا برمی‌گردند — `/api` با ۳۰۲ خطای JSON می‌دهد، `/picture` با ۳۰۲
+    // حلقه‌ی بی‌پایان می‌سازد (Next همین پیشوند را به ما پروکسی می‌کند)، و
+    // شاخه‌ی «به خودمان» اگر برداشته شود حلقه‌ی ریدایرکت می‌شود. هیچ‌کدام خطا
+    // نمی‌دهند؛ فقط رفتار عوض می‌شود.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/error-handoff.js'] },
+    mutations: [
+      {
+        // حلقه: Next عکس‌ها را به همین سرور پروکسی می‌کند؛ پس ۳۰۲ دادنشان
+        // یعنی رفت‌وبرگشتِ بی‌پایان بین دو سرور.
+        label: 'استثنای عکس‌ها برداشته شود (عکس‌ها هم ۳۰۲ بگیرند)',
+        file: 'backend/lib/error-handoff.js',
+        find: "  if (pathname === '/picture' || pathname.startsWith('/picture/')) {",
+        replace: '  if (false) {',
+        expect: /حلقه/,
+      },
+      {
+        // ۳۰۱ برای «مسیری که امروز نیست» کشِ دائمی می‌سازد: روزی که آن مسیر
+        // ساخته شود، مرورگرها همچنان به جای خالی می‌روند.
+        label: '۳۰۲ به ۳۰۱ عوض شود (کشِ دائمی برای مسیرِ نبوده)',
+        file: 'backend/lib/error-handoff.js',
+        find: '    status: 302,',
+        replace: '    status: 301,',
+        expect: /۳۰۱/,
+      },
+      {
+        // متدِ نوشتاری با ۳۰۲ به GET تبدیل می‌شود، یعنی تلقینِ «دوباره
+        // فرستاده شد» — و اگر روزی مسیرِ نوشتاریِ غیرِ‌API اضافه شود، بدترین
+        // حالت است.
+        label: 'متدِ نوشتاری هم ۳۰۲ بگیرد',
+        file: 'backend/lib/error-handoff.js',
+        find: '  if (!PAGE_METHODS.includes(verb)) {',
+        replace: '  if (false) {',
+        expect: /متدِ (POST|PUT|PATCH|DELETE)/,
+      },
+      {
+        // همان حلقه‌ای که قاعده‌ی `/admin` با `sameHost` بست: ۳۰۲ به خودمان.
+        label: 'شاخه‌ی «سایت روی همین میزبان است» برداشته شود',
+        file: 'backend/lib/error-handoff.js',
+        find: '  if (!base || sameHost(base, host)) {',
+        replace: '  if (!base) {',
+        expect: /به خودمان/,
+      },
+      {
+        // بازگشتِ صفحه‌ی دوم — همان چیزی که حذفِ `frontend/` می‌خواست ببندد.
+        label: 'هندلرِ ۴۰۴ دوباره HTML بسازد',
+        file: 'backend/server.js',
+        find:
+          "  res.status(404).type('text/plain; charset=utf-8').send('چنین صفحه‌ای وجود ندارد.');",
+        replace:
+          "  res.status(404).type('text/html; charset=utf-8').send('<!doctype html><h1>404</h1>');",
+        expect: /HTML/,
+      },
+      {
+        // هندلرِ ۵۰۰ از قاعده جدا شود: نه ۵۰۰ِ استایل‌دار، نه ۴۰۴ — یعنی
+        // همان واگراییِ دو دنیا، فقط این‌بار روی خودِ دامنه.
+        label: 'هندلرِ ۵۰۰ دوباره جدای از قاعده جواب بدهد',
+        file: 'backend/server.js',
+        find: '  const handoff = errorHandoff(req);\n  if (handoff.kind === \'storefront\') {',
+        replace: "  const handoff = { kind: 'plain' };\n  if (handoff.kind === 'storefront') {",
+        expect: /۴۰۴ و ۵۰۰/,
+      },
+    ],
+  },
+
   // ----------------------------------------------------------
   // نگهبان‌های Vitest (منبع را عوض می‌کنیم، نگهبان باید قرمز شود)
   // ----------------------------------------------------------
@@ -751,6 +902,36 @@ const GUARDS = [
         find: 'قوانین خرید، رویه',
         replace: 'قوانین خرید تازه، رویه',
         failedTest: 'terms.html',
+      },
+      {
+        // صفحه‌ی ۵۰۰ِ لبه‌ی دامنه (`public/error-500.html`) سه نسخه‌ی هم‌متنِ
+        // لازم دارد: خودش، `error.tsx` و `global-error.tsx`. جهش روی متنِ خودِ
+        // فایل نشان می‌دهد نگهبان واقعاً *همین* فایل را می‌خواند.
+        label: 'متنِ صفحه‌ی ۵۰۰ِ nginx از error.tsx واگرا شود',
+        file: 'next-frontend/public/error-500.html',
+        find: '<span class="badge">خطای ۵۰۰</span>',
+        replace: '<span class="badge">خطای سرور</span>',
+        failedTest: 'همان کارتِ خطای مسیرِ Next را دارد',
+      },
+      {
+        // خودکفایی: صفحه‌ای که دقیقاً هنگامِ خرابیِ سرور نشان داده می‌شود
+        // نباید به چیزی وابسته شود که همان لحظه نمی‌آید.
+        label: 'صفحه‌ی ۵۰۰ِ nginx به یک CSS بیرونی وصل شود',
+        file: 'next-frontend/public/error-500.html',
+        find: '<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">',
+        replace:
+          '<link rel="stylesheet" href="/assets/style-mutation.css">\n<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">',
+        failedTest: 'خودکفاست',
+      },
+      {
+        // مستند ↔ فایل: اگر خطِ `error_page` از HTTPS-GUIDE پاک/عوض شود،
+        // این فایل بی‌مصرف می‌ماند و کسی نمی‌فهمد. نگهبان باید همان خط را
+        // از خودِ مستند بخواند، نه از حافظه.
+        label: 'خطِ error_pageِ nginx به فایلِ دیگری اشاره کند',
+        file: 'HTTPS-GUIDE.md',
+        find: 'error_page 500 502 503 504 /error-500.html;',
+        replace: 'error_page 500 502 503 504 /oops.html;',
+        failedTest: 'nginx واقعاً به همین فایل وصل است',
       },
     ],
   },
@@ -970,6 +1151,49 @@ const GUARDS = [
         find: '"عنوان لازم است (حداکثر ۱۲۰ حرف)"',
         replace: '"عنوان لازم است"',
         failedTest: 'عنوانِ خالی',
+      },
+    ],
+  },
+  {
+    name: 'apiContract',
+    scope: 'frontend',
+    title: 'قراردادِ API بین دو فرانت: پوششِ پاسخ‌های آدرس و ادغامِ هدرها',
+    // چرا این نگهبان لنگر می‌خواهد: خاستگاهش دو شکایتِ واقعیِ مشتری است — «آدرس
+    // ست شده ولی صفحه می‌گوید انتخاب نشده» — و ریشه‌اش قراردادی بود، نه منطقی:
+    // بک‌اند `{addresses:[…]}` می‌دهد و کلاینت همان شیءِ پوشش را با تایپِ
+    // `Address[]` برمی‌گرداند. یک خرابیِ واقعی دقیقاً همین است: پوشش دوباره
+    // بسته نشود و در `/checkout` روی `.map` بترکد.
+    runner: { kind: 'vitest', test: 'src/lib/apiContract.test.ts' },
+    mutations: [
+      {
+        label: 'getAddresses پوششِ {addresses} را باز نکند',
+        file: 'next-frontend/src/lib/api.ts',
+        find: 'return data.addresses ?? [];',
+        replace: 'return data as unknown as Address[];',
+        failedTest: 'getAddresses',
+      },
+    ],
+  },
+  {
+    name: 'structuredData',
+    scope: 'frontend',
+    title: 'داده‌ی ساختاریافته‌ی Next با اوراکلِ منجمد یکی است (کم و زیاد)',
+    // چرا لنگر می‌خواهد: این نگهبان جایش را از `backend/test-seo.js` گرفته و
+    // خودش یک واگراییِ واقعی پیدا کرده بود (`/products` فقط CollectionPage را
+    // می‌فرستاد و BreadcrumbList جا مانده بود). یک قلمِ JSON-LD می‌تواند بی‌صدا
+    // از یک صفحه بیفتد و هیچ سنجشِ زنده‌ای آن را نمی‌بیند — چون برابریِ زنده
+    // فقط متادیتا را مقایسه می‌کند، نه JSON-LD.
+    runner: { kind: 'vitest', test: 'src/app/structuredData.test.ts' },
+    mutations: [
+      {
+        // چرا کلِ خط حذف می‌شود و نه فقط نامش عوض: جهشِ اول نامِ برچسب را
+        // عوض می‌کرد و آزمون سبز ماند — چون `toContain("<ProductJsonLd")` زیررشته‌ی
+        // نامِ تازه را هم می‌گرفت. یک جهشِ بی‌خاصیت، خودش یک نگهبانِ قلابی است.
+        label: 'قلمِ ProductJsonLd از مسیرِ محصول برداشته شود',
+        file: 'next-frontend/src/app/product/[id]/page.tsx',
+        find: '      <ProductJsonLd product={product} />\n',
+        replace: '',
+        failedTest: 'دو قلم',
       },
     ],
   },
@@ -1255,6 +1479,28 @@ const GUARDS = [
 ];
 
 // ============================================================
+// ۲) نگهبان → فایلِ خودِ نگهبان (تنها منبعِ لنگرِ پوشش)
+// ============================================================
+// چرا مشتق و نه دستی: `tests/guard-anchors.js` می‌پرسد «هر فایلِ آزمون/نگهبان
+// لنگر دارد؟» و جوابش باید از همین رجیستری بیاید، نه از یک فهرستِ دومِ دستی که
+// با این یکی واگرا می‌شود. مسیرِ فایل از `runner` خوانده می‌شود: برای Vitest از
+// `test`، برای اسکریپت‌های آمادهٔ Next از ثابتِ همان نوع، و برای `node` از تنها
+// آرگومانی که پسوندِ `.js`/`.mjs` دارد (بقیهٔ آرگومان‌ها پرچم‌اند: `--scope`،
+// `--next=…`، `--disable-warning=…`).
+function guardFileOf(g) {
+  const r = g.runner;
+  if (r.kind === 'vitest') return `next-frontend/${r.test}`;
+  if (r.kind === 'readme-script') return 'next-frontend/scripts/check-readme-counts.mjs';
+  if (r.kind === 'parity') return 'next-frontend/scripts/parity-storefront.mjs';
+  if (r.kind === 'node') {
+    const script = (r.args || []).find((a) => /\.m?js$/.test(a));
+    if (!script) throw new Error(`${g.name}: هیچ فایلِ اسکریپتی در args نیست`);
+    return path.relative(ROOT, path.resolve(r.cwd || ROOT, script)).split(path.sep).join('/');
+  }
+  throw new Error(`${g.name}: نوعِ اجراکننده‌ی ناشناخته — ${r.kind}`);
+}
+
+// ============================================================
 // ۲) موتور: پشتیبان در حافظه، جهش، اجرا، بازگردانی، تأیید
 // ============================================================
 let pass = 0;
@@ -1484,7 +1730,18 @@ function preflight(guards) {
     if (g.runner.kind === 'vitest') {
       const t = path.join(NEXT, g.runner.test);
       if (!fs.existsSync(t)) problems.push(`${g.name}: فایلِ آزمون نیست — ${g.runner.test}`);
+    } else {
+      // نگهبان‌های غیرِ Vitest هم فایلِ خودشان را دارند و تا امروز هیچ‌کس
+      // نبودنش را نمی‌سنجید: یک مسیرِ عوض‌شده فقط یک اسپاونِ ناموفق می‌داد و
+      // پیامش شبیه «خودِ نگهبان قرمز است» می‌شد، نه «رجیستری غلط است».
+      try {
+        const own = guardFileOf(g);
+        if (!fs.existsSync(path.join(ROOT, own))) problems.push(`${g.name}: فایلِ نگهبان نیست — ${own}`);
+      } catch (e) {
+        problems.push(`${g.name}: ${e.message}`);
+      }
     }
+    if (!g.mutations.length) problems.push(`${g.name}: هیچ جهشی ندارد`);
     for (const m of g.mutations) {
       if (g.runner.kind === 'vitest' && !m.failedTest) {
         problems.push(`${g.name} :: ${m.label}: «failedTest» ندارد`);
@@ -1567,6 +1824,28 @@ async function preflightStatic() {
 }
 
 async function main() {
+  // خروجیِ ماشین‌خوان — پیش از هر دامنه‌بندی: پرسشِ «چه کسی در رجیستری است»
+  // دامنه‌ای نیست. اگر نگاشتِ فایل نشکند، این‌جا با کد ۲ می‌مانیم و نه با
+  // یک JSONِ ناقص که مصرف‌کننده‌اش را گمراه کند.
+  if (REGISTRY) {
+    let entries;
+    try {
+      entries = GUARDS.map((g) => ({
+        name: g.name,
+        scope: g.scope,
+        title: g.title,
+        runner: g.runner.kind,
+        file: guardFileOf(g),
+        mutations: g.mutations.length,
+      }));
+    } catch (e) {
+      console.error(`✖ رجیستری خوانده نشد: ${e.message}`);
+      process.exit(2);
+    }
+    console.log(JSON.stringify({ guards: entries }));
+    return;
+  }
+
   const selected = GUARDS.filter(
     (g) => ACTIVE_SCOPES.has(g.scope) && (!ONLY || g.name.includes(ONLY)),
   );

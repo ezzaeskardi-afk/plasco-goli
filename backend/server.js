@@ -45,6 +45,7 @@ const ordersRoute = require('./routes/orders');
 const wishlistRoute = require('./routes/wishlist');
 const adminRoute = require('./routes/admin');
 const { legacyRedirect, isLegacyPath } = require('./lib/legacy-redirects');
+const { decideErrorHandoff } = require('./lib/error-handoff');
 const shopRoute = require('./routes/shop');
 const wholesaleRoute = require('./routes/wholesale');
 
@@ -317,6 +318,20 @@ const CSRF_EXTRA_HOSTS = String(process.env.CSRF_EXTRA_ORIGINS || '')
 function siteBase(req) {
   if (/^https?:\/\/[^\s/]+$/.test(SITE_URL)) return SITE_URL;
   return `${req.protocol}://${req.get('host')}`;
+}
+
+// ---------- خطاها: این سرور صفحه ندارد، پس تصمیمِ «کجا برود» را می‌پرسد ----------
+// هر خطای صفحه‌شکل یک تصمیم دارد و تصمیم در `lib/error-handoff.js` نوشته شده
+// (خالص و آزموده‌شده). این‌جا فقط `req` به آن وصل می‌شود، تا هیچ‌جای دیگری
+// قاعده دوباره پیاده نشود. جزئیاتِ چهار حالت و دلیلِ هرکدام همان فایل است.
+function errorHandoff(req) {
+  return decideErrorHandoff({
+    method: req.method,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    host: req.get('host'),
+    siteUrl: siteBase(req),
+  });
 }
 
 // مسیرِ عکس، تضمین‌شده «دقیقاً یک‌بار کدشده».
@@ -683,17 +698,37 @@ app.use('/picture', express.static(PICTURE_DIR, {
   }
 }));
 
-// 404 — برای API جوابِ JSON، برای بقیه متنِ ساده (کدِ واقعی 404، نه soft-404)
+// 404 — کدِ ۴۰۴ِ واقعی (نه soft-404)، ولی *صفحه*اش این‌جا نیست
 app.use((req, res) => {
-  if (req.path.startsWith('/api/')) {
+  const handoff = errorHandoff(req);
+
+  // API: JSON با کدِ ۴۰۴. کلاینتِ این مسیرها fetch است و ۳۰۲ یعنی پاسخِ خراب.
+  if (handoff.kind === 'api') {
     return res.status(404).json({ error: 'چنین مسیری وجود ندارد' });
   }
-  // این سرور دیگر صفحه‌ی HTML ندارد (فروشگاه روی Next است)، پس ۴۰۴ هم متنِ
-  // ساده است: HTMLِ دوم از این‌جا یعنی دو نسخه‌ی واگرا از یک صفحه.
-  //
-  // res.send() در Express برای متن هم پیش‌فرض Cache-Control: public, max-age=0
-  // می‌گذارد؛ با no-cache می‌گوییم هر بار از سرور بپرس.
+
+  // در هر سه شاخه‌ی دیگر: یک ۴۰۴ِ کش‌شده روی مسیری که فردا ساخته می‌شود،
+  // برای کاربر لینکِ مرده‌ی دائمی می‌سازد.
   res.setHeader('Cache-Control', 'no-cache');
+
+  // صفحه‌شکل و سایت روی میزبانِ دیگری: ۳۰۲ به همان مسیر روی سایت، تا کاربر
+  // همان چیزی را ببیند که روی دامنه‌ی واحد می‌بیند — `not-found.tsx`ِ
+  // استایل‌دارِ Next. دو چیز هم درست می‌شود که امروز غلط بود:
+  //
+  //   ۱. مبدأِ Express دیگر ۴۰۴ِ دروغین نمی‌دهد: `/cart` و `/products` و
+  //      `/checkout` روی این مبدأ *وجود دارند* (روی Next) و تا امروز متنِ
+  //      «چنین صفحه‌ای وجود ندارد» می‌گرفتند. هر ابزار یا کرالری که به این
+  //      مبدأ می‌زند، همان جوابِ درستِ دامنه را می‌گیرد.
+  //   ۲. خطا استایل دارد: متنِ بی‌استایلِ عصرِ `frontend/` تمام شد و هیچ
+  //      HTMLِ دومی هم این‌جا ساخته نمی‌شود (منبعِ حقیقت همان یک صفحه است).
+  if (handoff.kind === 'storefront') {
+    return res.redirect(handoff.status, handoff.target);
+  }
+
+  // بقیه: متنِ ساده. نه از سرِ تنبلی — صفحه‌ی HTMLِ دوم این‌جا یعنی دو نسخه‌ی
+  // واگرا از یک صفحه، که همان چیزی است که حذفِ `frontend/` می‌خواست ببندد.
+  // (روی دامنه‌ی واحد این شاخه نمی‌آید: پروکسی مسیرهای غیرِ `/api` و
+  // `/picture` را به Next می‌دهد.)
   res.status(404).type('text/plain; charset=utf-8').send('چنین صفحه‌ای وجود ندارد.');
 });
 
@@ -732,6 +767,21 @@ app.use((err, req, res, next) => {
       error: 'خطای داخلی سرور؛ چند لحظه بعد دوباره تلاش کنید',
       ref: req.id
     });
+  }
+
+  // و همین قرارداد برای ۵۰۰: درخواستِ صفحه‌شکل به سایت می‌رود تا کاربر
+  // `error.tsx`ِ استایل‌دار را ببیند (و اگر خودِ Next هم ترکیده باشد،
+  // `global-error.tsx`). هیچ صفحه‌ی ۵۰۰ِ دومی این‌جا ساخته نمی‌شود.
+  //
+  // ⚠️ و یک هزینه‌ی آگاهانه: مانیتورِ بیرونی روی یک مسیرِ *صفحه* این‌جا ۳۰۲
+  // می‌بیند، نه ۵۰۰. دلیلش این است که ۳۰۲ دقیق‌ترین جمله‌ی این سرور است
+  // («من صاحبِ این مسیر نیستم») و صفحه‌ی واقعی هم همان‌جاست. خطا در لاگِ همین
+  // سرور کامل ثبت می‌شود (`log.error` با `req.id`) و کدِ ۵xx را از مسیرهای
+  // داده‌ای می‌توان سنجید: `/healthz` و `/api/health`.
+  const handoff = errorHandoff(req);
+  if (handoff.kind === 'storefront') {
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.redirect(handoff.status, handoff.target);
   }
 
   res.setHeader('Cache-Control', 'no-cache');

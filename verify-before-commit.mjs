@@ -15,6 +15,11 @@
    هر دو تا امروز فقط «موقعِ بازبینی» پیدا می‌شدند — یعنی بعد از کامیت.
    این فایل آن‌ها را سرِ کامیت می‌آورد.
 
+   یک گامِ دیگر هم هست که «عدد» نیست ولی همان جنس است: پوششِ لنگرِ جهش
+   (`backend/tests/guard-anchors.js`). هارنس فقط نگهبان‌های رجیستری را
+   می‌آزماید، پس کامیتی که یک نگهبانِ تازه‌ی بی‌لنگر (یا یک معافیتِ بی‌دلیل)
+   را ببرد، نباید از این دروازه رد شود.
+
    ---------- اجرا ----------
      node verify-before-commit.mjs              # همه‌ی scopeهای آفلاین
      node verify-before-commit.mjs --fast       # فقط عددها (چند ثانیه)
@@ -63,6 +68,12 @@ const KEEP_GOING = has('--keep-going');
 // که یک اشتباهِ ساده دارد نگیرد.
 const STEPS = [
   {
+    label: 'پوششِ لنگرِ جهش',
+    why: 'هر آزمون/نگهبان یا لنگر دارد یا دلیلِ مستند — نیم‌ثانیه، بدونِ سرور',
+    cwd: join(ROOT, 'backend'),
+    args: ['tests/guard-anchors.js'],
+  },
+  {
     label: 'عددهای README — بک‌اند',
     why: 'خطِ وضعیت، جدول، کامنتِ دستور، درخت و متنِ امکانات',
     cwd: join(ROOT, 'backend'),
@@ -79,13 +90,13 @@ const STEPS = [
   },
   {
     label: 'جهش‌های نگهبان‌های بک‌اند',
-    why: 'هفت نگهبان، از جمله هر دو جهشِ عددهای README',
+    why: 'یازده نگهبان، از جمله هر دو جهشِ عددهای README',
     cwd: join(ROOT, 'backend'),
     args: ['tests/guard-mutations.js', '--scope=backend'],
   },
   {
     label: 'جهش‌های نگهبان‌های فرانت‌اند',
-    why: 'هفده نگهبانِ Vitest و اسکریپت‌های Next',
+    why: '۲۱ نگهبانِ Vitest و اسکریپت‌های Next',
     cwd: join(ROOT, 'backend'),
     args: ['tests/guard-mutations.js', '--scope=frontend'],
   },

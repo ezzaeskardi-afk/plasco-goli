@@ -330,3 +330,78 @@ describeExpress("سئوی صفحه‌ها بین Express و Next یکی است",
     expect(contains(layout, '"max-image-preview": "large"')).toBe(true);
   });
 });
+
+// ============================================================
+// صفحه‌ی ۵۰۰ روی *لبه‌ی دامنه* — نه در Next، روی دیسکِ کنارِ Next
+// ============================================================
+// `app/error.tsx` خطای داخلِ Next را می‌گیرد، ولی وقتی خودِ Next بالا نیست
+// (یا بک‌اند جواب نمی‌دهد) این nginx است که ۵۰۲/۵۰۳/۵۰۴ می‌دهد و پیش‌فرضش
+// یک صفحه‌ی بی‌ربط است. `public/error-500.html` همان لحظه را پوشش می‌دهد و
+// nginx مستقیم از دیسک سروش می‌کند.
+//
+// سه چیز این‌جا قفل می‌شود، و هر سه یک جور واگرایی‌اند:
+//   ۱. **متن** با `error.tsx` یکی بماند؛ وگرنه دو صفحه‌ی ۵۰۰ داریم که به دو
+//      چیزِ مختلف می‌گویند.
+//   ۲. **خودکفا** بماند: صفحه‌ای که دقیقاً در لحظه‌ی خرابیِ سرور نشان داده
+//      می‌شود نباید به CSS/JS/فونتی وابسته باشد که همان لحظه نمی‌آید.
+//   ۳. **وصل بودنش به nginx** از خودِ مستند خوانده شود، نه از حافظه: اگر کسی
+//      خطِ `error_page` را از HTTPS-GUIDE پاک کند، این فایل بی‌مصرف می‌شود و
+//      کسی نمی‌فهمد.
+describe("صفحه‌ی ۵۰۰ِ لبه‌ی دامنه (سروِ مستقیمِ nginx)", () => {
+  const REL = "public/error-500.html";
+  const abs = path.join(NEXT_DIR, REL);
+  const raw = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
+  // کامنت‌ها خنثی می‌شوند: خودِ توضیح‌های همین فایل ناچاراً همان متن‌ها را
+  // دارند و اگر ارجاع شمرده شوند، نگهبان روی چیزی قرمز می‌شود که خودش
+  // محافظش است.
+  const body = plain(stripComments(raw));
+
+  it("همان کارتِ خطای مسیرِ Next را دارد (متنِ مشترک، نه نسخه‌ی دوم)", () => {
+    const err = nextSource("app/error.tsx");
+    const SHARED = [
+      "خطای ۵۰۰",
+      "مشکلی موقت در سرور پیش آمد",
+      "سبد خرید و سفارش‌های شما سر جای خودشان امن",
+      "تلاش دوباره",
+      "tel:09113567409",
+      "wa.me/989113567409",
+    ];
+    for (const s of SHARED) {
+      expect(contains(body, s), `«${s}» در ${REL} نیست — دو نسخه از یک صفحه واگرا شده‌اند`).toBe(
+        true,
+      );
+      expect(contains(err, s), `«${s}» از app/error.tsx افتاده`).toBe(true);
+    }
+  });
+
+  it("خودکفاست: هیچ استایل‌شیت، اسکریپت و فونتِ بیرونی ندارد", () => {
+    expect(/<link[^>]+stylesheet/i.test(body), `${REL} به یک CSS بیرونی وصل شده`).toBe(false);
+    expect(/<script/i.test(body), `${REL} اسکریپت دارد`).toBe(false);
+    expect(/@import|url\(\s*["']?https?:/i.test(body), `${REL} فونت/داراییِ بیرونی می‌کشد`).toBe(
+      false,
+    );
+    expect(/<img/i.test(body), `${REL} تصویرِ بیرونی دارد؛ آیکون باید درون‌خطی باشد`).toBe(false);
+    // و پالت باید همان پالتِ خطای ریشه باشد، نه رنگی سرِخود.
+    expect(contains(raw, "#25E3C4"), "رنگِ teal در صفحه نیست").toBe(true);
+    expect(contains(raw, "#FF6A4D"), "رنگِ coral در صفحه نیست").toBe(true);
+  });
+
+  it("noindex است و مسیرش در robots بسته شده", () => {
+    expect(/name="robots"\s+content="noindex, nofollow"/.test(raw)).toBe(true);
+    expect(nextSource("app/robots.ts")).toContain("/error-500.html");
+  });
+
+  it("nginx واقعاً به همین فایل وصل است (مستند ↔ فایل)", () => {
+    // راهنمای استقرار در ریشه‌ی مخزن است، نه داخلِ `next-frontend`.
+    const guidePath = path.resolve(NEXT_DIR, "..", "HTTPS-GUIDE.md");
+    const guide = fs.readFileSync(guidePath, "utf8");
+    expect(
+      /error_page\s+500\s+502\s+503\s+504\s+\/error-500\.html/.test(guide),
+      "HTTPS-GUIDE خطِ error_page را برای همین فایل ندارد",
+    ).toBe(true);
+    // و در فهرستِ مسیرهای ثابتِ فروشگاه هم هست، پس سنجشِ زنده سروشدنش را
+    // می‌پرسد (وگرنه فایلی روی دیسک می‌ماند که هیچ‌کس سرو شدنش را نمی‌سنجد).
+    const manifest = fs.readFileSync(path.join(NEXT_DIR, "scripts", "static-paths.mjs"), "utf8");
+    expect(manifest).toContain("/error-500.html");
+  });
+});
