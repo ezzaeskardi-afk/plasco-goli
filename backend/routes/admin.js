@@ -28,7 +28,7 @@ const {
   crmGetSummary, crmSearchCustomers, crmGetCustomer,
   crmListTags, crmCreateTag, crmDeleteTag, crmSetUserTags,
   crmAddNote, crmDeleteNote, crmAddTask, crmToggleTask, crmDeleteTask,
-  crmLogActivity, crmGetActivities, crmCalcRFM, crmRecalcAllScores,
+  crmLogActivity, crmGetActivities, crmCalcRFM, crmRecalcAllScores, crmRefreshStaleScores,
   crmGetSegmentStats, crmGetRevenueByMonth, crmGetTopCustomers, crmExportCustomers,
   crmAutoTag, crmAutoTagAll, crmGetAdvancedSummary,
   listWholesaleRequests, countNewWholesaleRequests, setWholesaleRequestStatus, deleteWholesaleRequest
@@ -257,13 +257,32 @@ function crmWrap(handler) {
   };
 }
 
+// ---------- تازه‌کردنِ تنبلِ امتیازها، پیش از هر *خواندن* ----------
+// باگِ واقعی که این سه خط می‌بندد: `crm_scores` هیچ‌وقت پر نمی‌شد (نه خودکار،
+// نه با کارِ زمان‌بندی‌شده‌ای که وجود نداشت)، پس کارتِ «سگمنت مشتریان» خالی
+// بود، در حالی که دیتابیس پر از کاربر و سفارش بود. حالا هر خواندنِ CRM اول
+// امتیازهای نبوده/کهنه را کش می‌کند (سقف‌دار؛ جزئیاتش در
+// `db.js:crmRefreshStaleScores`).
+//
+// فقط *خواندن*ها: نوشتن (یادداشت/برچسب/پیگیری) هیچ ربطی به امتیاز ندارد و
+// اضافه‌کردنش فقط یک SELECTِ بی‌فایده به هر کلیک مدیر می‌چسباند.
+function crmRead(handler) {
+  return crmWrap((req, res) => {
+    const r = crmRefreshStaleScores();
+    if (r.recalculated) {
+      log.info(`CRM scores refreshed for ${r.recalculated} customer(s) on read`);
+    }
+    handler(req, res);
+  });
+}
+
 // خلاصه + برچسب‌ها در یک درخواست (برای باز شدن اولیه‌ی بخش CRM)
 router.get('/crm/summary', (req, res) => {
   res.json({ summary: crmGetSummary(), tags: crmListTags() });
 });
 
 // جستجوی مشتری‌ها با برچسب/فیلتر/مرتب‌سازی/صفحه‌بندی
-router.get('/crm/customers', crmWrap((req, res) => {
+router.get('/crm/customers', crmRead((req, res) => {
   res.json(crmSearchCustomers({
     q: req.query.q, tag: req.query.tag, filter: req.query.filter,
     sort: req.query.sort, limit: req.query.limit, offset: req.query.offset
@@ -328,20 +347,19 @@ router.put('/crm/customers/:id/tags', (req, res) => {
 });
 
 // ---- CRM پیشرفته: خلاصه، سگمنت‌ها، درآمد، صادرات ----
-router.get('/crm/advanced', (req, res) => {
-  try { res.json({ summary: crmGetAdvancedSummary() }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-router.get('/crm/segments', (req, res) => {
+router.get('/crm/advanced', crmRead((req, res) => {
+  res.json({ summary: crmGetAdvancedSummary() });
+}));
+router.get('/crm/segments', crmRead((req, res) => {
   res.json({ segments: crmGetSegmentStats() });
-});
+}));
 router.get('/crm/revenue', (req, res) => {
   res.json({ months: crmGetRevenueByMonth() });
 });
-router.get('/crm/top', (req, res) => {
+router.get('/crm/top', crmRead((req, res) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
   res.json({ customers: crmGetTopCustomers(limit) });
-});
+}));
 router.get('/crm/export', (req, res) => {
   const data = crmExportCustomers({ q: req.query.q, tag: req.query.tag, filter: req.query.filter });
   const csv = '\uFEFF' + ['ID,Phone,Name,Orders,Spent,LastOrder,Tags'].concat(

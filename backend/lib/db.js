@@ -1376,6 +1376,33 @@ const stmtCrmScoreUpsert = db.prepare(`INSERT INTO crm_scores (user_id, recency,
   ON CONFLICT(user_id) DO UPDATE SET recency=excluded.recency, frequency=excluded.frequency,
   monetary=excluded.monetary, health=excluded.health, segment=excluded.segment, updated_at=excluded.updated_at`);
 
+// ---------- سگمنتِ مشتری: یک قاعده، در یک جا ----------
+// چرا این زنجیره از `crmCalcRFM` بیرون آمد: هر کس می‌خواست سگمنت را از داده‌ی
+// دیگری بسازد (یا فقط بپرسد «این مشتری کدام سگمنت است؟»)، مجبور بود عینِ همین
+// رشته‌ی if/else را کپی کند — یعنی دو نسخهٔ واگرا از یک قاعده، همان چیزی که
+// این مخزن هر جای دیگری گرفته است. حالا یک تابعِ خالص است: ورودی سه امتیاز،
+// خروجی یک نام.
+//
+// دو باگِ خفته که همین جداشدن لو داد (هر دو در نسخهٔ قبلی هیچ خطایی نمی‌دادند،
+// فقط نتیجه‌ای که به کاربر می‌رسید غلط بود):
+//   • `dormant` **دست‌نیافتنی** بود. شرطش `frequency === 0` بود، ولی شاخهٔ
+//     اول (`lead`) همهٔ بی‌خریدها را می‌گرفت — پس «خفته» هرگز تولید نمی‌شد،
+//     در حالی که رابط برایش برچسب («خفته») و رنگ دارد و برچسبِ خودکارِ
+//     «غیرفعال» هم به همان سگمنت گره خورده است. شرطِ درست، خریدِ کم و قدیمی
+//     است، نه خریدِ صفر.
+//   • `new` هم دست‌نیافتنی بود (هر مسیر یک سگمنت می‌گذاشت). «new» یعنی «امتیازی
+//     ثبت نشده» و در لایهٔ نمایش با `COALESCE(s.segment, 'new')` ساخته می‌شود.
+const CRM_SEGMENTS = ['vip', 'at_risk', 'returning', 'new_buyer', 'casual', 'dormant', 'lead'];
+function segmentOf({ recency, frequency, monetary }) {
+  if (frequency === 0) return 'lead';                                     // هرگز خرید نکرده
+  if (recency >= 4 && frequency >= 3 && monetary >= 3) return 'vip';       // تازه، پرخرید، پرخرج
+  if (recency <= 2 && frequency >= 2) return 'at_risk';                    // می‌خرید ولی دیگر نمی‌آید
+  if (recency <= 1 && frequency <= 1) return 'dormant';                    // یک خرید، مدت‌ها پیش
+  if (frequency >= 2) return 'returning';
+  if (recency >= 3) return 'new_buyer';
+  return 'casual';
+}
+
 // محاسبه امتیاز RFM برای یک مشتری
 function crmCalcRFM(userId) {
   const r = db.prepare(`SELECT
@@ -1391,22 +1418,58 @@ function crmCalcRFM(userId) {
   // Monetary: 1-5
   const monetary = r.totalSpent >= 5000000 ? 5 : r.totalSpent >= 2000000 ? 4 : r.totalSpent >= 500000 ? 3 : r.totalSpent >= 100000 ? 2 : r.totalSpent > 0 ? 1 : 0;
   // Health: 0-100 (ترکیب وزنی)
-  const health = Math.round(recency * 20 + frequency * 15 + monetary * 15);
-  // Segment
-  let segment = 'new';
-  if (frequency === 0) segment = 'lead';
-  else if (recency >= 4 && frequency >= 3 && monetary >= 3) segment = 'vip';
-  else if (recency <= 2 && frequency >= 2) segment = 'at_risk';
-  else if (recency <= 1 && frequency === 0) segment = 'dormant';
-  else if (frequency >= 2) segment = 'returning';
-  else if (recency >= 3) segment = 'new_buyer';
-  else segment = 'casual';
+  // تقسیم بر ۲٫۵ عمدی است و باگِ واقعی را می‌بندد: وزن‌ها (۲۰+۷۵+۷۵) حداکثر
+  // ۲۵۰ می‌دادند، در حالی که همین‌جا، پیش‌فرضِ ستون (`DEFAULT 50`) و رابط همه
+  // ۰-۱۰۰ فرض می‌کنند. نتیجه‌اش روی داده‌ی واقعی این مغازه «سلامت ۲۰۵٪» و
+  // میله‌ای پهن‌تر از قابش بود. تقسیم، فقط مقیاس را درست می‌کند و ترتیبِ
+  // مشتری‌ها را عوض نمی‌کند (تابعِ صعودی).
+  const health = Math.round((recency * 20 + frequency * 15 + monetary * 15) / 2.5);
+  const segment = segmentOf({ recency, frequency, monetary });
 
   stmtCrmScoreUpsert.run(Number(userId), recency, frequency, monetary, health, segment);
   return { recency, frequency, monetary, health, segment };
 }
 
-// بازحسابه امتیاز همه مشتریان (هر شب)
+// ---------- تازه‌کردنِ کهنه‌ها ----------
+// چرا این تابع لازم شد — همین باگِ گزارش‌شده: `crm_scores` هیچ‌وقت خودش پر
+// نمی‌شد. نه هنگامِ ثبت/پرداختِ سفارش نوشته می‌شد، نه کاربرِ تازه امتیاز
+// می‌گرفت، و نه کارِ زمان‌بندی‌شده‌ای وجود داشت (کامنتِ «هر شب» فقط یک
+// آرزو بود). پس تا وقتی کسی دکمهٔ «بازحساب RFM همه» را نمی‌زد، جدول خالی
+// می‌ماند — و کارتِ «سگمنت مشتریان» در `/admin/crm` یک جعبهٔ خالی بود، در
+// حالی که ۱۴۱ کاربر و ۳۴۱ سفارش در همان دیتابیس وجود داشت.
+//
+// راه‌حل عمداً یک کارِ زمان‌بندی‌شدهٔ جدید نیست: هر خواندنِ CRM اول همین را
+// صدا می‌زند (از `routes/admin.js`). فقط کاربرانی که امتیاز ندارند یا
+// امتیازشان از `maxAgeDays` قدیمی‌تر است، و با سقفِ صریح — چون یک GET نباید
+// هزار کاربر را بازحساب کند. وقتی تازه باشد، یک SELECTِ ارزان است.
+// `s.health > 100` در شرط، خودترمیمیِ یک‌بارهٔ همان باگِ مقیاس است: ردیف‌هایی که
+// با فرمولِ قدیمی (حداکثر ۲۵۰) نوشته شده‌اند، بی‌نیاز به مهاجرت یا بامپِ نسخه،
+// در اولین خواندن بازمحاسبه می‌شوند. بدونِ این شرط، مقدارِ غلط تا هفت روز
+// (تا وقتی «کهنه» شود) روی پنل می‌ماند.
+const stmtCrmStaleIds = db.prepare(`SELECT u.id FROM users u
+  LEFT JOIN crm_scores s ON s.user_id = u.id
+  WHERE s.user_id IS NULL OR s.updated_at IS NULL OR s.health > 100 OR s.updated_at < datetime('now', ?)
+  ORDER BY u.id LIMIT ?`);
+
+function crmRefreshStaleScores(opts = {}) {
+  const days = Math.max(1, Math.min(Number(opts.maxAgeDays) || 7, 365));
+  const cap = Math.max(1, Math.min(Number(opts.limit) || 500, 5000));
+  const ids = stmtCrmStaleIds.all(`-${days} days`, cap).map(r => r.id);
+  const segments = {};
+  for (const id of ids) {
+    const s = crmCalcRFM(id);
+    // برچسبِ خودکار از همان امتیازِ تازه ساخته می‌شود (وگرنه سگمنت و برچسب
+    // دو روایتِ متفاوت از یک مشتری می‌شدند).
+    crmAutoTag(id);
+    segments[s.segment] = (segments[s.segment] || 0) + 1;
+  }
+  return { recalculated: ids.length, segments };
+}
+
+// بازحسابه امتیاز همه مشتریان
+// (کامنت قبلی می‌گفت «هر شب» ولی هیچ‌جا زمان‌بندی نشده بود — همان باگی که باگِ
+// کارتِ خالی سگمنت‌ها را می‌ساخت. برای «کهنه‌ها» به `crmRefreshStaleScores`
+// نگاه کنید که هر خواندنِ CRM اجرایش می‌کند.)
 function crmRecalcAllScores() {
   const ids = db.prepare('SELECT id FROM users').all().map(r => r.id);
   const segCounts = {};
@@ -1418,7 +1481,9 @@ function crmRecalcAllScores() {
 }
 
 // آمار سگمنت‌ها
-const stmtCrmSegCounts = db.prepare('SELECT segment, COUNT(*) AS n FROM crm_scores GROUP BY segment');
+// ترتیب عمدی است: پرجماعت‌ترین اول. `GROUP BY` بدونِ `ORDER BY` ترتیبِ
+// تضمین‌شده‌ای ندارد و کارتِ سگمنت‌ها هر بار جابه‌جا دیده می‌شد.
+const stmtCrmSegCounts = db.prepare('SELECT segment, COUNT(*) AS n FROM crm_scores GROUP BY segment ORDER BY n DESC, segment ASC');
 function crmGetSegmentStats() {
   const rows = stmtCrmSegCounts.all();
   const total = rows.reduce((s, r) => s + r.n, 0);
@@ -1426,28 +1491,75 @@ function crmGetSegmentStats() {
   return rows.map(r => ({ segment: r.segment, label: segLabels[r.segment] || r.segment, count: r.n, pct: total ? Math.round(r.n * 100 / total) : 0 }));
 }
 
-// درآمد به تفکیک ماه
-const stmtCrmRevenueByMonth = db.prepare(`SELECT
-  strftime('%Y-%m', created_at) AS month,
-  COUNT(*) AS orders,
-  SUM(total) AS revenue,
-  COUNT(DISTINCT user_id) AS customers
-FROM orders WHERE status IN ${CRM_PAID}
-GROUP BY month ORDER BY month DESC LIMIT 24`);
-function crmGetRevenueByMonth() { return stmtCrmRevenueByMonth.all(); }
+// درآمد به تفکیک ماه — و در همان قالبِ گزارشِ ماه‌به‌ماهِ داشبورد (`getMonthlySales`):
+// ماه‌های **شمسی**، از قدیم به جدید، با `label` آماده برای محورِ نمودار.
+//
+// سه ایراد واقعی که همین تابع داشت و روی کارتِ «درآمد ماهانه» در `/admin/crm`
+// دیده می‌شد (همه از یک جنس: نامِ فیلدها با قراردادِ رابط یکی نبود):
+//   • برچسبِ محور خالی بود. رابط `m.label` می‌خواند و این‌جا فقط `month` بود
+//     («2026-07») — یعنی زیر هر میله یک جای خالی می‌ماند.
+//   • ترتیب نزولی بود و رابط `months.slice(-12)` می‌زند؛ آن برش روی فهرستِ
+//     نزولی، **قدیمی‌ترین** ۱۲ ماه را برمی‌داشت، نه ۱۲ ماهِ آخر. با یک ماه داده
+//     معلوم نمی‌شد؛ با دو سال داده، نمودار ماه‌های پارسال را نشان می‌داد.
+//   • گروه‌بندی میلادی بود، در حالی که کلِ این مخزن گزارش را شمسی می‌گیرد
+//     (دلیلش در `lib/jalali.js` نوشته شده: تیر و مردادِ یک مغازه دو ماهِ جداست،
+//     ولی در تقویمِ میلادی هر دو «۲۰۲۶-۰۷» می‌شوند).
+function crmGetRevenueByMonth(months = 24) {
+  const n = Math.min(Math.max(Number(months) || 24, 2), 36);
+  const bounds = jalali.available() ? jalali.monthStarts(n) : jalali.gregorianMonthStarts(n);
+  const cases = bounds.map((b, i) => `WHEN d >= '${b.startIso}' THEN ${i}`).join(' ');
+  // `prep` نه `db.prepare`: متنِ کوئری برای هر `n` ثابت است، پس کشِ prepared
+  // statement همان کاری را می‌کند که برای گزارشِ داشبورد می‌کند.
+  const rows = prep(`
+    WITH src AS (
+      SELECT date(created_at,'localtime') AS d, total, user_id
+      FROM orders
+      WHERE status IN ${CRM_PAID} AND date(created_at,'localtime') >= ?
+    )
+    SELECT CASE ${cases} END AS bucket,
+           COUNT(*)                AS orders,
+           COALESCE(SUM(total),0)  AS revenue,
+           COUNT(DISTINCT user_id) AS customers
+    FROM src GROUP BY bucket HAVING bucket IS NOT NULL`).all(bounds[bounds.length - 1].startIso);
+
+  const byBucket = new Map(rows.map(r => [Number(r.bucket), r]));
+  const out = [];
+  // از قدیم به جدید، و ماه‌های بی‌فروش هم با صفر می‌آیند: برشِ `slice(-12)` در
+  // رابط آن‌وقت «۱۲ ماهِ آخرِ تقویم» است، نه «۱۲ ماهی که فروش داشته».
+  for (let i = n - 1; i >= 0; i--) {
+    const b = bounds[i];
+    const hit = byBucket.get(i);
+    const orders = hit?.orders || 0;
+    const revenue = hit?.revenue || 0;
+    out.push({
+      month: b.startIso.slice(0, 7),
+      label: `${b.name} ${b.jy}`,
+      orders,
+      revenue,
+      customers: hit?.customers || 0,
+      // همان فیلدهای قراردادِ `CrmRevenueMonth` — نه بیشتر، نه کمتر.
+      avgOrder: orders ? Math.round(revenue / orders) : 0
+    });
+  }
+  return out;
+}
 
 // مشتریان پردرآمد
+// نامِ ستون‌ها عمداً همان چیزی است که قراردادِ رابط می‌گوید (`CrmTopCustomer`:
+// `fullName` و `spent`). قبلاً `full_name` و `totalSpent` بود، پس کارتِ
+// «مشتریان برتر» نه نامی نشان می‌داد (فقط شماره) و نه مبلغی («ناعدد تومان») —
+// چون `c.fullName` و `c.spent` در رابط `undefined` می‌شدند.
 const stmtCrmTopCustomers = db.prepare(`SELECT
-  u.id, u.phone, u.full_name,
+  u.id, u.phone, u.full_name AS fullName,
   COUNT(o.id) AS orders,
-  SUM(o.total) AS totalSpent,
+  SUM(o.total) AS spent,
   MAX(o.created_at) AS lastOrder,
   COALESCE(s.health, 50) AS health,
   COALESCE(s.segment, 'new') AS segment
 FROM users u JOIN orders o ON o.user_id = u.id
 LEFT JOIN crm_scores s ON s.user_id = u.id
 WHERE o.status IN ${CRM_PAID}
-GROUP BY u.id ORDER BY totalSpent DESC LIMIT ?`);
+GROUP BY u.id ORDER BY spent DESC LIMIT ?`);
 function crmGetTopCustomers(limit = 20) { return stmtCrmTopCustomers.all(Math.min(Number(limit) || 20, 100)); }
 
 // صادرات مشتریان به CSV
@@ -1500,8 +1612,10 @@ function crmGetAdvancedSummary() {
   const segments = crmGetSegmentStats();
   const months = crmGetRevenueByMonth();
   const topCustomers = crmGetTopCustomers(5);
-  const thisMonth = months[0] || { orders: 0, revenue: 0, customers: 0 };
-  const lastMonth = months[1] || { orders: 0, revenue: 0, customers: 0 };
+  // `crmGetRevenueByMonth` از قدیم به جدید است، پس ماهِ جاری *آخرین* عضو است —
+  // با `months[0]` این دو جابه‌جا می‌شدند و «رشد» منفیِ بی‌معنی می‌داد.
+  const thisMonth = months[months.length - 1] || { orders: 0, revenue: 0, customers: 0 };
+  const lastMonth = months[months.length - 2] || { orders: 0, revenue: 0, customers: 0 };
   const revenueGrowth = lastMonth.revenue > 0 ? Math.round((thisMonth.revenue - lastMonth.revenue) * 100 / lastMonth.revenue) : 0;
   const orderGrowth = lastMonth.orders > 0 ? Math.round((thisMonth.orders - lastMonth.orders) * 100 / lastMonth.orders) : 0;
   return { ...base, segments, months, topCustomers, thisMonth, revenueGrowth, orderGrowth };
@@ -2979,7 +3093,8 @@ module.exports = {
   crmGetSummary, crmSearchCustomers, crmGetCustomer,
   crmListTags, crmCreateTag, crmDeleteTag, crmSetUserTags,
   crmAddNote, crmDeleteNote, crmAddTask, crmToggleTask, crmDeleteTask,
-  crmLogActivity, crmGetActivities, crmCalcRFM, crmRecalcAllScores,
+  crmLogActivity, crmGetActivities, crmCalcRFM, crmRecalcAllScores, crmRefreshStaleScores,
+  segmentOf, CRM_SEGMENTS,
   crmGetSegmentStats, crmGetRevenueByMonth, crmGetTopCustomers, crmExportCustomers,
   crmAutoTag, crmAutoTagAll, crmGetAdvancedSummary,
   addWholesaleRequest, listWholesaleRequests, countNewWholesaleRequests, setWholesaleRequestStatus, deleteWholesaleRequest,

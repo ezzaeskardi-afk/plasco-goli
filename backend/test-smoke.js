@@ -3705,6 +3705,180 @@ function shutdown(code) {
         adminOnExpress.status === 404, String(adminOnExpress.status));
     }
 
+    // ============ V38: کارتِ «سگمنت مشتریان» هرگز خالی نمی‌ماند ============
+    // باگی که مدیر گزارش کرد و این بخش می‌گیرد: `crm_scores` هیچ‌وقت خودش پر
+    // نمی‌شد. نه هنگامِ ثبت/پرداختِ سفارش نوشته می‌شد، نه کاربرِ تازه امتیاز
+    // می‌گرفت، و نه کارِ زمان‌بندی‌شده‌ای وجود داشت (کامنتِ «هر شب» روی
+    // `crmRecalcAllScores` فقط یک آرزو بود). پس `/admin/crm` یک کارتِ سفیدِ
+    // بی‌توضیح نشان می‌داد، در حالی که همان دیتابیس پر از مشتری و سفارش بود.
+    //
+    // چرا این تست پیش‌شرط را خودش می‌سازد: اگر فقط «کارت خالی نبود» را بسنجیم،
+    // روی دیتابیسی که از قبل امتیاز دارد سبزِ بی‌معنی می‌شود — یعنی نگهبانی که
+    // همان باگ را رد نمی‌کند. پس جدولِ امتیازها عمداً از بیرون (اتصالِ دوم به
+    // همان فایلِ سندباکس) پاک می‌شود تا وضعیتِ باگ بازسازی شود، و بعد همان
+    // درخواستی زده می‌شود که خودِ رابط می‌زند.
+    {
+      await loginAdmin();
+      const { DatabaseSync } = require('node:sqlite');
+      const sqliteFile = path.join(SANDBOX_DATA, 'polasco.db');
+      const scoreRows = () => {
+        const d = new DatabaseSync(sqliteFile, { readOnly: true });
+        try { return d.prepare('SELECT COUNT(*) AS n FROM crm_scores').get().n; } finally { d.close(); }
+      };
+      const wipeScores = () => {
+        const d = new DatabaseSync(sqliteFile);
+        try { d.exec('DELETE FROM crm_scores'); } finally { d.close(); }
+      };
+      const countWhere = (sql) => {
+        const d = new DatabaseSync(sqliteFile, { readOnly: true });
+        try { return d.prepare(`SELECT COUNT(*) AS n FROM crm_scores WHERE ${sql}`).get().n; } finally { d.close(); }
+      };
+      const badHealth = 'health > 100 OR health < 0';
+
+      wipeScores();
+      // یک ردیفِ عمداً خراب با فرمولِ قدیمی (سقفِ ۲۵۰) و تاریخِ **تازه** کار
+      // می‌گذاریم. «تازه» بودن مهم است: اگر کهنه باشد، شرطِ کهنگی خودش
+      // بازمحاسبه می‌کند و آزمون چیزی دربارهٔ خودترمیمیِ مقیاس ثابت نمی‌کند.
+      const firstUser = (() => {
+        const d = new DatabaseSync(sqliteFile, { readOnly: true });
+        try { return d.prepare('SELECT id FROM users ORDER BY id LIMIT 1').get().id; } finally { d.close(); }
+      })();
+      {
+        const d = new DatabaseSync(sqliteFile);
+        try {
+          d.prepare(`INSERT INTO crm_scores (user_id, recency, frequency, monetary, health, segment, updated_at)
+            VALUES (?, 5, 3, 3, 205, 'vip', datetime('now'))`).run(firstUser);
+        } finally { d.close(); }
+      }
+
+      check('V38 سگمنت: پیش‌شرطِ باگ بازسازی شد (هیچ امتیازِ تازه‌ای نیست، یک ردیفِ خراب کار گذاشته شد)',
+        scoreRows() === 1 && countWhere(badHealth) === 1, `${scoreRows()} ردیف`);
+
+      const summaryRes = await api('GET', '/admin/crm/summary');
+      const users = summaryRes.data.summary?.totalCustomers;
+      const segRes = await api('GET', '/admin/crm/segments');
+      const segs = (segRes.data && segRes.data.segments) || [];
+      const sum = segs.reduce((a, s) => a + s.count, 0);
+
+      check('V38 سگمنت: خواندنِ کارت از خالی بیرون می‌آید (امتیازها تنبل تازه می‌شوند)',
+        segRes.status === 200 && segs.length > 0, `${segRes.status}، ${segs.length} سگمنت`);
+      check('V38 سگمنت: مجموعِ شمارش‌ها = کلِ مشتریان',
+        sum > 0 && sum === users, `${sum} از ${users}`);
+      check('V38 سگمنت: هر سگمنت برچسب و درصدِ درست دارد',
+        segs.length > 0 && segs.every(s => s.label && s.count > 0 &&
+          s.pct === Math.round(s.count * 100 / sum)),
+        segs.map(s => `${s.segment}:${s.pct}%`).join(' '));
+      check('V38 سگمنت: ترتیب نزولی است (پرجماعت‌ترین اول)',
+        segs.every((s, i) => i === 0 || segs[i - 1].count >= s.count),
+        segs.map(s => `${s.segment}:${s.count}`).join(' '));
+
+      const { segmentOf, CRM_SEGMENTS } = require('./lib/db');
+      check('V38 سگمنت: هیچ نامِ ناشناخته‌ای در کارت نیست',
+        segs.every(s => CRM_SEGMENTS.includes(s.segment)),
+        segs.map(s => s.segment).join(','));
+
+      const segAgain = await api('GET', '/admin/crm/segments');
+      check('V38 سگمنت: خواندنِ دوم همان کارت را می‌دهد (پایدار، نه تصادفی)',
+        JSON.stringify(segAgain.data.segments) === JSON.stringify(segs));
+      check('V38 سگمنت: امتیازها واقعاً نوشته شدند (برای هر کاربر یک ردیف)',
+        scoreRows() === users, `${scoreRows()} ردیف برای ${users} کاربر`);
+
+      const advRes = await api('GET', '/admin/crm/advanced');
+      check('V38 سگمنت: خلاصه‌ی پیشرفته هم همان سگمنت‌ها را می‌آورد (دو منبع، یک کارت)',
+        JSON.stringify(advRes.data.summary?.segments) === JSON.stringify(segs));
+
+      const topRes = await api('GET', '/admin/crm/top?limit=100');
+      const tops = topRes.data.customers || [];
+      check('V38 سگمنت: مشتریِ خریدکرده در کارتِ پرخرج‌ها دیگر «جدید» نیست',
+        tops.length > 0 && tops.every(c => c.segment !== 'new'),
+        tops.filter(c => c.segment === 'new').length + ' موردِ «جدید»');
+
+      // ---------- قراردادِ فیلدها: کارتِ «مشتریان برتر» ----------
+      // این کارت روزی نامِ مشتری را به‌جای نام، شماره نشان می‌داد و مبلغ را
+      // «ناعدد تومان» — چون کوئری `full_name`/`totalSpent` می‌داد و رابط
+      // `c.fullName`/`c.spent` می‌خواند. سکوتِ `undefined` در جاوااسکریپت یعنی
+      // این باگ هیچ خطایی نمی‌دهد، فقط عددی را که مدیر برای پیگیری لازم دارد
+      // خراب می‌کند. پس این‌جا خودِ *قرارداد* سنجیده می‌شود، نه شکلِ ظاهری.
+      check('V38 قرارداد: ردیفِ «مشتریان برتر» فیلدهای fullName و spent را دارد',
+        tops.length > 0 && tops.every(c => typeof c.fullName === 'string' && typeof c.spent === 'number'),
+        JSON.stringify(Object.keys(tops[0] || {})));
+      check('V38 قرارداد: مبلغِ ردیفِ پرخرج عددی و مثبت است (ناعدد نمی‌شود)',
+        tops.length > 0 && tops.every(c => Number.isFinite(c.spent) && c.spent > 0),
+        `بیشترین: ${Math.max(...tops.map(c => Number(c.spent) || 0))}`);
+      // `String(...)` عمدی است: اگر روزی فیلد غایب شود، این سنجش باید «قرمز»
+      // بدهد نه اینکه وسطِ بلوک استثنا پرت کند و بقیه‌ی V38 را از کار بیندازد.
+      check('V38 قرارداد: نامِ مشتری جایی هست که رابط انتظار دارد (نه فقط شماره)',
+        tops.some(c => String(c.fullName || '').trim().length > 0),
+        `${tops.filter(c => String(c.fullName || '').trim()).length} از ${tops.length} نام‌دار`);
+
+      // ---------- قراردادِ فیلدها: کارتِ «درآمد ماهانه» ----------
+      // دو ایرادِ هم‌جنس: `label` نبود (زیر هر میله جای خالی) و ترتیب نزولی بود
+      // درحالی‌که رابط `months.slice(-12)` می‌زند و روی نتیجه‌ی نزولی، *قدیمی‌ترین*
+      // ۱۲ ماه را نشان می‌داد.
+      const revRes = await api('GET', '/admin/crm/revenue');
+      const months = revRes.data.months || [];
+      check('V38 قرارداد: نمودارِ درآمد برچسبِ ماه دارد (محور خالی نمی‌ماند)',
+        months.length > 0 && months.every(m => typeof m.label === 'string' && m.label.trim().length > 0),
+        months[months.length - 1]?.label || '—');
+      check('V38 قرارداد: ماه‌های نمودار از قدیم به جدید می‌آیند',
+        months.length > 1 && months.every((m, i) => i === 0 || months[i - 1].month < m.month),
+        `${months[0]?.month} → ${months[months.length - 1]?.month}`);
+      check('V38 قرارداد: هر ماهِ نمودار مبلغ و میانگینِ سفارشِ عددی دارد',
+        months.length > 0 && months.every(m => Number.isFinite(m.revenue) && Number.isFinite(m.avgOrder)));
+
+      // ---------- سلامتِ مشتری: ۰ تا ۱۰۰، نه بیشتر ----------
+      // فرمول قدقی (۲۰+۱۵+۱۵ روی امتیازهای ۰-۵) حداکثر ۲۵۰ می‌داد، درحالی‌که
+      // ستون پیش‌فرض ۵۰ دارد و رابط `width: ${health}%` می‌کشد — یعنی میله‌ای
+      // پهن‌تر از قاب و «سلامتِ ۲۰۵٪» روی پرونده‌ی مشتری. برای همین خودترمیمی
+      // هم سنجیده می‌شود: ردیفِ خرابِ جا‌مانده باید در همان اولین خواندن درست شود.
+      const healths = tops.map(c => c.health);
+      check('V38 سلامت: هر امتیازِ سلامت داخلِ بازهٔ ۰ تا ۱۰۰ است',
+        healths.length > 0 && healths.every(h => Number.isFinite(h) && h >= 0 && h <= 100),
+        `بیشترین: ${Math.max(...healths)}`);
+      const badRows = countWhere(badHealth);
+      check('V38 سلامت: ردیفِ خارج‌از‌بازه (۲۰۵) خودش در همان اولین خواندن درست شد',
+        badRows === 0, `${badRows} ردیفِ خراب`);
+
+      // ---------- قاعده‌ی سگمنت: کدام ورودی کدام نام را می‌دهد ----------
+      // این جدول عمداً «یک نمونه برای هر سگمنت» است، نه نمونه‌ی حاصل از دیتابیس:
+      // دیتابیسِ یک مغازه ممکن است هیچ مشتریِ خفته‌ای نداشته باشد و آن‌وقت یک
+      // شاخه‌ی مُرده (مثلِ `dormant` در نسخه‌ی قبلی) هیچ‌وقت لو نمی‌رود.
+      const cases = [
+        ['lead', { recency: 1, frequency: 0, monetary: 0 }],
+        ['vip', { recency: 5, frequency: 3, monetary: 3 }],
+        ['at_risk', { recency: 2, frequency: 2, monetary: 3 }],
+        ['dormant', { recency: 1, frequency: 1, monetary: 1 }],
+        ['returning', { recency: 3, frequency: 2, monetary: 3 }],
+        ['new_buyer', { recency: 3, frequency: 1, monetary: 2 }],
+        ['casual', { recency: 2, frequency: 1, monetary: 1 }]
+      ];
+      const wrong = cases.filter(([want, input]) => segmentOf(input) !== want)
+        .map(([want, input]) => `${want}→${segmentOf(input)}`);
+      check('V38 قاعده: هر هفت سگمنت با ورودیِ واقعی همان‌طور تولید می‌شود که انتظار داریم',
+        wrong.length === 0, wrong.join(' '));
+      const produced = new Set(cases.map(([, input]) => segmentOf(input)));
+      check('V38 قاعده: هیچ سگمنتِ مرده‌ای در فهرست نیست (همه تولیدشدنی‌اند)',
+        CRM_SEGMENTS.every(s => produced.has(s)),
+        CRM_SEGMENTS.filter(s => !produced.has(s)).join(',') || 'بی‌مرده');
+      // «new» عمداً سگمنت نیست: یعنی «امتیازی ثبت نشده» و در لایه‌ی نمایش با
+      // `COALESCE(s.segment, 'new')` ساخته می‌شود. اگر روزی به فهرست بیاید،
+      // یعنی دو معنیِ متفاوت زیر یک نام قاطی شده‌اند.
+      check('V38 قاعده: «new» یک سگمنت نیست، فقط حالتِ «بدونِ امتیاز» است',
+        !CRM_SEGMENTS.includes('new') && produced.has('lead'));
+
+      // ---------- کارتِ خالیِ رابط: توضیح و راهِ خروج ----------
+      // سنجشِ سورس است نه سنجشِ رندر، چون این مخزن کتابخانه‌ی رندرِ کامپوننت
+      // ندارد (نه testing-library نه jsdom برای React) و آوردنش فقط برای این
+      // یک کارت، سنگین‌تر از خودِ باگ است. همان کاری که نگهبانِ پنلِ بازنشسته
+      // و css-js-hooks می‌کنند.
+      const crmSrc = nextSrc(path.join('components', 'CrmContent.tsx'));
+      check('V38 کارت: حالتِ خالیِ کارت توضیح و دکمه‌ی «محاسبه‌ی امتیازها» دارد',
+        crmSrc.includes('segments.length === 0') && crmSrc.includes('handleRecalcAll'));
+      check('V38 کارت: «مشتریِ صفر» و «امتیازِ صفر» دو حالتِ جدا هستند (درمانشان یکی نیست)',
+        crmSrc.includes('summary.totalCustomers === 0') &&
+        /مشتری‌ای ثبت نشده/.test(crmSrc));
+    }
+
   } catch (err) {
     check('Tests ran without an unexpected error', false, err.message);
   } finally {
