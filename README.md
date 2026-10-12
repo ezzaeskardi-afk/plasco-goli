@@ -186,8 +186,9 @@ npm run parity:storefront -- --report   # فقط گزارش، بدونِ شکس�
 npm run legacy-links:live            # مقصدِ نشانی‌های قدیمی (.html) و پوششِ نام‌ها — Next لازم است
 npm run legacy-links:live -- --express=http://127.0.0.1:3000   # سمتِ Express هم سنجیده شود
 npm run freeze:oracle                # اوراکل را بازمی‌سازد؛ امروز دیگر سرورِ Express آن صفحه‌ها را ندارد، پس صریح می‌ایستد و راهِ `git show` را نشان می‌دهد
-npm run cutover:rehearsal            # تمرینِ کاتاور: هر دو دنیا روی یک پورت + خزش و فهرستِ شکست‌ها
+npm run cutover:rehearsal            # تمرینِ کاتاور: هر دو دنیا روی یک پورت + خزش، فهرستِ شکست‌ها و رفتارِ خطا روی همان دامنه
 npm run cutover:rehearsal -- --serve # فقط همان دامنهٔ واحد را بالا نگه دار (بدونِ خزش)
+npm run cutover:rehearsal -- --slow  # + درگاهِ باز و بی‌جواب (بودجهٔ ۱۵ ثانیه‌ایِ خواندن واقعاً خرج می‌شود)
 ```
 
 > میانِ این ۳۳۷ آزمون، هشت‌تای نخستِ صفحه‌ی نتیجه‌ی سفارش تنها چیزی در پروژه‌اند که
@@ -711,7 +712,7 @@ polasco-goli/
 │   │   ├── parity-storefront.mjs    ← مقایسهِ زندهِ هر صفحهِ Express با هم‌تای Next (بدنه از اوراکلِ منجمد)
 │   │   ├── legacy-links-live.mjs    ← مقصدِ نشانی‌های قدیمیِ `.html` روی هر دو سرور + پوششِ نگاشت و sitemap
 │   │   ├── freeze-legacy-oracle.mjs ← آرشیوِ HTMLِ سروشدهٔ Express — اوراکلِ منجمد برای پس از حذفِ frontend/
-│   │   ├── cutover-rehearsal.mjs    ← تمرینِ کاتاور: هر دو دنیا پشتِ یک دامنه (مسیریابیِ nginx) + خزشِ کاملِ لینک‌ها
+│   │   ├── cutover-rehearsal.mjs    ← تمرینِ کاتاور: هر دو دنیا پشتِ یک دامنه (مسیریابیِ nginx) + خزش، و رفتارِ خطا روی همان دامنه (قراردادش از HTTPS-GUIDE خوانده می‌شود)
 │   │   ├── static-paths.mjs         ← فهرستِ مسیرهای ثابت + کشفِ آیکون/فونت — منبعِ حقیقتِ مشترک با نگهبانِ پوشش
 │   │   └── static-paths-live.mjs    ← مانیفست/PWA و مسیرهای ثابت روی Nextِ زنده (بدونِ بک‌اند)
 │   ├── public/                ← فایل‌های ثابتِ خودِ Next — دیگر از Express پروکسی نمی‌شوند

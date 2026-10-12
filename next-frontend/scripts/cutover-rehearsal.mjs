@@ -8,7 +8,7 @@
 // می‌گیرد. تفاوت این دو، همان جایی است که لینک‌ها می‌شکنند — چون مسیری که
 // روی یک مبدأ زنده است، روی دامنه‌ی واحد می‌تواند به دنیای دیگری برود.
 //
-// این اسکریپت سه کار می‌کند:
+// این اسکریپت چهار کار می‌کند:
 //   ۱. یک پروکسیِ کوچک روی یک پورت بالا می‌آورد که **دقیقاً** همان مسیریابیِ
 //      مستندِ nginx است (`HTTPS-GUIDE.md` → «پیکربندی nginx»):
 //         /api/     → Express :3000
@@ -17,6 +17,12 @@
 //   ۲. از همان مبدأ می‌خزد: صفحه‌های Next، نشانی‌های عصرِ Express (`.html`)،
 //      مسیرهای ثابت و PWA، API، عکس‌ها، و هر لینک/داراییِ داخلیِ پیدا‌شده.
 //   ۳. فهرست می‌کند **کدام مسیر یا لینک می‌شکند** — با زنجیره‌ی کاملش.
+//   ۴. رفتارِ *خطا* را روی همان دامنه سنجیده می‌کند: مسیرِ ناموجود، خطای ۵۰۰ی
+//      که خودِ upstream برمی‌گرداند، و بالا‌نبودنِ یکی از دو سرویس. هر سه از
+//      پشتِ همین پروکسی و با همان قراردادی که `HTTPS-GUIDE.md` می‌نویسد
+//      (`error_page`، سوئیچِ `proxy_intercept_errors`، و `@api_down`).
+//      نبودِ یک سرویس با پورتِ *بسته* شبیه‌سازی می‌شود، پس خطای واقعیِ شبکه
+//      (ECONNREFUSED) رخ می‌دهد و فوریُبودن هم اندازه‌گیری می‌شود.
 //
 // ---------- چرا پروکسی و نه «Next را روی ۳۰۰۰ بالا کن» ----------
 // چون کاربر هرگز فقط Next را نمی‌بیند: بدنه‌ی صفحه از Next می‌آید ولی عکسِ
@@ -36,10 +42,12 @@
 //   node scripts/cutover-rehearsal.mjs --port=9000
 //   node scripts/cutover-rehearsal.mjs --verbose        # هر مسیر را چاپ کن، نه فقط شکست‌ها
 //   node scripts/cutover-rehearsal.mjs --serve          # فقط دامنه‌ی واحد را بالا نگه دار (خزش نکن)
+//   node scripts/cutover-rehearsal.mjs --slow           # + درگاهِ باز و بی‌جواب (سنجشِ کاملِ بودجه‌ی صبر)
 //
 // کدِ خروج: ۰ = هیچ مسیر/لینکِ شکسته‌ای نیست · ۱ = شکستِ زنده · ۲ = پیش‌شرط
 
 import http from "node:http";
+import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,6 +74,10 @@ const VERBOSE = flag("verbose", false) === true;
 // حالتِ سرو: به‌جای خزش، پروکسی را بالا نگه می‌دارد تا خودتان روی همان
 // پورت ببینید. خزش حکم می‌دهد؛ این حالت به چشم اجازه‌ی قضاوت می‌دهد.
 const SERVE = flag("serve", false) === true;
+// درگاهِ باز و بی‌جواب: سنجشِ همین یک حالت، بودجه‌ی صبر را *واقعاً* خرج
+// می‌کند (تا `proxy_read_timeout`ِ مستند). پس پیش‌فرض خاموش است تا تمرینِ
+// همیشه‌رو سریع بماند، ولی عددش همیشه از مستند خوانده می‌شود.
+const SLOW = flag("slow", false) === true;
 /** سقفِ خزش — تمرین باید سریع تمام شود؛ ۳۰۰ سقفِ مناسبی برای این سایت است. */
 const MAX_URLS = 300;
 const MAX_HOPS = 5;
@@ -92,12 +104,151 @@ const say = (s = "") => console.log(s);
 // پیکربندیِ مستند `location /api/` و `location /picture/` است.
 const TO_EXPRESS = ["/api/", "/picture/"];
 
+// ------------------------------------------------------------
+// ۰) قراردادِ لبه — از خودِ مستند خوانده می‌شود، نه از حافظه
+// ------------------------------------------------------------
+// چرا parse و نه «همان عددها را این‌جا بنویسیم»: اگر این اسکریپت مهلت‌ها و
+// مسیرِ کارتِ خطا را از خودش بداند، با هر تغییرِ پیکربندیِ nginx *بی‌صدا* از
+// آن جدا می‌شود و یک نسخه‌ی دومِ حقیقت می‌سازد. پس بلوک‌های مستند خوانده و
+// همان‌ها اجرا می‌شوند؛ نبودِ هر لنگر یعنی پیش‌شرطِ ناقص، نه یک سبزِ خالی.
+const GUIDE = path.join(ROOT, "HTTPS-GUIDE.md");
+
+/** بدنه‌ی یک بلوکِ `location` — از سرِ آن تا بستنِ هم‌تورفتگی‌اش. */
+function blockOf(src, head) {
+  const i = src.indexOf(head);
+  if (i === -1) return null;
+  const j = src.indexOf("\n    }", i);
+  return j === -1 ? null : src.slice(i, j);
+}
+const secondsOf = (block, directive) => {
+  const m = block && block.match(new RegExp(`${directive}\\s+(\\d+)s;`));
+  return m ? Number(m[1]) * 1000 : null;
+};
+const interceptOf = (block) => {
+  const m = block && block.match(/proxy_intercept_errors\s+(on|off);/);
+  return m ? m[1] === "on" : null;
+};
+
+function loadEdgeContract() {
+  const src = fs.readFileSync(GUIDE, "utf8");
+  const api = blockOf(src, "location /api/ {");
+  const picture = blockOf(src, "location /picture/ {");
+  const page = blockOf(src, "location / {");
+  const cardLoc = blockOf(src, "location = /error-500.html {");
+  const down = blockOf(src, "location @api_down {");
+
+  const cardLine = src.match(/error_page\s+([\d ]+?)\s+(\/error-500\.html);/);
+  const downReturn = down && down.match(/return\s+(\d{3})\s+'([^']+)'/);
+  const root = cardLoc && cardLoc.match(/root\s+(\S+);/);
+  // مسیرِ `root` در مستند، مسیرِ سرور است (`/var/www/…/next-frontend/public`).
+  // همان پوشه روی ماشینِ توسعه `next-frontend/public`ِ همین مخزن است.
+  const tail = root
+    ? root[1].slice(root[1].indexOf("next-frontend/") + "next-frontend/".length)
+    : "";
+
+  const contract = {
+    cardStatuses: cardLine ? cardLine[1].trim().split(/\s+/).map(Number) : [],
+    cardPath: cardLine && root ? path.join(NEXT_DIR, tail, cardLine[2]) : null,
+    cardCache: /Cache-Control\s+"no-store"/.test(cardLoc || "") ? "no-store" : null,
+    api: {
+      connect: secondsOf(api, "proxy_connect_timeout"),
+      read: secondsOf(api, "proxy_read_timeout"),
+      intercept: interceptOf(api),
+      downStatus: downReturn ? Number(downReturn[1]) : null,
+      downBody: downReturn ? downReturn[2] : null,
+      downType: down && /default_type\s+application\/json/.test(down) ? "application/json" : null,
+    },
+    picture: {
+      connect: secondsOf(picture, "proxy_connect_timeout"),
+      read: secondsOf(picture, "proxy_read_timeout"),
+    },
+    page: {
+      connect: secondsOf(page, "proxy_connect_timeout"),
+      read: secondsOf(page, "proxy_read_timeout"),
+      intercept: interceptOf(page),
+    },
+  };
+
+  const missing = [];
+  if (!contract.cardStatuses.length || !contract.cardPath) missing.push("خطِ error_page برای کارتِ ۵۰۰");
+  else if (!fs.existsSync(contract.cardPath)) missing.push(`فایلِ کارت روی دیسک نیست (${contract.cardPath})`);
+  if (!contract.cardCache) missing.push('add_header Cache-Control "no-store" روی همان کارت');
+  if (!contract.api.connect || contract.api.intercept !== false) missing.push("location /api/ (مهلتِ اتصال + proxy_intercept_errors off)");
+  if (!contract.api.downStatus || !contract.api.downBody || !contract.api.downType) missing.push("location @api_down (کد، بدنه و default_type)");
+  if (!contract.picture.connect) missing.push("location /picture/ (مهلتِ اتصال)");
+  if (!contract.page.connect || !contract.page.read || contract.page.intercept !== true) missing.push("location / (مهلت‌ها + proxy_intercept_errors on)");
+  return { contract, missing };
+}
+
+const { contract: EDGE, missing: EDGE_MISSING } = loadEdgeContract();
+// کارتِ لبه از دیسک خوانده می‌شود (همان کاری که nginx با `root` می‌کند) تا
+// بدنه‌ی سروشده بایت‌به‌بایت با فایل مقایسه شود، نه با «به‌نظر درست است».
+const CARD_BODY = EDGE.cardPath && fs.existsSync(EDGE.cardPath) ? fs.readFileSync(EDGE.cardPath) : null;
+
+// سرویسِ خوابیده: مبدأش به پورتِ *بسته* می‌رود، پس خطای واقعیِ شبکه
+// (ECONNREFUSED) رخ می‌دهد — نه یک ۵۰۲ِ ساختگیِ خودمان. با همین، «فوری بود»
+// هم معنا پیدا می‌کند: اندازه‌گیری روی همان چیزی است که مشتری تجربه می‌کند.
+const OVERRIDE = { next: null, express: null };
+
 function upstreamFor(pathname) {
-  return TO_EXPRESS.some((p) => pathname.startsWith(p)) ? EXPRESS : NEXT;
+  const toExpress = TO_EXPRESS.some((p) => pathname.startsWith(p));
+  return toExpress ? OVERRIDE.express || EXPRESS : OVERRIDE.next || NEXT;
+}
+
+/** هدرهای کارتِ لبه — خطا از دیسک سرو می‌شود، با همان `no-store`ِ مستند. */
+function cardHeaders() {
+  return {
+    "content-type": "text/html; charset=utf-8",
+    "content-length": Buffer.byteLength(CARD_BODY),
+    ...(EDGE.cardCache ? { "cache-control": EDGE.cardCache } : {}),
+  };
+}
+
+/** خطای ساخته‌ی خودِ لبه (۵۰۲/۵۰۴) یا ۵۰۰ی که از upstream نیامده. */
+function sendCard(res, status, extra = {}) {
+  res.writeHead(status, { ...cardHeaders(), "x-rehearsal-upstream": "edge", ...extra });
+  res.end(CARD_BODY);
+}
+
+/** پاسخِ `location @api_down` — به زبانِ خودِ API، نه کارتِ HTML. */
+function sendApiDown(res) {
+  res.writeHead(EDGE.api.downStatus, {
+    "content-type": EDGE.api.downType,
+    "content-length": Buffer.byteLength(EDGE.api.downBody, "utf8"),
+    "x-rehearsal-upstream": "edge",
+  });
+  res.end(EDGE.api.downBody);
+}
+
+// تزریقِ خطا: این دو مسیرِ ساختگی پاسخِ «۵۰۰ِ upstream» را می‌سازند تا مسیرِ
+// `error_page` سنجیده شود، بدونِ دست‌زدن به کدِ تولید. مسیرِ `/api/` عمداً
+// جدا است: قراردادِ آن‌جا JSON است و نباید کارت ببیند.
+const FAULT_PAGE = "/__rehearsal__/upstream-500";
+const FAULT_API = "/api/__rehearsal__/upstream-500";
+const FAULT_MARK = "upstream-500-tazrigh";
+
+function injectedUpstream500(req, res, pathname) {
+  const isApi = pathname.startsWith("/api/");
+  const upstream = isApi ? "express" : "next";
+  const body = `<!doctype html><html><body><h1>${FAULT_MARK} (${upstream})</h1></body></html>`;
+  const intercepted = !isApi && EDGE.page.intercept === true && EDGE.cardStatuses.includes(500);
+  if (intercepted) return sendCard(res, 500, { "x-rehearsal-injected": "500" });
+  res.writeHead(500, {
+    "content-type": "text/html; charset=utf-8",
+    "content-length": Buffer.byteLength(body, "utf8"),
+    "x-rehearsal-upstream": upstream,
+    "x-rehearsal-injected": "500",
+  });
+  res.end(body);
 }
 
 function proxy(req, res) {
-  const target = upstreamFor(req.url.split("?")[0]);
+  const pathname = req.url.split("?")[0];
+  if (pathname === FAULT_PAGE || pathname === FAULT_API) return injectedUpstream500(req, res, pathname);
+
+  const target = upstreamFor(pathname);
+  const isApi = pathname === "/api" || pathname.startsWith("/api/");
+  const isPicture = pathname.startsWith("/picture/");
   const url = new URL(req.url, target);
   const up = http.request(
     {
@@ -113,18 +264,33 @@ function proxy(req, res) {
       },
     },
     (upRes) => {
+      const status = upRes.statusCode || 502;
+      // همان سوئیچِ `proxy_intercept_errors`: روی `location /` روشن است
+      // (خطای خودِ Next هم به همان کارت می‌رسد) و روی `/api/` خاموش
+      // (قراردادِ JSON). عمداً هیچ کدِ ۴۰۴ این‌جا نیست — `not-found.tsx`ِ
+      // Next نباید قربانیِ کارتِ ۵۰۰ شود و در مستند هم `error_page …404` نداریم.
+      const shouldIntercept = !isApi && !isPicture && EDGE.page.intercept === true && EDGE.cardStatuses.includes(status);
+      if (shouldIntercept) {
+        upRes.resume(); // بدنه‌ی upstream خوانده نمی‌شود؛ جای آن کارت می‌رود.
+        return sendCard(res, status, { "x-rehearsal-intercepted": String(status) });
+      }
       // بدنه بایت‌به‌بایت رد می‌شود و هدرها دست‌نخورده — پس
       // `content-encoding` و `location` همان چیزی می‌مانند که سرور گفته.
-      res.writeHead(upRes.statusCode || 502, {
+      res.writeHead(status, {
         ...upRes.headers,
         "x-rehearsal-upstream": target === EXPRESS ? "express" : "next",
       });
       upRes.pipe(res);
     },
   );
+  // مهلتِ خواندن از مستند می‌آید: همین خط است که وقتی درگاه باز است و کسی
+  // جواب نمی‌دهد، مشتری را از انتظارِ بی‌پایان نجات می‌دهد.
+  const readMs = isApi ? EDGE.api.read : isPicture ? EDGE.picture.read : EDGE.page.read;
+  if (readMs) up.setTimeout(readMs, () => up.destroy(new Error("etimeout")));
   up.on("error", (e) => {
-    res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
-    res.end(`upstream ${target} در دسترس نیست: ${e.message}`);
+    if (res.headersSent) return res.destroy();
+    if (isApi) return sendApiDown(res);
+    return sendCard(res, e.message === "etimeout" ? 504 : 502, { "x-rehearsal-edge-error": e.message });
   });
   req.pipe(up);
 }
@@ -134,6 +300,38 @@ const server = http.createServer(proxy);
 // ------------------------------------------------------------
 // ۲) ابزارِ خزش
 // ------------------------------------------------------------
+/** یک پورتِ قطعاً بسته — برای شبیه‌سازیِ سرویسِ خوابیده. */
+async function deadOrigin() {
+  const srv = net.createServer();
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  const port = srv.address().port;
+  await new Promise((r) => srv.close(r));
+  return `http://127.0.0.1:${port}`;
+}
+
+/** درگاهی که اتصال را می‌پذیرد ولی هرگز پاسخ نمی‌دهد (پروسهٔ قفل‌شده). */
+async function hungOrigin() {
+  const sockets = new Set();
+  const srv = net.createServer((sock) => {
+    sockets.add(sock);
+    sock.on("close", () => sockets.delete(sock));
+    // وقتی خودِ پروکسی مهلت را تمام می‌کند و سوکت را می‌بندد، این طرف
+    // ECONNRESET می‌گیرد. بدونِ این خط، همان ریستِ **منتظره** یک
+    // unhandled 'error' می‌شود و کلِ تمرین را می‌کشد (تجربهٔ اجرای اول).
+    sock.on("error", () => sockets.delete(sock));
+    // عمداً هیچ پاسخی نمی‌دهد و سوکت را هم نمی‌بندد.
+  });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  const port = srv.address().port;
+  return {
+    origin: `http://127.0.0.1:${port}`,
+    close: () => {
+      for (const s of sockets) s.destroy();
+      srv.close();
+    },
+  };
+}
+
 async function alive(origin) {
   try {
     const res = await fetch(origin + "/", {
@@ -147,11 +345,14 @@ async function alive(origin) {
 }
 
 /** یک درخواست بدونِ دنبال‌کردنِ ریدایرکت. */
-async function hit(url) {
+async function hit(url, { timeoutMs = 15000 } = {}) {
   const res = await fetch(url, {
     redirect: "manual",
     headers: { "user-agent": "cutover-rehearsal/1.0" },
-    signal: AbortSignal.timeout(15000),
+    // پیش‌فرض بلندتر از بودجهٔ *خواندنِ* مستند (۱۵s) نیست؛ هر جا سنجشی
+    // عمداً همان بودجه را خرج می‌کند، مهلتِ خودِ سنجش هم بلندتر می‌شود
+    // وگرنه سنجش پیش از پاسخ می‌میرد و تشخیص را بهجای گزارش می‌شکند.
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const loc = res.headers.get("location");
   const type = res.headers.get("content-type") || "";
@@ -159,6 +360,7 @@ async function hit(url) {
     status: res.status,
     location: loc ? new URL(loc, url).toString() : null,
     upstream: res.headers.get("x-rehearsal-upstream") || "?",
+    cache: res.headers.get("cache-control"),
     type,
     body: /html|css|javascript|json|xml/.test(type) ? await res.text() : "",
   };
@@ -261,6 +463,12 @@ function extractRefs(base, body, contentType) {
 // ------------------------------------------------------------
 if (SERVE) {
   await serveOnly();
+} else if (EDGE_MISSING.length || !CARD_BODY) {
+  console.error(
+    `✖ قراردادِ لبه از خودِ HTTPS-GUIDE.md خوانده نشد — تمرینِ خطا معنا ندارد:\n` +
+      EDGE_MISSING.map((m) => `    • ${m}`).join("\n"),
+  );
+  process.exitCode = 2;
 } else if (!(await alive(EXPRESS)) || !(await alive(NEXT))) {
   console.error(
     `✖ برایِ تمرینِ کاتاور هر دو سرور لازم است:\n` +
@@ -344,6 +552,7 @@ async function run() {
   addSeed("/api/products?limit=1", "API");
 
   // عکسِ واقعیِ محصول از خودِ API خوانده می‌شود — نه نامِ حدسی.
+  let samplePicture = null;
   try {
     const r = await hit(`${DOMAIN}/api/products?limit=5`);
     if (r.status === 200 && r.body) {
@@ -355,6 +564,8 @@ async function run() {
         // encode کردنِ دوباره، آدرسِ `/picture/%2Fpicture%2F…` می‌سازد که
         // ۴۰۴ است — باگِ خودِ همین تمرین در اجرای اول.
         const img = String(withImage.image);
+        // برای سنجشِ رفتارِ خطا روی همان مبدأ لازم می‌شود (خوابِ Express).
+        samplePicture = img.startsWith("/picture/") ? img : `/picture/${img}`;
         // نامِ خام می‌ماند: خودِ fetch نویسه‌های غیرِ‌ASCII را درست کد می‌کند.
         // (encode کردنِ دوباره هم آدرس را می‌شکند، هم پروندهٔ عکس را گم می‌کند.)
         addSeed(img.startsWith("/picture/") ? img : `/picture/${img}`, "عکسِ محصول (از API)");
@@ -552,6 +763,151 @@ async function run() {
     say("    همان صفحه به دارایی‌هایی اشاره می‌کند که nginx به Next می‌دهد — بی‌استایل و با JSِ گم‌شده.");
   }
 
+  // ---------- رفتارِ خطا روی دامنهٔ واحد ----------
+  // چرا لازم بود: تا امروز هر سنجشِ خطا روی *دو مبدأ جدا* اجرا می‌شد (Express
+  // روی ۳۰۰۰ و Next روی ۳۰۰۱). ولی مشتری فقط دامنهٔ واحد را می‌بیند، و روی آن
+  // نه فقط چه کسی جواب می‌دهد تفاوت دارد، بلکه *خودِ کدِ خطا و بدنه‌اش* هم از
+  // لبه می‌آید. سه چیز این‌جا سنجیده می‌شود و هر سه از پشتِ همان پروکسی:
+  //   الف) مسیرِ ناموجود → کارتِ ۴۰۴ِ Next
+  //   ب) خطای ۵۰۰ی که خودِ upstream برمی‌گرداند → کارتِ لبه (و زیرِ /api/ دست‌نخورده)
+  //   ج) بالا‌نبودنِ یکی از دو سرویس → ۵۰۲ِ کارت‌دار برای صفحه، JSONِ @api_down
+  //      برای /api، و سلامتِ سرویسِ دیگر (فوری، بدونِ انتظار).
+  const edge = [];
+  const edgeBad = [];
+  const verdict = (label, ok, detail) => {
+    edge.push({ label, ok, detail });
+    if (!ok) edgeBad.push({ label, detail });
+  };
+  // یک واکشیِ ناموفق نباید کلِ تمرین را بکشد: شکستِ شبکه خودش یک یافته است.
+  const probe = async (label, fn) => {
+    try {
+      return await fn();
+    } catch (e) {
+      verdict(label, false, `واکشی شکست خورد: ${e.message}`);
+      return null;
+    }
+  };
+  const textOf = (html) => String(html).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  // نشانه‌های متن از همان دو فایلی می‌آیند که پاسخ را می‌سازند، نه از حدس:
+  // `app/not-found.tsx` و `public/error-500.html`.
+  const NOT_FOUND_TEXT = "پیدا نشد (۴۰۴)";
+  const CARD_TEXT = "خطای ۵۰۰";
+  const BARE_EXPRESS_TEXT = "چنین صفحه‌ای وجود ندارد";
+
+  say("\nرفتارِ خطا روی دامنهٔ واحد (پشتِ همان پروکسی):");
+
+  // الف) مسیرِ ناموجود
+  {
+    const p = `/__rehearsal__/${Date.now().toString(36)}-nist`;
+    const r = await hit(DOMAIN + p);
+    const t = textOf(r.body);
+    verdict(
+      `مسیرِ ناموجود (${p}) کارتِ ۴۰۴ِ Next است، نه متنِ خامِ Express`,
+      r.status === 404 &&
+        r.upstream === "next" &&
+        /html/.test(r.type) &&
+        t.includes(NOT_FOUND_TEXT) &&
+        !t.includes(BARE_EXPRESS_TEXT),
+      `${r.status} از ${r.upstream} · نشانهٔ ۴۰۴: ${t.includes(NOT_FOUND_TEXT)} · متنِ خام: ${t.includes(BARE_EXPRESS_TEXT)}`,
+    );
+  }
+
+  // ب) خطای عمدیِ سرور (۵۰۰ی که upstream برمی‌گرداند)
+  {
+    const r = await hit(DOMAIN + FAULT_PAGE);
+    const t = textOf(r.body);
+    verdict(
+      "خطای ۵۰۰ِ Next به کارتِ استایل‌دارِ لبه می‌رسد (بدنهٔ upstream عوض می‌شود)",
+      r.status === 500 && !t.includes(FAULT_MARK) && t.includes(CARD_TEXT) && (r.cache || "").includes("no-store"),
+      `${r.status} · بدنهٔ upstream پاک شد: ${!t.includes(FAULT_MARK)} · کارت: ${t.includes(CARD_TEXT)} · cache: ${r.cache}`,
+    );
+    const a = await hit(DOMAIN + FAULT_API);
+    const at = textOf(a.body);
+    verdict(
+      "همان ۵۰۰ زیرِ /api/ دست‌نخورده می‌ماند (قراردادِ JSON، نه کارتِ HTML)",
+      a.status === 500 && at.includes(FAULT_MARK) && !at.includes(CARD_TEXT),
+      `${a.status} · بدنهٔ upstream دیده شد: ${at.includes(FAULT_MARK)}`,
+    );
+  }
+
+  // ج) یکی از دو سرویس بالا نیست — با پورتِ بسته، یعنی خطای واقعیِ شبکه.
+  const DEAD = await deadOrigin();
+  {
+    OVERRIDE.next = DEAD;
+    const t0 = Date.now();
+    const r = await hit(DOMAIN + "/products");
+    const ms = Date.now() - t0;
+    const t = textOf(r.body);
+    verdict(
+      "Next خواب: صفحه کارتِ ۵۰۲ را می‌گیرد و فوری می‌آید",
+      r.status === 502 && t.includes(CARD_TEXT) && ms <= EDGE.page.connect + 1500,
+      `${r.status} در ${ms}ms (بودجهٔ اتصالِ مستند: ${EDGE.page.connect}ms) · کارت: ${t.includes(CARD_TEXT)}`,
+    );
+    const a = await hit(DOMAIN + "/api/health");
+    verdict(
+      "با خوابیدنِ Next، خودِ /api سالم می‌ماند (دو سرویس، یک دامنه)",
+      a.status === 200,
+      `${a.status} از ${a.upstream}`,
+    );
+    OVERRIDE.next = null;
+  }
+  {
+    OVERRIDE.express = DEAD;
+    const a = await hit(DOMAIN + "/api/health");
+    verdict(
+      "Express خواب: /api همان JSONِ @api_down را می‌دهد (کد و بدنه از مستند)",
+      a.status === EDGE.api.downStatus &&
+        String(a.type).includes(EDGE.api.downType) &&
+        String(a.body).includes("سرویس موقتاً در دسترس نیست"),
+      `${a.status} ${a.type} — «${String(a.body).slice(0, 58)}…»`,
+    );
+    const p = await hit(DOMAIN + "/products");
+    verdict("با خوابیدنِ Express، صفحه‌های Next سالم می‌مانند", p.status === 200, `${p.status} از ${p.upstream}`);
+    if (samplePicture) {
+      const img = await hit(DOMAIN + samplePicture);
+      verdict(
+        `عکس (${samplePicture}) روی همین مبدأ کدِ ۵۰۲ می‌گیرد، نه عکسِ نیمه‌کاره`,
+        img.status === 502,
+        `${img.status} · نوعِ بدنه: ${img.type}`,
+      );
+    } else {
+      notes.push("عکسِ نمونه‌ای پیدا نشد — سنجشِ عکس هنگامِ خوابِ Express انجام نشد");
+    }
+    OVERRIDE.express = null;
+  }
+
+  // د) درگاهِ باز و بی‌جواب — همان حالتی که مهلتِ *خواندن* را خرج می‌کند.
+  if (SLOW) {
+    const hung = await hungOrigin();
+    try {
+      OVERRIDE.next = hung.origin;
+      const t0 = Date.now();
+      const r = await probe(`درگاهِ باز و بی‌جواب (${EDGE.page.read}ms)`, () =>
+        hit(DOMAIN + "/products", { timeoutMs: EDGE.page.read + 5000 }),
+      );
+      const ms = Date.now() - t0;
+      if (r) {
+        verdict(
+          `درگاهِ باز و بی‌جواب: در ${EDGE.page.read}ms کارتِ ۵۰۴ می‌آید (نه ۶۰ ثانیهٔ پیش‌فرض)`,
+          r.status === 504 &&
+            textOf(r.body).includes(CARD_TEXT) &&
+            ms >= EDGE.page.read - 500 &&
+            ms <= EDGE.page.read + 3000,
+          `${r.status} در ${ms}ms (بودجهٔ خواندنِ مستند: ${EDGE.page.read}ms)`,
+        );
+      }
+    } finally {
+      OVERRIDE.next = null;
+      hung.close();
+    }
+  } else {
+    notes.push(
+      `حالتِ «درگاهِ باز و بی‌جواب» سنجیده نشد — با --slow اجرا کن (بودجهٔ خواندنِ مستند: ${EDGE.page.read}ms)`,
+    );
+  }
+
+  for (const v of edge) say(`  ${v.ok ? "✔" : "✖"} ${v.label}\n      ${v.detail}`);
+
   try {
     const sm = await hit(`${DOMAIN}/sitemap.xml`);
     if (sm.status === 200) {
@@ -572,10 +928,15 @@ async function run() {
   say(
     `جمع: ${rows.length} مسیر سنجیده شد — ${ok200.length} در یک گام ۲۰۰، ${redirects.length} انتقال، ` +
       `${broken.length} شکستِ داوری‌شده، ${stale.length} مسیرِ کهنه‌ی مرده، ${notJudged.length} ارجاعِ داوری‌نشده، ` +
-      `${fromErrorRefs.length} ارجاع از صفحه‌ی خطا.`,
+      `${fromErrorRefs.length} ارجاع از صفحه‌ی خطا، ${edge.length} سنجشِ رفتارِ خطا (${edgeBad.length} ناموفق).`,
   );
 
-  if (broken.length) {
+  if (edgeBad.length) {
+    say("\n✖ رفتارِ خطا روی دامنهٔ واحد طبقِ قراردادِ مستند نیست:");
+    for (const v of edgeBad) say(`  • ${v.label}\n      ${v.detail}`);
+  }
+
+  if (broken.length || edgeBad.length) {
     say("✖ کاتاور با این وضعیت شکسته است.");
     exitCode = 1;
   } else if (stale.length) {
