@@ -1,0 +1,175 @@
+name: DAST
+
+# ============================================================
+# چرا این workflow جدا از ci.yml است
+# ============================================================
+# `ci.yml` نگهبان‌های *ایستا و رفتاری* را اجرا می‌کند: کد را می‌خواند، سرورِ
+# سندباکس بالا می‌آورد، و در چند ثانیه جواب می‌دهد. ولی هیچ‌کدام از آن‌ها
+# نمی‌تواند بگوید «یک اسکنرِ بیرونی وقتی به سایت نگاه می‌کند چه می‌بیند».
+# OWASP ZAP همان نگاهِ بیرونی است (DAST) و سه تفاوتِ عملی با بقیه دارد:
+#
+#   • Docker می‌خواهد و یک بیلدِ کاملِ فرانت‌اند —
+#     یعنی کندتر از کلِ ماتریسِ ci.yml.
+#   • خطایش از جنسِ «نتیجهٔ سنجش» است نه «شکستِ تست»، و باید بشود مستقل
+#     خاموشش کرد بدونِ اینکه نگهبان‌های دیگر بی‌گارد شوند.
+#   • فقط یک نسخهٔ Node لازم دارد؛ ماتریس‌کردنش یعنی دو بار اسکنِ یک چیز.
+#
+# پس اینجا فایلِ خودش را دارد: یک job، یک اجرا، یک گزارش.
+#
+# ============================================================
+# این job چه چیزی را *نمی‌کند* (عمدی)
+# ============================================================
+#   • حمله نمی‌کند. ZAP «baseline» یک اسکنِ پایه است: فقط می‌خزد و پاسخ‌ها را
+#     منفعل ارزیابی می‌کند. اسکنِ فعال (`action-full-scan`) درخواست‌های تهاجمی
+#     می‌فرستد و به اجازهٔ صریح نیاز دارد؛ اینجا نیست.
+#   • Issue نمی‌سازد. `allow_issue_writing: false` و در سطحِ job هم مجوزِ
+#     `issues: none` است. یافته‌ها در artifact و لاگِ همان اجرا می‌مانند.
+#   • روی سایتِ واقعی کار نمی‌کند. هدف `127.0.0.1:3001` است: همان بیلدی که
+#     همان لحظه ساخته شده، با بک‌اندِ محلی. نه دامنه‌ای، نه داده‌ای.
+#
+# ============================================================
+# چرا شکستِ بیلد ممکن است (و چرا این خوب است)
+# ============================================================
+# `fail_action: true` و `cmd_options: '-I -T 5'`:
+#   • `-I` یعنی «هشدار، شکست نیست» — پس فقط یافته‌هایی که در `.zap/rules.tsv`
+#     صریحاً FAIL شده‌اند بیلد را قرمز می‌کنند، نه هر هشدارِ پیش‌فرضِ ZAP.
+#   • `-T 5` سقفِ پنج‌دقیقه‌ای برای خودِ ZAP است (نه برای آماده‌بودنِ سایت؛
+#     آن یکی حلقهٔ curl پایین است و شکستش پیامِ روشن می‌دهد).
+#   • اگر ZAP خودش بترکد (هدف پاسخ ندهد، خطای داخلی) هم job قرمز می‌شود —
+#     «اسکنی که هیچ‌وقت نمی‌تواند قرمز شود» همان اطمینانِ قلابی است.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# فقط خواندنِ مخزن. Issues عمداً `none` است: این اسکن هرگز چیزی در Issues
+# نمی‌نویسد و مجوزش هم داده نمی‌شود تا اشتباهی ممکن نباشد.
+permissions:
+  contents: read
+  issues: none
+
+concurrency:
+  group: dast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zap-baseline:
+    name: OWASP ZAP baseline (DAST)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      # همان مقداری که jobِ فرانت‌اندِ ci.yml می‌گذارد: بدونِ آن canonical و
+      # og:url روی دو مبدأ مختلف ساخته می‌شوند و اسکن چیزِ بی‌ربط می‌بیند.
+      SITE_URL: http://localhost:3001
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: next-frontend/package-lock.json
+
+      # ---------- بک‌اند، فقط برای اینکه بیلد واقعاً صفحه‌ی محصول بسازد ----------
+      # `product/[id]/page.tsx` در زمانِ build محصولات را پیش‌رندر می‌کند. بدونِ
+      # بک‌اند، بیلد سبز می‌شود ولی صفر صفحه‌ی محصول می‌سازد — یعنی اسکنر به یک
+      # سایتِ نیمه‌خالی نگاه می‌کند و «سبز» بی‌معنا می‌شود.
+      - name: Build the storefront against a live backend
+        run: |
+          set -euo pipefail
+
+          ( cd backend && npm ci )
+          ( cd backend && node server.js > /tmp/backend.log 2>&1 & )
+
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1 && break
+            sleep 1
+          done
+          if ! curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
+            echo '::error::backend never became healthy'
+            cat /tmp/backend.log
+            exit 1
+          fi
+
+          ( cd next-frontend && npm ci )
+          ( cd next-frontend && npm run build )
+
+          prerendered=$(find next-frontend/.next/server/app/product -name '*.html' 2>/dev/null | wc -l)
+          echo "prerendered product pages: $prerendered"
+          if [ "$prerendered" -lt 1 ]; then
+            echo '::error::no product pages were prerendered - the target would be an empty shell'
+            exit 1
+          fi
+
+      # ---------- بالا آوردنِ هدف و انتظار تا واقعاً پاسخ دهد ----------
+      # آماده‌بودن با «کدِ HTTP غیرِ ۰۰۰» سنجیده می‌شود نه با ۲۰۰ روی یک مسیرِ
+      # ثابت: یک ۴۰۴ هم ثابت می‌کند پروسه گوش می‌دهد، و اگر همان مسیر خراب
+      # باشد این حلقه نباید ۶۰ ثانیه هدر بدهد.
+      - name: Start the target
+        run: |
+          set -euo pipefail
+
+          ( cd next-frontend && npm run start > /tmp/next.log 2>&1 & )
+
+          up() {
+            local code
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/ || true)
+            [ "$code" != "000" ]
+          }
+
+          ready=0
+          for _ in $(seq 1 60); do
+            if up; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" != "1" ]; then
+            echo '::error::storefront did not start - ZAP would scan a closed port'
+            tail -50 /tmp/next.log 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "target is up:"
+          curl -sI http://127.0.0.1:3001/ | head -5
+
+      # ---------- اسکنِ پایه ----------
+      # اکشن، خودش تصویرِ ZAP را می‌آورد و روی runnerهای لینوکسی با
+      # `--network=host` اجرا می‌کند؛ برای همین `127.0.0.1` از داخلِ اسکنر هم
+      # همان پروسه‌ای است که بالا آوردیم.
+      - name: ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: 'http://127.0.0.1:3001'
+          rules_file_name: '.zap/rules.tsv'
+          # شکست روی یافته‌های FAIL، بی‌شکست روی هشدارها (`-I`)
+          fail_action: true
+          cmd_options: '-I -T 5'
+          # هیچ Issue/PRی ساخته یا ویرایش نمی‌شود — یافته‌ها artifact و لاگ‌اند.
+          allow_issue_writing: false
+          artifact_name: 'zap-baseline-report'
+
+      # ---------- گزارشِ خوانا حتی وقتی اسکن قرمز شده ----------
+      # جدا از artifactِ خودِ اکشن می‌آید تا در خلاصهٔ اجرا مستقیم دیده شود.
+      - name: Summarize findings
+        if: always()
+        run: |
+          {
+            echo '### OWASP ZAP baseline'
+            echo
+            echo 'هدف: `http://127.0.0.1:3001` (بیلدِ همین اجرا، بک‌اندِ محلی)'
+            echo
+            echo 'قواعدِ گیت: `.zap/rules.tsv` — فقط قواعدِ FAIL بیلد را می‌بندند.'
+            echo 'گزارشِ کامل: artifactِ `zap-baseline-report`.'
+            if [ -f report_md.md ]; then
+              echo
+              head -80 report_md.md
+            else
+              echo
+              echo 'گزارشِ markdown پیدا نشد؛ خروجیِ اسکن در لاگِ stepِ بالا است.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -169,6 +169,7 @@ function allNumbers(line) {
 const SUITES = [
   { key: 'smoke', file: 'test-smoke.js', word: w(0x62f, 0x648, 0x62f) },                       // دود
   { key: 'owasp', file: 'owasp-scan.js', word: 'OWASP' },
+  { key: 'asvs', file: 'asvs.js', word: 'ASVS' },
   { key: 'security', file: 'security.js', word: w(0x627, 0x645, 0x646, 0x6cc, 0x62a) },        // امنیت
   { key: 'discount', file: 'discount.js', word: w(0x62a, 0x62e, 0x641, 0x6cc, 0x641) },        // تخفیف
   { key: 'bench', file: 'bench-report-integrity.js', word: w(0x628, 0x646, 0x686, 0x645, 0x627, 0x631, 0x6a9) },

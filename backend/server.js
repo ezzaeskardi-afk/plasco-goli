@@ -113,7 +113,11 @@ const CSP = [
   "frame-src 'none'",    // سایت هیچ iframe ندارد؛ پرداخت با ریدایرکت انجام می‌شود
   "form-action 'self' https://www.zarinpal.com",
   "frame-ancestors 'self'",
-  "base-uri 'self'",
+  // ASVS 3.4.3 صراحتاً `base-uri 'none'` می‌خواهد، نه `'self'`. تفاوتش
+  // واقعی است: با `'self'` یک `<base href="/">`ِ تزریق‌شده *مجاز* است و
+  // برچسبِ نسبیِ صفحه را به ریشه می‌برد؛ با `'none'` اصلِ عنصر `<base>` بی‌اثر
+  // می‌شود. خودِ سایت هیچ‌جا `<base>` ندارد (سنجیده شد)، پس سخت‌گیری رایگان است.
+  "base-uri 'none'",
   "object-src 'none'",
   // روی HTTPS، هر آدرس http:// که از قلم افتاده باشد خودکار ارتقا می‌یابد تا
   // مرورگر «محتوای ناامن» نشان ندهد
@@ -140,7 +144,10 @@ app.use((req, res, next) => {
   res.setHeader('Reporting-Endpoints', 'csp="/api/csp-report"');
   // اگر پشت HTTPS هستیم، مرورگر را وادار می‌کنیم همیشه از HTTPS استفاده کند
   if (HTTPS_MODE) {
-    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+    // ASVS 3.4.1 حداقل **یک سال** می‌خواهد؛ ۱۵۵۵۲۰۰۰ (۱۸۰ روز) کمتر بود.
+    // مبدأِ Next از قبل یک‌ساله + preload می‌فرستد (next.config.ts)، پس این
+    // تغییر دو مبدأ را هم‌سطح می‌کند و راهنمای HTTPS هم همان عدد را دارد.
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
   next();
 });
@@ -291,9 +298,12 @@ app.use('/api', compressJson);
 // نبودن این تابع قبلاً باعث شده بود canonical صفحه‌ی اصلی روی یک دامنه‌ی نمونه
 // بماند — که یعنی گوگل صفحه‌ی اصلی را به آدرسی که وجود ندارد نسبت می‌داد.
 const SITE_URL = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
-if (IS_PRODUCTION && !/^https:\/\/[^\s/]+$/.test(SITE_URL)) {
-  throw new Error('SITE_URL must be a valid https:// URL in production');
-}
+// بندِ ۱۳.۲.۱ یک نسخه دارد، نه دو:
+// تا امروز همین قاعده دو جا نوشته شده بود — یک تابعِ صادرشده در
+// `lib/security-config.js` و یک کپیِ درون‌خطی همین‌جا — و آن تابع هیچ‌جا صدا
+// زده نمی‌شد. یعنی «اعتبارسنجیِ تنظیمات» دو حقیقت داشت که می‌توانستند از هم
+// جدا بیفتند. حالا نگهبانِ ASVS روی همان چیزی می‌سنجد که واقعاً اجرا می‌شود.
+validateRuntimeConfig({ isProduction: IS_PRODUCTION, siteUrl: SITE_URL });
 const SITE_HOST = (() => {
   try { return SITE_URL ? new URL(SITE_URL).host : ''; } catch (e) { return ''; }
 })();

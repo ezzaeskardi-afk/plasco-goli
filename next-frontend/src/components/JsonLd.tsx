@@ -12,6 +12,24 @@ import {
 } from "@/lib/site";
 import { HOME_FAQ, type FaqItem } from "@/lib/faq";
 
+/* ---------- درجِ ایمنِ JSON-LD داخلِ صفحه ----------
+   ASVS 5.0.0 — بندِ ۱.۲.۱: خروجی باید متناسب با بافتِ خودش رمزگذاری شود؛ اینجا
+   بافت داخلِ یک عنصرِ `<script>` است (نه متنِ معمولی که React خودش فرار می‌دهد).
+
+   چرا لازم است: دادهٔ این اسکیماها — نام و توضیحِ محصول، پرسش‌های متداول — از
+   پنل مدیریت می‌آید، یعنی ورودیِ کاربر است. `JSON.stringify` تنها `"` و `\` را
+   فرار می‌دهد و `<` را دست‌نخورده می‌گذارد، پس یک نامِ محصولِ حاویِ
+   `</script><script>…` رشته را می‌بست و اسکریپت در مرورگرِ بازدیدکننده اجرا
+   می‌شد. با `\u003c` همان داده فرستاده می‌شود (JSON معتبر است و گوگل هیچ
+   تفاوتی نمی‌بیند) ولی اسکریپت با آن دیگر بسته نمی‌شود. */
+export function safeJsonLd(ld: unknown): string {
+  return JSON.stringify(ld)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 /* ---------- Store (صفحه اصلی) ---------- */
 export function StoreJsonLd() {
   // این بلوک عیناً از `index.html` نسخه‌ی Express می‌آید — با همان کلیدها و
@@ -57,7 +75,7 @@ export function StoreJsonLd() {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(ld) }}
     />
   );
 }
@@ -86,7 +104,7 @@ export function WebSiteJsonLd() {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(ld) }}
     />
   );
 }
@@ -109,7 +127,7 @@ export function FAQPageJsonLd({ items = HOME_FAQ }: { items?: FaqItem[] } = {}) 
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(ld) }}
     />
   );
 }
@@ -147,7 +165,7 @@ export function ItemListJsonLd({
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(ld) }}
     />
   );
 }
@@ -173,7 +191,7 @@ export function CollectionPageJsonLd({
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(ld) }}
     />
   );
 }
@@ -270,7 +288,7 @@ export function ProductJsonLd({
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(ld) }}
     />
   );
 }
@@ -294,7 +312,7 @@ export function BreadcrumbJsonLd({
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(ld) }}
     />
   );
 }
@@ -324,7 +342,7 @@ export function WebPageJsonLd({
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(ld) }}
     />
   );
 }

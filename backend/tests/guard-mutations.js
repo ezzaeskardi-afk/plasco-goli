@@ -805,6 +805,50 @@ const GUARDS = [
     ],
   },
 
+  {
+    name: 'asvs',
+    scope: 'backend',
+    title: 'نقشهٔ ASVS به کدِ واقعی گره خورده (نه فقط به حافظهٔ نویسنده)',
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/asvs.js'] },
+    mutations: [
+      {
+        // جهش روی *هر دو* محل (کامنت و کد) — همان چیزی که یک ویرایشگر دستی
+        // هم انجام می‌دهد. نکته: نگهبان باید بگوید «base-uri دیگه 'none' نیست»،
+        // نه اینکه با خطای نگارشی بیفتد: پیامِ خودش سنجیده می‌شود.
+        label: 'base-uri از none به self برگردد',
+        file: 'backend/server.js',
+        find: "base-uri 'none'",
+        replace: "base-uri 'self'",
+        all: true,
+        expect: /base-uri/,
+      },
+      {
+        label: 'HSTS دوباره ۱۸۰ روزه شود',
+        file: 'backend/server.js',
+        find: 'max-age=31536000',
+        replace: 'max-age=15552000',
+        expect: /یک سال/,
+      },
+      {
+        label: 'حذفِ نویسه‌های کنترلی از لاگ برداشته شود',
+        file: 'backend/lib/logger.js',
+        find: "if (typeof value === 'string') return value.replace(CONTROL_CHARS, ' ')",
+        replace: "if (typeof value === 'string') return value",
+        // پیامِ همان دو سنجشی که این جهش باید بزند: شمارشِ مسیرها و خودِ
+        // آزمونِ رفتاریِ CR/LF/TAB/ESC — نه سنجشِ وجودِ خودِ ثابت.
+        expect: /CR\/LF\/TAB\/ESC/,
+      },
+      {
+        label: 'JSON-LD دوباره بدونِ رمزگذاری درج شود',
+        file: 'next-frontend/src/components/JsonLd.tsx',
+        find: 'safeJsonLd(ld)',
+        replace: 'JSON.stringify(ld)',
+        all: true,
+        expect: /safeJsonLd/,
+      },
+    ],
+  },
+
   // ----------------------------------------------------------
   // نگهبان‌های Vitest (منبع را عوض می‌کنیم، نگهبان باید قرمز شود)
   // ----------------------------------------------------------
