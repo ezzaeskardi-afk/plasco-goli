@@ -71,13 +71,33 @@ const PATHS = [
 
 // آیکون‌های مانیفست از *خودِ مانیفست* خوانده می‌شوند، نه دستی تکرار: اگر فردا
 // آیکونی اضافه شود، همین سنجش خودبه‌خود پوشش می‌دهد و لازم نیست کسی یادش باشد.
-let manifestError = null;
+let manifestError = null; // خوانده یا تجزیه نشد
+let iconsEmpty = false; // خوانده شد، ولی فهرستِ اصلیِ آیکون‌ها تهی بود
 try {
   const manifest = JSON.parse(
     fs.readFileSync(path.join(FRONTEND_DIR, "public", "manifest.webmanifest"), "utf8"),
   );
-  for (const icon of manifest.icons ?? []) {
-    PATHS.push([icon.src, "آیکونِ اعلام‌شده در مانیفستِ PWA"]);
+  const mainIcons = Array.isArray(manifest.icons) ? manifest.icons : [];
+  // چرا اینجا **تهی‌بودنِ فهرستِ آیکون‌ها قرمز است**، حال آنکه مانیفستِ
+  // بی‌آیکون از نظرِ خودِ استاندارد «نامعتبر» نیست: مشکل خودِ آیکون نیست،
+  // *سنجش* است. این فهرست از مانیفست خوانده می‌شود تا دستی تکرار نشود؛ اگر
+  // تهی شود، سنجش سه مسیرِ کمتری می‌سنجد و آخرِ کار با همان اطمینان می‌نویسد
+  // «هر N مسیر ۲۰۰ داد». با جهشِ تخریبی اثبات شد: مانیفست با `"icons": []`
+  // عوض شد و سنجش **سبز** ماند. حالا مثلِ فونت‌ها، صفر تا یعنی کدِ خروج ۲ تا
+  // «سبزِ خالی» از «سنجیده شد» جدا بماند. (میان‌بُرها جای این فهرست را
+  // نمی‌گیرند: آیکونِ فهرستِ اصلی همان چیزی است که مرورگر برای نصب می‌خواهد.)
+  iconsEmpty = mainIcons.length === 0;
+  if (!iconsEmpty) {
+    // و آیکون‌های میان‌بُرها هم سنجیده می‌شوند، نه فقط فهرستِ اصلی: خواهرِ
+    // ایستای همین سنجش (`src/app/internalLinks.test.ts`) از هر دو جا می‌خواند
+    // — و همان‌جا هم نوشته شده که سنجشِ ایستا «فایل روی دیسک هست؟» را می‌پرسد
+    // نه «سرور ۲۰۰ می‌دهد؟». آیکونِ اختصاصیِ یک میان‌بُر هم داراییِ واقعیِ
+    // کاربر است و اگر ۴۰۴ شود، میان‌بُرِ نصب‌شده بی‌آیکون می‌ماند.
+    const shortcutIcons = (manifest.shortcuts ?? []).flatMap((s) => s.icons ?? []);
+    for (const icon of [...mainIcons, ...shortcutIcons]) {
+      if (!icon || typeof icon.src !== "string" || !icon.src) continue;
+      PATHS.push([icon.src, "آیکونِ اعلام‌شده در مانیفستِ PWA"]);
+    }
   }
 } catch (e) {
   manifestError = e.message;
@@ -124,6 +144,12 @@ async function backendIsUp() {
 let exitCode = 0;
 if (manifestError) {
   console.error(`✖ مانیفستِ PWA خوانده نشد: ${manifestError}`);
+  exitCode = 2;
+} else if (iconsEmpty) {
+  console.error(
+    "✖ مانیفستِ PWA هیچ آیکونی در فهرستِ اصلی ندارد — پوششِ آیکون‌ها بی‌صدا " +
+      "کوچک می‌شد، پس سنجش را انجام نمی‌دهیم.",
+  );
   exitCode = 2;
 } else if (fontError) {
   console.error(`✖ فونت‌ها از globals.css خوانده نشدند: ${fontError}`);

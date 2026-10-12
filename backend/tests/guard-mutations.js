@@ -29,6 +29,11 @@
      ۴. فایل از همان نسخه‌ی حافظه‌ای بازنویسی و با هشِ SHA-256 تأیید می‌شود که
         مو‌به‌مو‌ همان چیزی است که بود.
 
+   صورت‌های جهش: `find`/`replace` (با `all` برای چندتایی)، `append`، `create`،
+   و `delete`. آخری برای «داراییِ ناپدیدشده» است: حذفِ یک فایل هم یک خرابیِ
+   رفتاری است، نه یک متنِ عوض‌شده — و بایت‌های اصلی در همان حافظه می‌مانند، پس
+   بازگردانی مثل بقیه است.
+
    هیچ جهشی با `git stash`، `git checkout` یا پشتیبانِ روی دیسک کار نمی‌کند:
    فقط حافظه. اگر پروسه وسطِ راه بمیرد (Ctrl-C، سیگنال، استثنا)، همان لحظه
    فایل‌ها بازگردانده می‌شوند — یک `process.on('exit')` و چند سیگنال‌گیرنده
@@ -46,13 +51,21 @@
      node tests/guard-mutations.js --scope=backend    # فقط سبک‌های بک‌اند
      node tests/guard-mutations.js --scope=frontend   # فقط Vitest/اسکریپت‌های Next
      node tests/guard-mutations.js --scope=live       # فقط برابریِ زنده (هر دو سرور لازم است)
-     node tests/guard-mutations.js --scope=all        # همه
+     node tests/guard-mutations.js --scope=static     # فقط سنجشِ زنده‌ی دارایی‌ها (Next بالا، بک‌اند خواب)
+     node tests/guard-mutations.js --scope=all        # همه‌ی دامنه‌های سازگار
      node tests/guard-mutations.js --only=panel       # فقط نگهبان‌هایی که نامشان این را دارد
      node tests/guard-mutations.js --list             # فهرستِ نگهبان‌ها و جهش‌ها بدونِ اجرا
      node tests/guard-mutations.js --self-test      # خودآزمونِ لنگرهای مشتق‌شده‌ی README
 
    `live` هر دو سرور را می‌خواهد: Express روی ۳۰۰۰ و Next روی ۳۰۰۱. اگر بالا
    نباشند، با پیامِ روشن رد می‌شود — نه اینکه بی‌صدا رد شود.
+
+   `static` عمداً دامنه‌ی جدا است، چون محیطش با `live` **در تضاد** است: خودِ
+   نگهبانِ `static-paths-live` رد می‌کند اگر بک‌اند بالا باشد (چون آن‌وقت
+   مسیرها می‌توانند از پروکسی سیر شوند و سنجش همان چیزی را که ادعا می‌کند
+   نمی‌سنجد). پس `static` می‌خواهد Next بالا و بک‌اند **خواب** باشد — و همین
+   دلیلِ نبودنش در `all` است: یک پروسه نمی‌تواند هر دو محیط را هم‌زمان داشته
+   باشد. اگر پیش‌شرط برقرار نباشد، با پیامِ روشن و کدِ ۲ رد می‌شود.
    ============================================================ */
 'use strict';
 
@@ -84,7 +97,10 @@ const SCOPES = {
   backend: ['backend'],
   frontend: ['frontend'],
   live: ['live'],
+  static: ['static'],
   offline: ['backend', 'frontend'],
+  // `static` عمداً اینجا نیست: `live` بک‌اندِ بالا می‌خواهد و `static` بک‌اندِ
+  // خواب — جمع‌کردنشان یعنی یک محیطِ غیرِقابلِ‌برآورده و یک شکستِ ساختگی.
   all: ['backend', 'frontend', 'live'],
 };
 if (!SCOPES[SCOPE]) {
@@ -958,6 +974,50 @@ const GUARDS = [
     ],
   },
 
+  {
+    name: 'contrastTokens',
+    scope: 'frontend',
+    title: 'پالتِ تم کفِ کنتراستِ WCAG AA را رد نمی‌کند (وارثِ contrast-audit.js)',
+    // چرا این جهش‌ها مستقیم روی `globals.css` می‌نشینند و نه روی خودِ آزمون:
+    // این نگهبان *توکن‌ها* را می‌سنجد، پس خرابیِ واقعی عوض‌کردنِ یک رنگ است —
+    // همان کاری که یک بازطراحی می‌کند. دو جهشِ اول رنگ را به محدوده‌ی زیرِ
+    // ۴٫۵ می‌برند (یکی متنِ کم‌رنگ، یکی ترکیبِ آلفایی) و دو جهشِ بعد دو حفرهٔ
+    // تازهٔ همین نگهبان را قفل می‌کنند: پالتِ کوتاهِ :root که از @theme جدا
+    // بیفتد، و یک `var(--…)` وجود‌نداشته که یک‌بار واقعاً پیش آمده بود.
+    runner: { kind: 'vitest', test: 'src/app/contrastTokens.test.ts' },
+    mutations: [
+      {
+        label: 'متنِ کم‌رنگ تیره شود (زیرِ کفِ ۴٫۵)',
+        file: 'next-frontend/src/app/globals.css',
+        find: '--color-ink-dim: #82968C;',
+        replace: '--color-ink-dim: #6B7B73;',
+        failedTest: 'فرعی',
+      },
+      {
+        label: 'آلفای tintِ صورتی به ۰٫۱۴ برگردد (بَج زیرِ ۴٫۵)',
+        file: 'next-frontend/src/app/globals.css',
+        find: '--color-pink-tint: rgba(240, 83, 143, 0.11);',
+        replace: '--color-pink-tint: rgba(240, 83, 143, 0.14);',
+        failedTest: 'خودش',
+      },
+      {
+        label: 'نامِ کوتاهِ :root از پالتِ @theme جدا شود',
+        file: 'next-frontend/src/app/globals.css',
+        find: '    --pink: #f0538f;',
+        replace: '    --pink: #d94a80;',
+        failedTest: 'کوتاه',
+      },
+      {
+        label: 'متغیرِ تعریف‌نشده خوانده شود (همان باگِ var(--shadow))',
+        file: 'next-frontend/src/app/globals.css',
+        // لنگر دو خطی است چون `background: var(--color-cream);` دو جا می‌آید
+        // (body و شیارِ اسکرول‌بار) و لنگرِ یکتا باید یکتا بماند.
+        find: '  body {\n    font-family: var(--font-sans);\n    background: var(--color-cream);',
+        replace: '  body {\n    font-family: var(--font-sans);\n    background: var(--color-cream-404);',
+        failedTest: 'سورس یا CSS',
+      },
+    ],
+  },
   // ----------------------------------------------------------
   // اسکریپتِ عددهای فرانت‌اند و نگهبانِ زنده
   // ----------------------------------------------------------
@@ -1057,6 +1117,106 @@ const GUARDS = [
       },
     ],
   },
+  {
+    name: 'static-paths-live',
+    scope: 'static',
+    title: 'سنجشِ زنده‌ی دارایی‌های ثابت، ناپدیدشدنِ دارایی و ۴۰۴ِ آدرس را می‌گیرد',
+    // چرا این نگهبان به هارنس وصل شد: `static-paths-live` دلیلِ خودش را بالای
+    // سرش نوشته است — پنج rewrite‌ای که تا چندی پیش `/sw.js` و `/assets/*` و
+    // مانیفست و صفحه‌ی آفلاین را از `frontend/`ِ Express سرو می‌کردند برداشته
+    // شدند و از آن روز تنها چیزی که این مسیرها را زنده نگه می‌دارد `public/`
+    // است. ولی خودِ این سنجش تنها نگهبانِ زنده‌ی پروژه بود که هیچ جهشی رویش
+    // نبود: می‌شد یک دارایی را از `public/` برداشت — یا آدرسش را در
+    // `@font-face` و مانیفست به فایلی بی‌وجود برد — و هیچ‌کس قرمز نمی‌شد.
+    //
+    // چرا هدفِ جهش‌ها خودِ دارایی‌هاست و نه متنِ اسکریپت: این سنجش *محصول* را
+    // می‌سنجد، نه سورسِ خودش را. پس جهش هم باید همان‌جایی زده شود که یک آدمِ
+    // بی‌احتیاط می‌زند: فایلی که از `public/` ناپدید شود، و دو آدرسی که از
+    // سورس خوانده می‌شوند (وزیر در `globals.css` و آیکونِ مانیفست) و اگر یکی
+    // ۴۰۴ شود مرورگر **بی‌صدا** به جایگزین برمی‌گردد — بدونِ هیچ خطای قرمزی.
+    //
+    // و دو جهشِ آخر عمداً ۴۰۴ نیستند: خودِ اسکریپت دو شبکه‌ی ایمنی برای
+    // «پوششِ بی‌صدا کوچک نشود» دارد (مانیفست خوانده نشود، یا صفر فونت پیدا
+    // شود → کدِ خروج ۲). اگر آن دو هم قفل نباشند، روزی که مانیفست جابه‌جا شود
+    // فهرستِ پویا خالی می‌ماند و اسکریپت باز هم می‌نویسد «هر N مسیر ۲۰۰ داد».
+    runner: {
+      kind: 'node',
+      cwd: NEXT,
+      args: [
+        '--disable-warning=MODULE_TYPELESS_PACKAGE_JSON',
+        path.join(NEXT, 'scripts', 'static-paths-live.mjs'),
+        `--next=${NEXT_ORIGIN}`,
+        `--backend=${EXPRESS_ORIGIN}`,
+      ],
+    },
+    mutations: [
+      {
+        // چرا اینجا «→ ۴۰۴» قفل نشده و «→ <کدِ سه‌رقمی>» قفل شده: داراییِ
+        // *ناپدیدشده* را همین حالا سنجیدیم و Nextِ نسخه‌ی این ماشین به‌جای
+        // ۴۰۴ یک **۴۰۰** می‌دهد. سنجشِ نگهبان بر `status === 200` است، پس
+        // هر کدِ غیرِ۲۰۰ گرفتنِ او را نشان می‌دهد — ولی سنجیدنِ «۴۰۴» فقط
+        // نگهبان را به یک عددِ داخلیِ Next گره می‌زد که خودش چیزِ محافظت‌شده‌ای
+        // نیست. آنچه باید قفل بماند این است که در فهرستِ شکست، **همین**
+        // دارایی با یک کدِ مردود ظاهر شود.
+        label: 'داراییِ اسپرایتِ آیکون‌ها از public ناپدید شود',
+        file: 'next-frontend/public/assets/icons.svg',
+        delete: true,
+        expect: /\/assets\/icons\.svg → \d{3}/,
+      },
+      {
+        label: 'آدرسِ آیکونِ مانیفست به فایلی برود که وجود ندارد',
+        file: 'next-frontend/public/manifest.webmanifest',
+        find: '{ "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },',
+        replace: '{ "src": "/assets/icon-512-404.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },',
+        expect: /\/assets\/icon-512-404\.png → 404/,
+      },
+      {
+        label: 'آدرسِ فونتِ وزیر در globals.css به فایلی برود که وجود ندارد',
+        file: 'next-frontend/src/app/globals.css',
+        find: "url('/assets/fonts/Vazir-Bold-FD-WOL.woff2')",
+        replace: "url('/assets/fonts/Vazir-Bold-FD-WOL-404.woff2')",
+        expect: /Vazir-Bold-FD-WOL-404\.woff2 → 404/,
+      },
+      {
+        label: 'مانیفستِ PWA ناپدید شود (فهرستِ آیکون‌ها از خودش خوانده می‌شود)',
+        file: 'next-frontend/public/manifest.webmanifest',
+        delete: true,
+        expect: /PWA خوانده نشد/,
+      },
+      {
+        label: 'همه‌ی url(...woff2) در globals.css از بین برود (پوشش بی‌صدا کوچک شود)',
+        file: 'next-frontend/src/app/globals.css',
+        find: "url('/assets/fonts/",
+        replace: "آدرس('/assets/fonts/",
+        all: true,
+        expect: /globals\.css خوانده نشدند/,
+      },
+      {
+        // همان نقطه‌کورِ بالا، ولی برای آیکون‌ها — و این یکی یک تفاوت مهم
+        // دارد: تا پیش از این کسی *نمی‌دانست* هست. با جهش ثابت شد که مانیفست
+        // می‌توانست `"icons": []` شود و سنجش هنوز سبز بماند («هر ۱۴ مسیر ۲۰۰
+        // داد»). حالا تهی‌بودنِ فهرستِ اصلی پیش‌شرط را می‌شکند و رمزِ خروج ۲
+        // می‌دهد؛ این جهش همان قفل است.
+        label: 'فهرستِ اصلیِ آیکون‌های مانیفست تهی شود (پوشش بی‌صدا کوچک شود)',
+        file: 'next-frontend/public/manifest.webmanifest',
+        find: '"icons": [\n',
+        replace: '"icons_unused": [\n',
+        expect: /PWA هیچ آیکونی در/,
+      },
+      {
+        // چرا این یکی جدا از آیکونِ فهرستِ اصلی است: خواهرِ ایستای همین سنجش
+        // (`internalLinks.test.ts`) آیکون‌های میان‌بُرها را هم می‌خواند، ولی
+        // سنجشِ زنده تا امروز فقط فهرستِ اصلی را می‌سنجید. با جهش اثبات شد:
+        // آدرسِ آیکونِ میان‌بُر را به فایلی بی‌وجود بردیم و سبز ماند.
+        label: 'آدرسِ آیکونِ یک میان‌بُر به فایلی برود که وجود ندارد',
+        file: 'next-frontend/public/manifest.webmanifest',
+        find: '{ "src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png" }',
+        replace: '{ "src": "/assets/icon-192-404.png", "sizes": "192x192", "type": "image/png" }',
+        all: true,
+        expect: /\/assets\/icon-192-404\.png → 404/,
+      },
+    ],
+  },
 ];
 
 // ============================================================
@@ -1119,6 +1279,12 @@ function applyMutation(m) {
   if (m.create !== undefined) {
     fs.mkdirSync(path.dirname(abs), { recursive: true });
     fs.writeFileSync(abs, m.create);
+    return;
+  }
+  // «ناپدیدشدنِ دارایی» یک جهشِ واقعی است، نه یک متنِ عوض‌شده: حذف می‌کنیم و
+  // بایت‌های اصلی در همان `active` مانده‌اند، پس بازگردانی مثل بقیه است.
+  if (m.delete) {
+    fs.rmSync(abs, { force: true });
     return;
   }
   if (m.append !== undefined) {
@@ -1303,6 +1469,7 @@ function preflight(guards) {
         continue;
       }
       if (m.append !== undefined) continue;
+      if (m.delete) continue;
       const src = fs.readFileSync(abs, 'utf8');
       const hits = countOccurrences(src, m.find);
       if (hits === 0) problems.push(`${g.name} :: ${m.label}: لنگر پیدا نشد — «${m.find}»`);
@@ -1339,6 +1506,31 @@ async function preflightLive() {
   return false;
 }
 
+/**
+ * پیش‌شرطِ دامنه‌ی `static` — عمداً برعکسِ `live`.
+ *
+ * خودِ نگهبان رد می‌کند اگر بک‌اند بالا باشد، چون آن‌وقت مسیرها می‌توانند از
+ * پروکسی (`/api/*` و `/picture/*`) سیر شوند و سنجش همان چیزی را که ادعا می‌کند
+ * نسنجد. اگر اینجا «هر چه شد سبز باش» می‌گرفتیم، نگهبان با کدِ ۲ رد می‌شد و
+ * هارنس به‌جای گرفتنِ جهش، گارد را قرمز می‌دید؛ و اگر خلافش را می‌گفتیم و
+ * `--allow-backend` می‌فرستادیم، شرطِ خودِ نگهبان را بی‌صدا خنثی کرده بودیم.
+ */
+async function preflightStatic() {
+  const [express, next] = await Promise.all([
+    reachable(`${EXPRESS_ORIGIN}/api/health`),
+    reachable(`${NEXT_ORIGIN}/`),
+  ]);
+  if (next && !express) return true;
+  console.error(
+    '\n❌ دامنه‌ی static می‌خواهد Next بالا و بک‌اند خواب باشد:\n' +
+    `   Next (${NEXT_ORIGIN}/): ${next ? 'بالا' : 'پاسخ نداد'}\n` +
+    `   Express (${EXPRESS_ORIGIN}/api/health): ${express ? 'بالاست — باید خواب باشد' : 'خواب'}\n` +
+    '   اگر بک‌اند بالا باشد، خودِ نگهبانِ static-paths-live با کدِ ۲ رد می‌کند\n' +
+    '   (مسیرها می‌توانند از پروکسی سیر شوند). اول بک‌اند را بخوابان، بعد اجرا کن.',
+  );
+  return false;
+}
+
 async function main() {
   const selected = GUARDS.filter(
     (g) => ACTIVE_SCOPES.has(g.scope) && (!ONLY || g.name.includes(ONLY)),
@@ -1369,6 +1561,7 @@ async function main() {
   }
 
   if (ACTIVE_SCOPES.has('live') && !(await preflightLive())) process.exit(2);
+  if (ACTIVE_SCOPES.has('static') && !(await preflightStatic())) process.exit(2);
 
   console.log(`\n=== هارنسِ تخریبیِ نگهبان‌ها — دامنه: ${SCOPE} | ${selected.length} نگهبان ===`);
   const startedAt = Date.now();
