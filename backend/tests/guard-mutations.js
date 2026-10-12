@@ -767,6 +767,41 @@ const GUARDS = [
         replace: "  const handoff = { kind: 'plain' };\n  if (handoff.kind === 'storefront') {",
         expect: /۴۰۴ و ۵۰۰/,
       },
+      {
+        // جابهجاییِ *ترتیب* — همان چیزی که هیچ خطایی نمی‌دهد. این جفت
+        // کوچکترین جای‌جاییِ واقعاً رفتاری در همین زنجیره است: هر دو روی
+        // `/picture` ثبت می‌شوند و کد از خودش می‌گوید «باید قبل از
+        // express.static باشد»؛ جابه‌جا شدنشان یعنی گزینهٔ WebP هرگز تحویل
+        // نمی‌شود و همان فایلِ خام می‌رود — بدونِ یک استثنا.
+        // (پلهای ۳۰۱/۳۰۲ هم همین‌جنس‌اند، ولی جای‌جایی‌شان دهها خط فاصله
+        // دارد؛ برای یک جهشِ خوانا همان جفتِ چسبیده کافی است — خودِ سنجشِ
+        // ترتیب روی هر جفتی — از همان جدول — کار می‌کند.)
+        label: 'تحویلِ WebP زیرِ فایلِ خامِ عکس بنشیند (ترتیبِ زنجیره عوض شود)',
+        file: 'backend/server.js',
+        find:
+          "app.use('/picture', webpNegotiate(PICTURE_DIR));\n" +
+          '// سرو عکس‌ها از پوشه‌ی picture — نام فایل‌های آپلودی تصادفی است، پس کش بلند امن است\n' +
+          "app.use('/picture', express.static(PICTURE_DIR, {\n" +
+          "  maxAge: '7d',\n" +
+          '  setHeaders(res, filePath) {\n' +
+          "    if (filePath.toLowerCase().endsWith('.jfif')) {\n" +
+          "      res.setHeader('Content-Type', 'image/jpeg');\n" +
+          '    }\n' +
+          '  }\n' +
+          '}));',
+        replace:
+          '// سرو عکس‌ها از پوشه‌ی picture — نام فایل‌های آپلودی تصادفی است، پس کش بلند امن است\n' +
+          "app.use('/picture', express.static(PICTURE_DIR, {\n" +
+          "  maxAge: '7d',\n" +
+          '  setHeaders(res, filePath) {\n' +
+          "    if (filePath.toLowerCase().endsWith('.jfif')) {\n" +
+          "      res.setHeader('Content-Type', 'image/jpeg');\n" +
+          '    }\n' +
+          '  }\n' +
+          '}));\n' +
+          "app.use('/picture', webpNegotiate(PICTURE_DIR));",
+        expect: /ترتیبِ پل‌ها/,
+      },
     ],
   },
 

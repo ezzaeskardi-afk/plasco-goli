@@ -492,15 +492,23 @@ async function run() {
   // امروز فقط در `next-frontend/public/` هستند و Express هیچ فایلی سرو
   // نمی‌کند. اگر همان انتظارِ قدیمی بماند، نگهبان روی معماریِ *درست* قرمز
   // می‌شود (یک مثبتِ کاذب که آدم را وادار می‌کند چیزِ سالم را «تعمیر» کند).
-  // پس: Next باید ۲۰۰ بدهد، و Express باید ۴۰۴ — چون برگشتنِ فایلِ ثابت روی
-  // آن مبدأ یعنی کسی دوباره فروشگاهِ حذف‌شده را سرو می‌کند.
+  // پس: Next باید ۲۰۰ بدهد؛ و Express یکی از این دو — ۴۰۴ («نسخه‌ی دومی
+  // این‌جا نیست») یا ۳۰۲ به همان نام روی سایت (`backend/lib/error-handoff.js`:
+  // خطای صفحه‌شکل صاحب دارد و مشتری به همان فایلِ زنده می‌رسد). هر دو یک چیز
+  // را ثابت می‌کنند: این مبدأ فروشگاهِ حذف‌شده را سرو نمی‌کند. آنچه همچنان
+  // تخلف است ۲۰۰ است — یعنی کسی دوباره کپیِ دومِ فایل را این‌جا سرِ جا گذاشته.
+  //
+  // چرا ۳۰۲ *کورکورانه* قبول نمی‌شود: مقصدش هم سنجیده می‌شود (همان مسیر، نه
+  // حلقه به خودمان)، و اگر مقصد همان سرورِ Nextِ زیرِ سنجش باشد خودِ فایل هم
+  // واکشی می‌شود — وگرنه «می‌دانم کجاست» یک حرفِ توخالی می‌شد و همان دامِ
+  // «انتظارِ کهنه»، فقط با جهتِ برعکس.
   say("\nفایل‌های مستقل:");
   const standalone = [
-    ["Next", NEXT, 200],
-    ["Express", EXPRESS, 404],
+    ["Next", NEXT, [200]],
+    ["Express", EXPRESS, [404, 302]],
   ];
   for (const name of ["offline.html"]) {
-    for (const [label, origin, want] of standalone) {
+    for (const [label, origin, wants] of standalone) {
       if (!origin) continue;
       let res;
       try {
@@ -509,9 +517,34 @@ async function run() {
         bad(`${label} /${name} — واکشی شکست (${e.message})`);
         continue;
       }
-      if (res.status === want) ok(`${label} /${name} — ${res.status}`);
-      else if (want === 200) bad(`${label} /${name} کدِ ${res.status} می‌دهد (سرویس‌ورکر به این فایل تکیه دارد)`);
-      else bad(`${label} /${name} کدِ ${res.status} می‌دهد — این مبدأ نباید فایلِ ثابت سرو کند`);
+      if (res.status === 200 && wants.includes(200)) {
+        ok(`${label} /${name} — 200`);
+      } else if (res.status === 404 && wants.includes(404)) {
+        ok(`${label} /${name} — 404 (نسخه‌ی دومِ فایل این‌جا نیست)`);
+      } else if (res.status === 302 && wants.includes(302)) {
+        const dest = new URL(res.location, res.url);
+        const loop = dest.origin === new URL(origin).origin;
+        const sameName = routeOf(dest.toString()) === `/${name}`;
+        let landed = null;
+        if (sameName && !loop && dest.origin === new URL(NEXT).origin) {
+          try {
+            landed = (await hit(dest.toString())).status;
+          } catch {
+            // مقصد روی همان سرورِ زیرِ سنجش است ولی جواب نداد: صفر یعنی
+            // «نرسید» — و «نرسید» یک تخلف است، نه یک «نمی‌دانم».
+            landed = 0;
+          }
+        }
+        if (sameName && !loop && (landed === null || landed === 200)) {
+          ok(`${label} /${name} — 302 → ${dest.origin}${dest.pathname} (همان فایلِ زنده${landed === 200 ? "، ۲۰۰" : ""})`);
+        } else {
+          bad(`${label} /${name} — 302 به ${dest.toString()}؛ باید همان /${name} روی سایت باشد و حلقه نبندد${landed === null ? "" : ` (مقصد ${landed} می‌دهد)`}`);
+        }
+      } else if (wants.includes(200)) {
+        bad(`${label} /${name} کدِ ${res.status} می‌دهد (سرویس‌ورکر به این فایل تکیه دارد)`);
+      } else {
+        bad(`${label} /${name} کدِ ${res.status} می‌دهد — این مبدأ نباید فایلِ ثابت سرو کند`);
+      }
     }
   }
 
