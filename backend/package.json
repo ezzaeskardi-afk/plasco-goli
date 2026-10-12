@@ -22,6 +22,8 @@
     "test:events": "node tests/event-labels.js",
     "test:retired": "node tests/panel-retired.js",
     "test:readme": "node tests/readme-counts.js",
+    "test:anchors": "node tests/guard-anchors.js",
+    "test:handoff": "node tests/error-handoff.js",
     "test:secrets": "node tests/secrets.js",
     "owasp": "node tests/owasp-scan.js",
     "test:full": "node test-smoke.js && node tests/owasp-scan.js && node tests/security.js && node tests/discount.js && node tests/bench-report-integrity.js && node tests/secrets.js && node tests/panel-retired.js && node tests/order-window-integrity.js && node tests/otp-resend-window.js && node tests/service-worker-strategy.js && node tests/static-compress-cache.js && node tests/event-labels.js && node tests/readme-counts.js",

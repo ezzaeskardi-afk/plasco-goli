@@ -530,7 +530,9 @@ describe("پیوندهای داخلی و مسیرهای ثابتِ Next", () => 
         // (فهرستِ EXPRESS_ERA بالا دلیلش را دارد).
         if (EXPRESS_ERA.has(r.path.split("/").pop() ?? "")) return true;
         // پسوندِ .html تنها وقتی مجاز است که واقعاً فایلی در public داشته باشد
-        // — تنها استثنای پروژه `public/offline.html` است.
+        // — دو استثنای پروژه همان دو صفحه‌ی بی‌وابستگی‌اند: `public/offline.html`
+        // (قطعِ اینترنت) و `public/error-500.html` (سروِ مستقیمِ nginx در ۵۰۲/۵۰۴
+        // وقتی Next بالا نیست).
         return !resolveRef(r, "exact").ok;
       })
       .map((r) => `${r.file} → ${r.raw}`);

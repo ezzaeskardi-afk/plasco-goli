@@ -18,6 +18,10 @@ export const MANUAL_PATHS = [
   ["/manifest.webmanifest", "مانیفستِ PWA؛ layout به آن لینک می‌دهد"],
   ["/sw.js", "سرویس‌ورکرِ فروشگاه"],
   ["/offline.html", "صفحه‌ی آفلاین — تنها چیزی که قطعیِ اینترنت را مدیریت می‌کند"],
+  [
+    "/error-500.html",
+    "صفحه‌ی خطای لبه‌ی دامنه — nginx مستقیم از `public/` سروش می‌کند وقتی Next بالا نیست",
+  ],
   ["/.well-known/security.txt", "RFC 9116"],
   ["/assets/favicon.svg", "آیکونِ layout (icon)"],
   ["/assets/apple-touch-icon.png", "آیکونِ layout (apple)"],
@@ -40,6 +44,13 @@ export const CONVENTIONS = [
   {
     path: "/.well-known/security.txt",
     why: "RFC 9116 — خزنده و محققِ امنیتی از پیش می‌داند کجا را بپرسد؛ هیچ کدی به آن لینک نمی‌دهد",
+  },
+  {
+    path: "/error-500.html",
+    why:
+      "قراردادِ بیرونی است، نه لینکِ درونِ سایت: مصرف‌کننده‌اش nginx است " +
+      "(`error_page 500 502 503 504 /error-500.html;` در HTTPS-GUIDE.md). هیچ کدِ " +
+      "سورسی به آن ارجاع نمی‌دهد و نباید بدهد — همان لحظه‌ای که لازم است، Next بالا نیست",
   },
 ];
 

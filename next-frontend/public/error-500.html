@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>خطای موقت سرور (۵۰۰) | پلاسکو گلی</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0B1411">
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<!--
+  ============================================================
+  صفحه‌ی ۵۰۰ روی لبه‌ی دامنه — هم‌خانواده‌ی `global-error.tsx`
+
+  ---------- چرا این فایل هست، وقتی صفحه‌ی ۵۰۰ در Next هست ----------
+  `app/error.tsx` و `app/global-error.tsx` خطاهای *داخلِ خودِ Next* را می‌گیرند.
+  ولی روی دامنه‌ی واحد یک دسته‌ی دیگر هم هست که هیچ‌کدام آن دو نمی‌بینند:
+  خطای خودِ nginx. دقیقاً وقتی که Next (یا بک‌اند) جواب نمی‌دهد، nginx با
+  کدِ ۵۰۲/۵۰۳/۵۰۴ پاسخ می‌دهد — و پیش‌فرضِ خودش یک صفحه‌ی بی‌ربط است.
+
+  این فایل همان حالتی را می‌پوشاند: nginx مستقیم از دیسک سروش می‌کند
+  (`error_page 500 502 503 504 /error-500.html;` — پیکربندی در HTTPS-GUIDE.md).
+  پس *نمی‌تواند* از Next بیاید: در همان لحظه Next بالا نیست. برای همین هم
+  هیچ وابستگی‌ای ندارد — نه استایل‌شیت، نه فونتِ وب، نه جاوااسکریپت.
+
+  ---------- چرا شبیهِ `global-error.tsx` است ----------
+  همان دلیل: صفحه‌ای که دقیقاً در لحظه‌ی خرابی نشان داده می‌شود نباید به چیزی
+  وابسته باشد که همین حالا خراب است. متن و پالت عیناً از `error.tsx` و
+  `global-error.tsx` آمده‌اند (و نگهبانِ `seoParity.test.ts` همین را قفل
+  می‌کند تا سه نسخه از هم واگرا نشوند).
+
+  ⚠️ یک تفاوتِ عمدی: «تلاش دوباره» این‌جا یک لینکِ ساده است (`href=""` یعنی
+  همین آدرس) و نه دکمه، چون این صفحه هیچ جاوااسکریپتی ندارد.
+  ============================================================
+-->
+<style>
+  :root{--bg:#0B1411;--surface:#12201B;--line:rgba(237,246,241,.12);--ink:#EDF6F1;--ink-soft:#9FB3AB;--teal:#25E3C4;--coral:#FF6A4D;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:Vazirmatn,Vazir,"Segoe UI",Tahoma,system-ui,sans-serif;
+    min-height:100vh;min-height:100dvh;
+    display:flex;align-items:center;justify-content:center;padding:40px 20px;
+  }
+  .err{
+    width:100%;max-width:520px;text-align:center;
+    background:var(--surface);border:1px solid var(--line);
+    border-radius:20px;padding:44px 30px;
+    box-shadow:0 30px 60px -30px rgba(0,0,0,.6);
+  }
+  .err-ic{
+    width:78px;height:78px;margin:0 auto 22px;border-radius:50%;
+    display:grid;place-items:center;
+    background:rgba(255,106,77,.10);border:1px solid rgba(255,106,77,.26);
+  }
+  .err-ic svg{width:36px;height:36px;color:var(--coral);}
+  .badge{
+    display:inline-block;font-size:12px;font-weight:800;color:var(--coral);
+    background:rgba(255,106,77,.10);border:1px solid rgba(255,106,77,.26);
+    border-radius:999px;padding:4px 12px;margin-bottom:14px;
+  }
+  h1{font-size:23px;line-height:1.6;margin-bottom:12px;}
+  p{color:var(--ink-soft);font-size:14.5px;line-height:2.1;}
+  .acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:26px;}
+  .b{
+    display:inline-flex;align-items:center;gap:8px;justify-content:center;
+    padding:12px 22px;border-radius:12px;font-size:14px;font-weight:800;
+    text-decoration:none;border:1px solid transparent;cursor:pointer;
+    font-family:inherit;
+  }
+  .b-main{background:var(--teal);color:#04211B;}
+  .b-out{background:transparent;color:var(--ink);border-color:var(--line);}
+  .b:focus-visible{outline:2px solid var(--teal);outline-offset:3px;}
+  .tip{
+    margin-top:26px;padding-top:20px;border-top:1px solid var(--line);
+    font-size:13px;color:var(--ink-soft);line-height:2.1;
+  }
+  .tip a{color:var(--teal);font-weight:700;}
+  .tip bdo{font-variant-numeric:tabular-nums;}
+  @media (max-width:480px){.err{padding:34px 22px;}h1{font-size:19px;}}
+</style>
+</head>
+<body>
+
+<main class="err" role="alert">
+
+  <div class="err-ic" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+  </div>
+
+  <span class="badge">خطای ۵۰۰</span>
+
+  <h1>مشکلی موقت در سرور پیش آمد</h1>
+
+  <p>
+    تقصیر شما نیست و سبد خرید و سفارش‌های شما سر جای خودشان امن هستند. چند
+    لحظه صبر کنید و دوباره تلاش کنید؛ اگر پرداختی انجام داده‌اید، وضعیتش در
+    حساب کاربری‌تان ثبت شده است.
+  </p>
+
+  <div class="acts">
+    <!-- href خالی یعنی «همین آدرس»؛ این صفحه جاوااسکریپت ندارد -->
+    <a href="" class="b b-main">تلاش دوباره</a>
+    <a href="/" class="b b-out">صفحه‌ی اصلی</a>
+    <a href="/products" class="b b-out">مشاهده محصولات</a>
+  </div>
+
+  <div class="tip">
+    عجله دارید؟ سفارش‌تان را تلفنی بدهید:
+    <a href="tel:09113567409"><bdo dir="ltr">۰۹۱۱-۳۵۶-۷۴۰۹</bdo></a><br>
+    یا در واتساپ پیام بدهید:
+    <a href="https://wa.me/989113567409" target="_blank" rel="noopener">واتساپ پلاسکو گلی</a>
+  </div>
+
+</main>
+
+</body>
+</html>
