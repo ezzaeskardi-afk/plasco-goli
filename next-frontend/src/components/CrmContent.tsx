@@ -34,6 +34,13 @@ import type {
 function toFa(n: number): string {
   return new Intl.NumberFormat("fa-IR").format(n);
 }
+// برچسبِ ماه از سرور می‌آید با ارقامِ لاتین (`آبان 1404`) — همان قراردادی که
+// گزارشِ ماه‌به‌ماهِ پنل هم دارد و آن‌جا با همین کار به ارقامِ فارسی تبدیل
+// می‌شود. بدونِ این خط، تنها جای پنل می‌شد که ماه را با ارقامِ لاتین نشان
+// می‌داد.
+function toFaStr(s: string): string {
+  return String(s).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+}
 function toToman(n: number): string {
   return `${toFa(n)} تومان`;
 }
@@ -279,14 +286,24 @@ export function CrmContent() {
     }
   };
 
+  const [recalcBusy, setRecalcBusy] = useState(false);
   const handleRecalcAll = async () => {
+    setRecalcBusy(true);
     try {
       await crmRecalcAll();
       loadDashboard();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "خطا");
+    } finally {
+      setRecalcBusy(false);
     }
   };
+
+  // مجموعِ مشتریان برای عرضِ میله‌های سگمنت. چرا از `advanced` تنها استفاده
+  // نمی‌کنیم: آن درخواست ممکن است کندتر برسد یا خطا بدهد و آن‌وقت مخرجِ کسر
+  // صفر می‌شد — یعنی همه‌ی میله‌ها فقط همان کفِ ۲٪ می‌شدند و کارت می‌گفت
+  // «همه یک‌اندازه»، که دروغ است. `summary` همیشه هست.
+  const segmentTotal = advanced?.totalCustomers || summary?.totalCustomers || 0;
 
   // ==================== رندر ====================
   return (
@@ -350,9 +367,41 @@ export function CrmContent() {
               <h3 className="text-sm font-bold mb-3" style={{ color: "var(--color-ink)" }}>
                 سگمنت مشتریان
               </h3>
+              {/*
+                حالتِ خالی — همین‌جا باگ بود: تا پیش از این اگر `segments` خالی
+                می‌بود، کارت یک جعبه‌ی سفیدِ بی‌توضیح بود و مدیر نمی‌فهمید
+                «داده‌ای نیست» یا «صفحه خراب است». دو حالتِ خالی از هم جدا
+                شده‌اند، چون درمانشان یکی نیست: مشتریِ صفر یک وضعیتِ عادیِ
+                کسب‌وکار است، ولی «مشتری هست و امتیاز نیست» یک کارِ انجام‌نشده
+                است که دکمه‌اش همان‌جاست.
+              */}
+              {segments.length === 0 ? (
+                <div className="text-xs leading-relaxed" style={{ color: "var(--color-ink-soft)" }}>
+                  {summary.totalCustomers === 0 ? (
+                    <>هنوز مشتری‌ای ثبت نشده است؛ با اولین ثبت‌نام، سگمنت‌ها همین‌جا ساخته می‌شوند.</>
+                  ) : (
+                    <>
+                      <p className="mb-3">
+                        امتیازِ RFM هیچ مشتری‌ای محاسبه نشده، پس سگمنتی برای نمایش
+                        نیست. با یک بار محاسبه، {toFa(summary.totalCustomers)} مشتری
+                        دسته‌بندی می‌شوند.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleRecalcAll}
+                        disabled={recalcBusy}
+                        className="rounded-full px-4 py-2 text-xs font-bold transition-colors disabled:opacity-60"
+                        style={{ background: "var(--color-gold-tint)", color: "var(--color-gold)" }}
+                      >
+                        {recalcBusy ? "در حال محاسبه…" : "محاسبه‌ی امتیازها"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : (
               <div className="space-y-2">
                 {segments.map((seg) => {
-                  const pct = advanced ? (seg.count / advanced.totalCustomers) * 100 : 0;
+                  const pct = segmentTotal > 0 ? (seg.count / segmentTotal) * 100 : 0;
                   return (
                     <div key={seg.segment} className="flex items-center gap-2 text-xs">
                       <span className="w-20 shrink-0" style={{ color: SEGMENT_COLORS[seg.segment] || "var(--color-ink-soft)" }}>
@@ -372,6 +421,7 @@ export function CrmContent() {
                   );
                 })}
               </div>
+              )}
             </div>
 
             {/* درآمد ماهانه */}
@@ -399,7 +449,7 @@ export function CrmContent() {
                           }}
                         />
                       </div>
-                      <span className="text-[9px] text-ink-dim rotate-45 origin-right">{m.label}</span>
+                      <span className="text-[9px] text-ink-dim rotate-45 origin-right">{toFaStr(m.label)}</span>
                     </div>
                   );
                 })}
