@@ -311,7 +311,18 @@ function shutdown(code) {
 
     const verify = await api('POST', '/auth/otp/verify', { phone, code });
     check('Login with correct code succeeds', verify.status === 200 && verify.data.ok === true);
-    check('Login response has fullName (for the "what is your name?" step)', 'fullName' in (verify.data.user || {}));
+    // شکلِ واقعیِ پاسخ — و همین‌جا بود که یک باگِ کاربری پنهان ماند: نام
+    // **فقط** زیرِ `user` می‌آید و هیچ فیلدِ سطحِ بالایی به نامِ
+    // `fullName`/`isNew` وجود ندارد. فرمِ ورودِ Next نام را از سطحِ بالا
+    // می‌خواند، هر دو `undefined` می‌شدند، پس شرط همیشه درست بود و مرحلهٔ
+    // «نام» برای هر ورودِ موفق باز می‌ماند («هر بار دوباره نامم را می‌پرسد»).
+    // این‌جا خودِ سرورِ واقعی سنجیده می‌شود تا قرارداد روی سیم قفل شود؛
+    // نگهبانِ سمتِ فرانت هم در `next-frontend/src/lib/apiContract.test.ts`
+    // همین شکل را با سورسِ سرور و اوراکلِ Express مقایسه می‌کند.
+    check('Login response shape: the name lives under user, never at the top level',
+      typeof verify.data?.user?.fullName === 'string'
+      && !('fullName' in verify.data) && !('isNew' in verify.data),
+      `top-level keys: ${Object.keys(verify.data || {}).join(',')}`);
 
     // ---------- profile ----------
     const prof = await api('POST', '/auth/profile', { fullName: 'Test User' });
@@ -366,6 +377,24 @@ function shutdown(code) {
       const v = await api('POST', '/auth/otp/verify', { phone: ph, code: c });
       if (v.status !== 200) throw new Error(`login failed for ${ph}`);
       return v.data.user;
+    }
+
+    // ---------- مشتریِ همیشگی: نامش باید از همان ورود برگردد ----------
+    // پیش‌شرطِ دقیقِ همان سناریویی که مشتری گزارش کرد («هر بار دوباره نامم را
+    // می‌پرسد»): کاربری که از قبل نام دارد. اگر پاسخِ ورود نام را *زیرِ `user`*
+    // برگرداند، هیچ مرحلهٔ «نام»ی باز نمی‌شود؛ ولی اگر سرور نام را جا بیندازد،
+    // هیچ نگهبانِ فرانت‌اندی این را نمی‌بیند — پس این‌جا روی سرورِ واقعی
+    // سنجیده می‌شود. شماره تازه است تا مهلتِ ۳۰ثانیه‌ایِ بازفرست درگیر نشود،
+    // و کاربر مستقیم در دیتابیسِ همان سندباکس ساخته می‌شود (همان کاری که
+    // این تست با کالاهای آزمایشی هم می‌کند).
+    {
+      const dbNames = require('./lib/db');
+      const regularPhone = '0912666' + String(Math.floor(1000 + Math.random() * 8999));
+      const regular = dbNames.findOrCreateUser(regularPhone);
+      dbNames.updateUserName(regular.id, 'مشتری همیشگی');
+      const regularUser = await loginAs(regularPhone);
+      check('Returning customer: the saved name comes back under user.fullName',
+        regularUser?.fullName === 'مشتری همیشگی', JSON.stringify(regularUser));
     }
 
     const buyerPhone = '0912111' + String(Math.floor(1000 + Math.random() * 8999));

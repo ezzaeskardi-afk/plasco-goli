@@ -22,6 +22,7 @@ import type {
   AdminDbHealth,
   AdminErrorGroup,
   AdminIntegrity,
+  AdminSecondFactorStatus,
   AdminSystemStatus,
 } from "@/lib/adminTypes";
 
@@ -71,6 +72,50 @@ type Verdict = { level: "ok" | "warn" | "bad"; issues: string[] };
 function verdictOf(s: AdminSystemStatus): Verdict {
   const issues: string[] = [];
 
+  /* «هیچ مدیری کلیدِ عاملِ دوم ندارد» — و چرا این ایراد این‌جاست، نه فقط در
+     کارتِ پایین.
+
+     تنها چیزی که یک آدمِ عجله‌دار از این صفحه می‌خواند همین بندِ اول است و
+     پرسشش یکی است: «مشکلی هست یا نه؟». اگر این ایراد فقط در یک کارتِ پایین
+     می‌نشست، همان بندِ اول می‌گفت «همه‌چیز مرتب است» — یعنی صفحه دربارهٔ
+     یک‌عاملی بودنِ پنل به مدیر دروغ می‌گفت. برای همین اینجا، در فهرستِ
+     ایرادها، می‌آید: هشدارش **پایدار** است (دکمه‌ی بستن ندارد و با تازه‌شدنِ
+     هر دقیقه‌ای برنمی‌گردد، چون وضعیتِ سرور است، نه یک نوتیف).
+
+     چراغِ سرورِ قدیمی‌تر: `security` تازه اضافه شده و Express و Next دو پروسهٔ
+     جدایند، پس در پنجرهٔ بین دو استقرار ممکن است نیاید؛ نداشتنش نباید کلِ این
+     نما را سفید کند. */
+  const sf = s.security?.secondFactor;
+  if (sf?.noneCovered) {
+    issues.push(
+      "ورودِ پنل یک‌عاملی است: هیچ مدیری کلیدِ عاملِ دوم ندارد. راهِ ساختش در کارتِ «عاملِ دومِ ورود» پایین‌تر آمده.",
+    );
+  }
+  if ((sf?.invalidEntries ?? 0) > 0) {
+    issues.push(
+      `${faNum(sf?.invalidEntries ?? 0)} ورودیِ ناخوانا در ADMIN_TOTP_SECRETS است — آن کلیدها بی‌اثر مانده‌اند.`,
+    );
+  }
+
+  /* ---------- کدِ پشتیبان ----------
+     این ایراد جنسِ دیگری دارد و در همان بندِ اول می‌آید، به دو دلیل:
+       • تنها ایرادی است که پیامدش «برای همیشه بیرون‌ماندن از پنل» است، نه
+         کندی یا نگهداری؛ یعنی از یک‌عاملی‌بودن هم سنگین‌تر است (آن یکی
+         امنیتِ کمتری دارد، این یکی دسترسی را می‌بندد).
+       • راهِ رفعش را همان‌جا در کارتِ پایین می‌شود نوشت، وگرنه مدیرِ عجله‌دار
+         فقط یک جملهٔ ترسناک می‌خواند بی‌اینکه بداند چه کند. */
+  const rec = sf?.recovery;
+  if ((rec?.missing ?? 0) > 0) {
+    issues.push(
+      `${faNum(rec?.missing ?? 0)} مدیرِ کلیددار کدِ پشتیبان ندارد — با گم‌شدنِ گوشی از پنل بیرون می‌ماند. راهِ ساختش در کارتِ «عاملِ دومِ ورود» پایین‌تر آمده.`,
+    );
+  }
+  if ((rec?.invalidEntries ?? 0) > 0) {
+    issues.push(
+      `${faNum(rec?.invalidEntries ?? 0)} ورودیِ ناخوانا در ADMIN_RECOVERY_CODES است — آن کدها بی‌اثر مانده‌اند (آنجا فقط هش می‌نشیند، نه خودِ کد).`,
+    );
+  }
+
   if (!s.health.ok) issues.push("دیتابیس به SELECT پاسخ نداد — همین حالا نگاه کن.");
   if (s.errors.unavailable) {
     // «۰ خطا» و «نتوانستم لاگ را بخوانم» دو چیزِ کاملاً متفاوت‌اند.
@@ -96,7 +141,11 @@ function verdictOf(s: AdminSystemStatus): Verdict {
     issues.push(`یک SELECT ساده ${faNum(s.health.queryMs)} میلی‌ثانیه طول کشید — دیسک کند است.`);
   }
 
-  const bad = !s.health.ok || Boolean(s.errors.unavailable) || s.health.backupStale;
+  // یک‌عاملی بودنِ ورودِ پنل قرمز است و نه زرد: بقیهٔ ایرادهای این تابع
+  // «کندی» و «نگهداری»اند، ولی این یکی یک ریسکِ نصب‌شده است.
+  const bad = !s.health.ok || Boolean(s.errors.unavailable) || s.health.backupStale
+    || Boolean(sf?.noneCovered)
+    || Boolean(rec && rec.missing > 0);
   return { level: issues.length === 0 ? "ok" : bad ? "bad" : "warn", issues };
 }
 
@@ -187,6 +236,12 @@ export function SystemContent() {
   return (
     <div className="space-y-5">
       <Verdict banner={v} onRefresh={() => statusQuery.refetch()} busy={statusQuery.isFetching} />
+
+      {/* ---------- امنیتِ ورود: درست زیرِ بندِ داوری ---------- */}
+      {/* جای عمدی و بلافاصله بعد از داوری: این کارت دربارهٔ *نبودنِ* یک چیز
+          است و نبودن، خودش را نشان نمی‌دهد؛ اگر پایینِ صفحه می‌رفت، فقط کسی
+          می‌دیدش که از قبل دنبالش بود. */}
+      <SecondFactorPanel sf={s.security?.secondFactor} />
 
       {/* ---------- نگاهِ اول: چهار عدد ---------- */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -369,6 +424,179 @@ export function SystemContent() {
 // ============================================================
 // قطعه‌ها
 // ============================================================
+
+/**
+ * کارتِ «عاملِ دومِ ورود» — تنها قطعه‌ای که *نبودِ* یک چیز را نشان می‌دهد.
+ *
+ * چرا کارتِ جداگانه دارد: یک پنلِ یک‌عاملی هیچ خطایی نمی‌دهد؛ فقط امنیتش کمتر
+ * است. پس این وضعیت هیچ‌وقت خودش را با «خرابی» نشان نمی‌دهد و تنها راهِ
+ * فهمیدنش این است که یک جای ثابت گفته شود.
+ *
+ * و چون وضعیتِ *سرور* است و نه یک رویداد، هشدارش پایدار هم هست: دکمهٔ بستن
+ * ندارد و با تازه‌شدنِ خودکارِ هر دقیقه‌ای برنمی‌گردد (چون چیزی نبوده که بسته
+ * شود). شرطش دقیقاً همان چیزی است که سرور می‌گوید (`noneCovered`).
+ *
+ * چرا راهِ رفع هم *داخلِ* هشدار است: «کلید ندارید» بدونِ «چطور بسازم» یعنی
+ * مدیر می‌رود جست‌وجو کند و برمی‌گردد سرِ جای اول. دستور و جایی که خطِ کلید
+ * می‌نشیند (فایلِ `.env`) هر دو همین‌جا آمده‌اند.
+ */
+function SecondFactorPanel({ sf }: { sf: AdminSecondFactorStatus | undefined }) {
+  const invalid = sf?.invalidEntries ?? 0;
+  // کدِ پشتیبان: `null` یعنی سرورِ قدیمی‌تر این فیلد را نمی‌فرستد و نباید
+  // چیزی دربارهٔ آن ادعا کرد (همان قرارِ `!sf` بالای همین کارت).
+  const rec = sf?.recovery;
+  const mine = rec?.mine ?? null;
+  // آستانهٔ هشدار: وقتی تنها یکی-دو کد مانده، اینکه «وقتی تمام شد خبرم کن»
+  // بی‌فایده است — باید *پیش از* تمام‌شدن بداند. عدد عمداً کوچک است تا نویز نشود.
+  const lowCodes = Boolean(mine && mine.remaining <= 2);
+
+  return (
+    <Panel title="عاملِ دومِ ورود">
+      {!sf ? (
+        <p className="text-[11px] leading-relaxed" style={{ color: "var(--color-ink-dim)" }}>
+          سرور این بخش را برنگرداند (نسخه‌ی قدیمی‌ترِ API) — پس نه می‌شود گفت
+          پنل یک‌عاملی است و نه اینکه نیست. بعد از استقرارِ نسخه‌ی تازه همین‌جا
+          نشان داده می‌شود.
+        </p>
+      ) : sf.noneCovered ? (
+        <div
+          className="rounded-[14px] p-3"
+          style={{ background: "var(--color-coral-tint)", border: "1px solid transparent" }}
+          role="status"
+        >
+          <p className="text-sm font-extrabold mb-1" style={{ color: "var(--color-coral)" }}>
+            هیچ مدیری کلیدِ عاملِ دوم ندارد
+          </p>
+          <p className="text-[11px] leading-relaxed" style={{ color: "var(--color-coral)" }}>
+            {faNum(sf.admins)} شماره‌ی مدیریتی در ADMIN_PHONE ثبت است و هیچ‌کدام
+            کلیدِ TOTP ندارند. یعنی ورودِ پنل یک‌عاملی است: هر کس کدِ پیامکیِ
+            همین شماره‌ها را در دست بگیرد، بی‌درنگ داخلِ پنل است — و پنل قیمت و
+            موجودی و شماره‌ی همه‌ی مشتری‌ها را نشان می‌دهد. این هشدار تا وقتی
+            حداقل یکی از آن‌ها کلید ساخته باشد سرِ جایش می‌ماند.
+          </p>
+
+          <p className="mt-3 text-[11px] font-bold leading-relaxed" style={{ color: "var(--color-coral)" }}>
+            ساختِ کلید (روی دستگاهِ خودتان — کلید هیچ‌وقت از سرور بیرون نمی‌رود
+            و در پنل ساخته نمی‌شود):
+          </p>
+          <ol
+            className="mt-1.5 space-y-1 text-[11px] leading-relaxed"
+            style={{ color: "var(--color-coral)" }}
+          >
+            <li>
+              ۱. در پوشه‌ی <code dir="ltr">backend</code> این را بزنید:{" "}
+              <code dir="ltr" className="rounded px-1" style={{ background: "var(--color-surface)" }}>
+                node tools/admin-totp.js 09121234567
+              </code>
+            </li>
+            <li>
+              ۲. با نشانیِ <code dir="ltr">otpauth://</code> که چاپ می‌شود، همان
+              کلید را در اپِ Authenticator گوشی اضافه کنید.
+            </li>
+            <li>
+              ۳. خطِ <code dir="ltr">ADMIN_TOTP_SECRETS=…</code> که ابزار
+              می‌دهد در فایلِ <code dir="ltr">.env</code> سرور بگذارید و سرور را
+              دوباره بالا بیاورید. (هر مدیر کلیدِ خودش؛ می‌توانید همه را با کاما
+              در همان یک خط بنویسید.)
+            </li>
+          </ol>
+
+          <p className="mt-3 text-[10px] leading-relaxed" style={{ color: "var(--color-coral)" }}>
+            روی production این اجبار است: سرور بدونِ کلیدی که همه‌ی شماره‌های
+            ADMIN_PHONE را پوشش بدهد بالا نمی‌آید. پس اگر سایت بالاست و همین
+            هشدار را می‌بینید، یعنی روی همین سروری هستید که اجبار برایش خاموش
+            است (توسعه یا استقرارِ ناتمام).
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <p className="text-[11px] leading-relaxed" style={{ color: "var(--color-teal)" }}>
+            {sf.admins === 0
+              ? "هیچ شماره‌ای در ADMIN_PHONE ثبت نشده، پس سدِ عاملِ دوم روی کسی اعمال نمی‌شود — ورودِ پنل با همان کدِ پیامکی است."
+              : `${faNum(sf.covered)} از ${faNum(sf.admins)} شماره‌ی مدیریتی کلیدِ عاملِ دوم دارند؛ موقعِ ورود، بعد از کدِ پیامکی، کدِ اپِ Authenticator را هم می‌دهند.`}
+          </p>
+          {sf.admins > 0 && sf.covered < sf.admins && (
+            <p className="text-[11px] leading-relaxed" style={{ color: "var(--color-ink-soft)" }}>
+              بقیه با یک کد (کدِ پیامکی) وارد می‌شوند. برای آن‌ها هم می‌توانید
+              با همین ابزار کلید بسازید — پوششِ کامل یعنی هیچ راهی به پنل بدونِ
+              پلهٔ دوم نماند.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ---------- کدِ پشتیبان: راهِ برگشت ---------- */}
+      {rec && rec.missing > 0 && (
+        <div
+          className="mt-3 rounded-[14px] p-3"
+          style={{ background: "var(--color-coral-tint)", border: "1px solid transparent" }}
+          role="status"
+        >
+          <p className="text-sm font-extrabold mb-1" style={{ color: "var(--color-coral)" }}>
+            با گم‌شدنِ گوشی، این مدیر از پنل بیرون می‌ماند
+          </p>
+          <p className="text-[11px] leading-relaxed" style={{ color: "var(--color-coral)" }}>
+            {faNum(rec.missing)} از {faNum(rec.keyed)} مدیرِ کلیددار کدِ پشتیبان ندارد.
+            کلیدِ TOTP فقط داخلِ گوشی است؛ گوشیِ گم‌شده یا عوض‌شده یعنی کلیدِ رفته
+            و پنلِ بسته — بدونِ هیچ راهی برای برگشت. کدِ پشتیبان همان راه است: چند
+            رشتهٔ یک‌بارمصرف که روی کاغذ می‌ماند و در صفحهٔ ورود، جای کدِ اپ، وارد
+            می‌شود.
+          </p>
+          <p className="mt-2 text-[11px] font-bold leading-relaxed" style={{ color: "var(--color-coral)" }}>
+            روی دستگاهِ خودتان (کدها هیچ‌وقت از سرور بیرون نمی‌روند و در پنل ساخته نمی‌شوند):
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed" style={{ color: "var(--color-coral)" }}>
+            <code dir="ltr" className="rounded px-1" style={{ background: "var(--color-surface)" }}>
+              node tools/admin-recovery.js 09121234567
+            </code>{" "}
+            — کدها را روی کاغذ بنویسید و خطِ هش‌ها را در{" "}
+            <code dir="ltr">ADMIN_RECOVERY_CODES</code> بگذارید. روی production تا
+            این خط نباشد سرور بالا نمی‌آید، پس همین حالا بسازیدش.
+          </p>
+        </div>
+      )}
+
+      {rec && rec.missing === 0 && rec.keyed > 0 && (
+        <p className="mt-3 text-[11px] leading-relaxed" style={{ color: "var(--color-teal)" }}>
+          هر {faNum(rec.keyed)} مدیرِ کلیددار کدِ پشتیبان هم دارد: گم‌شدنِ گوشی به
+          قفل‌شدنِ پنل تبدیل نمی‌شود. اگر روزی از یکی از آن کدها استفاده شد، با
+          رنگِ زرد در «رویدادها» دیده می‌شود.
+        </p>
+      )}
+
+      {mine && (
+        <p
+          className="mt-2 text-[11px] leading-relaxed"
+          style={{ color: lowCodes ? "var(--color-gold)" : "var(--color-ink-soft)" }}
+        >
+          کدهای پشتیبانِ خودتان: {faNum(mine.remaining)} از {faNum(mine.configured)}{" "}
+          مصرف‌نشده ({faNum(mine.used)} مصرف‌شده).
+          {lowCodes
+            ? " کاغذتان تقریباً ته کشیده — کدهای تازه بسازید و کاغذِ قدیمی را دور بریزید."
+            : ""}
+        </p>
+      )}
+
+      {rec && rec.invalidEntries > 0 && (
+        <p className="mt-3 text-[11px] leading-relaxed" style={{ color: "var(--color-gold)" }}>
+          {faNum(rec.invalidEntries)} ورودیِ ناخوانا در ADMIN_RECOVERY_CODES است و بی‌اثر
+          مانده. این‌جا فقط <em>هشِ</em> کدها می‌نشیند، نه خودِ کدها — همان خطِ دومی که{" "}
+          <code dir="ltr">tools/admin-recovery.js</code> چاپ می‌کند. شایع‌ترین اشتباه
+          همین است: خطِ اول را جای دومی کپی می‌کنید و کدهایتان هیچ‌وقت کار نمی‌کنند.
+        </p>
+      )}
+
+      {invalid > 0 && (
+        <p className="mt-3 text-[11px] leading-relaxed" style={{ color: "var(--color-gold)" }}>
+          {faNum(invalid)} ورودیِ ناخوانا در ADMIN_TOTP_SECRETS است و بی‌اثر مانده.
+          قالبِ درست «شماره:کلیدِ Base32» است و چند ورودی با کاما جدا می‌شوند.
+          خطِ خروجیِ <code dir="ltr">tools/admin-totp.js</code> همان قالبِ درست را
+          می‌دهد.
+        </p>
+      )}
+    </Panel>
+  );
+}
 
 /**
  * بندِ داوری — تنها چیزی که یک آدمِ عجله‌دار می‌خواند.

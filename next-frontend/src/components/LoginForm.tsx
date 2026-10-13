@@ -21,7 +21,18 @@ import { hardNavigate } from "@/lib/navigation";
  * است که «کدِ پیامکیِ اشتباه» و «کدِ برنامهٔ اشتباه» دو پیامِ متفاوت
  * می‌گیرند و کاربر نمی‌ماند که کدام را دوباره بگیرد.
  */
-type Step = "phone" | "otp" | "password" | "totp" | "name";
+type Step = "phone" | "otp" | "password" | "totp" | "recovery-done" | "name";
+
+/**
+ * شکلِ کدِ پشتیبان، دقیقاً همان چیزی که سرور قبول می‌کند:
+ * ۱۲ نویسهٔ Base32 (خط تیره و فاصله‌اش شکلِ نمایش است، نه بخشی از کد).
+ *
+ * چرا سمتِ کلاینت هم سنجیده میشود: فرستادنِ یک رشتهٔ نیم‌کاره فقط یک
+ * درخواستِ محکوم است و از سقفِ نرخ کم می‌کند؛ ولی *تنها* سنجشِ کلاینتی هم
+ * نه — پیامِ دقیقِ حالات (مصرف‌شده، ناشناخته، تنظیم‌نشده) از سرور می‌آید.
+ */
+const RECOVERY_CODE_RE = /^[A-Z2-7]{12}$/;
+const normalizeRecovery = (raw: string) => raw.replace(/[\s-_.]/g, "").toUpperCase();
 
 /**
  * مهلتِ ناوبریِ نرم بعد از ورود. دلیلِ وجودش در `goToRedirect` آمده.
@@ -89,6 +100,16 @@ export function LoginForm() {
   // کدِ عاملِ دوم ۶ رقمی است (نه ۵)، پس حالتِ جداگانه لازم دارد.
   const [totpDigits, setTotpDigits] = useState(["", "", "", "", "", ""]);
   const [totpError, setTotpError] = useState("");
+  // کدِ پشتیبان: ورودیِ جدا چون *شکلش* جداست (۱۲ نویسهٔ حرف/رقم، نه ۶ رقم).
+  // تلاش برای جا دادنش در شش خانهٔ رقمی یعنی کاربری که گوشی‌اش را گم کرده
+  // نمی‌تواند هیچ‌وقت وارد شود — یعنی کلِ خاصیت بی‌اثر می‌ماند.
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
+  // بعد از ورودِ موفّق با کدِ پشتیبان، قبل از رفتن به پنل یک قدم می‌ایستیم.
+  // چرا: عددِ کدهای باقی‌مانده باید به مدیر گفته شود. "ورود موفق" در این
+  // حالت خبرِ خوبِ کاملی نیست — گوشی در دست نبوده و کاغذِ کدها هم دارد
+  // ته می‌کشد؛ اگر بی‌صدا به پنل برود، خطر را بعد از آخرین کد می‌فهمد.
+  const [recoveryDone, setRecoveryDone] = useState<{ message: string; remaining: number } | null>(null);
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -334,7 +355,17 @@ export function LoginForm() {
         setTimeout(() => totpRefs.current[0]?.focus(), 100);
         return;
       }
-      if (res.isNew || !res.fullName) {
+      /* مرحلهٔ «نام» فقط برای مشتریِ تازه باز می‌شود.
+
+         نامِ مشتری **فقط زیرِ `user`** می‌آید — همان شکلی که `publicUser` در
+         `backend/routes/auth.js` می‌سازد و اوراکلِ Express هم از همان می‌خواند
+         (`if (!user.fullName)` در `login.js`).
+
+         این‌جا پیش از این فیلدِ سطحِ بالای پاسخ خوانده می‌شد، که سرور هرگز
+         نمی‌فرستدش؛ پس شرط برای *هر* ورودِ موفق درست از آب درمی‌آمد و مشتریِ
+         همیشگی — با اینکه نامش سال‌هاست ثبت شده — دوباره نامش پرسیده می‌شد.
+         نگهبانش: `lib/apiContract.test.ts` (شکلِ سیم ↔ تایپ ↔ اوراکل). */
+      if (!res.user?.fullName?.trim()) {
         setStep("name");
         setLoading(false);
       } else {
@@ -353,7 +384,22 @@ export function LoginForm() {
     setLoading(true);
     setTotpError("");
     try {
-      await verifyTotp(code);
+      const res = await verifyTotp(code);
+      /* ---------- کدِ پشتیبان، مسیرِ خودش ----------
+         سرور خودش از قالبِ ورودی می‌فهمد کدام عامل است و در پاسخ می‌گوید
+         (`method`). این‌جا وقتی آن کد بوده، یک قدم قبل از پنل می‌ایستیم تا
+         «چند تا مانده» گفته شود — همان چیزی که سرور حساب کرده و در
+         `recoveryMessage` فرستاده. */
+      if (res.method === "recovery") {
+        setRecoveryDone({
+          message: res.recoveryMessage || "",
+          remaining: res.recoveryRemaining ?? 0,
+        });
+        setRecoveryCode("");
+        setStep("recovery-done");
+        setLoading(false);
+        return;
+      }
       // مثلِ مرحلهٔ رمز: تا وقتی ناوبری تعیینِ‌تکلیف نشده، دکمه در حالتِ
       // انتظار می‌ماند — اما اینجا خودِ ناوبری رخ می‌دهد، پس چیزی برنمی‌گردانیم.
       goToRedirect();
@@ -364,6 +410,22 @@ export function LoginForm() {
       setLoading(false);
     }
   };
+
+  // ارسالِ کدِ پشتیبان — از همان مسیرِ کدِ اپ می‌رود (`submitTotp`) چون سرور
+  // خودش تفکیک می‌کند؛ ولی پیش از فرستادن، شکلِ کد سنجیده می‌شود تا یک
+  // درخواستِ محکوم سهمیهٔ سقفِ نرخ را نخورد.
+  const submitRecovery = () => {
+    const normalized = normalizeRecovery(recoveryCode);
+    if (!RECOVERY_CODE_RE.test(normalized)) {
+      setTotpError("کدِ پشتیبان ۱۲ نویسه است و شکلِ XXXX-XXXX-XXXX دارد");
+      return;
+    }
+    submitTotp(normalized);
+  };
+
+  // رنگِ کادرِ ورودی از همین می‌آید: «شکلش درست است» را کاربر همان‌جا ببیند،
+  // نه با یک رفت‌وبرگشت به سرور و پیامِ خطا.
+  const recoveryReady = RECOVERY_CODE_RE.test(normalizeRecovery(recoveryCode));
 
   const handleTotpInput = (index: number, value: string) => {
     if (!/^\d?$/.test(value)) return;
@@ -489,7 +551,8 @@ export function LoginForm() {
         ].map((s, i) => {
           const active =
             (s.num === 1 && step === "phone") ||
-            (s.num === 2 && (step === "otp" || step === "password" || step === "totp")) ||
+            (s.num === 2 &&
+              (step === "otp" || step === "password" || step === "totp" || step === "recovery-done")) ||
             (s.num === 3 && step === "name");
           const done =
             (s.num === 1 && step !== "phone") ||
@@ -696,12 +759,15 @@ export function LoginForm() {
       {step === "totp" && (
         <div className="px-6 pb-8">
           <h2 className="text-lg font-bold text-center mb-1" style={{ color: "var(--color-ink)" }}>
-            کد تأیید دو مرحله‌ای
+            {recoveryMode ? "ورود با کد پشتیبان" : "کد تأیید دو مرحله‌ای"}
           </h2>
           <p className="text-xs text-center mb-6" style={{ color: "var(--color-ink-soft)" }}>
-            کد ۶ رقمی برنامهٔ Authenticator را وارد کنید
+            {recoveryMode
+              ? "یکی از کدهایی که روی کاغذ نوشته‌اید را وارد کنید"
+              : "کد ۶ رقمی برنامهٔ Authenticator را وارد کنید"}
           </p>
 
+          {!recoveryMode && (
           <div className="flex justify-center gap-1.5 mb-4" dir="ltr">
             {totpDigits.map((d, i) => (
               <input
@@ -725,6 +791,44 @@ export function LoginForm() {
               />
             ))}
           </div>
+          )}
+
+          {recoveryMode && (
+            <div className="mb-2">
+              <input
+                type="text"
+                value={recoveryCode}
+                onChange={(e) => setRecoveryCode(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submitRecovery(); }}
+                placeholder="XXXX-XXXX-XXXX"
+                className="w-full text-center rounded-xl py-3 px-4 text-lg font-bold outline-none"
+                style={{
+                  background: "var(--color-surface-2)",
+                  color: "var(--color-ink)",
+                  border: `2px solid ${
+                    recoveryReady ? "var(--color-teal)" : "var(--color-line-control)"
+                  }`,
+                }}
+                dir="ltr"
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                onClick={submitRecovery}
+                disabled={loading}
+                className="w-full mt-3 rounded-full py-3 text-sm font-bold disabled:opacity-60"
+                style={{ background: "var(--color-teal)", color: "var(--color-surface)" }}
+              >
+                تأیید کد پشتیبان
+              </button>
+              <p className="mt-2 text-[10px] leading-relaxed" style={{ color: "var(--color-ink-dim)" }}>
+                هر کد فقط یک بار کار می‌کند؛ کدهای مصرف‌شده را روی کاغذ خط بزنید.
+                به خط تیره و بزرگی/کوچکیِ حرف‌ها حساس نیست.
+              </p>
+            </div>
+          )}
 
           {totpError && (
             <p className="text-xs text-center mb-3" style={{ color: "var(--color-coral)" }}>
@@ -738,17 +842,91 @@ export function LoginForm() {
             </div>
           )}
 
+          {/* کلیدِ رفتن به مسیرِ کدِ پشتیبان. چرا برجسته نیست: مدیرِ روزِ
+              عادیِ خودش صاحبِ گوشی است و این را نمی‌خواهد؛ ولی روزی که گوشی
+              گم شود، همین یک دکمهٔ کم‌رنگ تنها راهِ برگشت است — پس باید
+              همیشه این‌جا باشد، نه در یک راهنما/کمکِ جدا. */}
+          {!recoveryMode ? (
+            <button
+              type="button"
+              onClick={() => { setRecoveryMode(true); setTotpError(""); }}
+              className="w-full text-center text-xs mt-1"
+              style={{ color: "var(--color-ink-dim)" }}
+            >
+              گوشی‌ام در دسترس نیست — کد پشتیبان دارم
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setRecoveryMode(false); setRecoveryCode(""); setTotpError(""); }}
+              className="w-full text-center text-xs mt-2"
+              style={{ color: "var(--color-ink-dim)" }}
+            >
+              ← برگشت به کدِ برنامهٔ Authenticator
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => {
               setStep("phone");
               setTotpDigits(["", "", "", "", "", ""]);
+              setRecoveryCode("");
+              setRecoveryMode(false);
               setTotpError("");
             }}
             className="w-full text-center text-xs mt-1"
             style={{ color: "var(--color-ink-dim)" }}
           >
             ← شروع دوباره از شماره
+          </button>
+        </div>
+      )}
+
+      {/* === پایانِ ورود با کدِ پشتیبان === */}
+      {/* چرا یک قدمِ جدا: ورود با کدِ پشتیبان "موفق" است ولی خبرِ خوبِ کامل
+          نیست — گوشی در دست نبوده و کاغذِ کدها هم دارد ته می‌کشد. اگر
+          بی‌درنگ به پنل می‌رفتیم، تنها لحظه‌ای که می‌شد این را گفت از دست
+          می‌رفت و مدیر روزِ آخرین کد می‌فهمید. */}
+      {step === "recovery-done" && (
+        <div className="px-6 pb-8">
+          <h2 className="text-lg font-bold text-center mb-1" style={{ color: "var(--color-ink)" }}>
+            با کد پشتیبان وارد شدید
+          </h2>
+          <p className="text-xs text-center mb-4" style={{ color: "var(--color-ink-soft)" }}>
+            گوشی در دست نبود و کاغذِ کدها به کار آمد. ولی هر کد فقط یک بار کار
+            می‌کند.
+          </p>
+
+          {recoveryDone?.message && (
+            <p
+              className="rounded-[14px] p-3 text-xs text-center leading-relaxed mb-4"
+              role="status"
+              style={
+                recoveryDone.remaining > 0
+                  ? { background: "var(--color-gold-tint)", color: "var(--color-gold)" }
+                  : { background: "var(--color-coral-tint)", color: "var(--color-coral)" }
+              }
+            >
+              {recoveryDone.message}
+            </p>
+          )}
+
+          <p className="text-[11px] leading-relaxed mb-4" style={{ color: "var(--color-ink-soft)" }}>
+            همین امروز کدهای تازه بسازید (روی دستگاهِ خودتان):{" "}
+            <code dir="ltr">node tools/admin-recovery.js 0912…</code> — خطِ
+            هش‌ها را در <code dir="ltr">ADMIN_RECOVERY_CODES</code> بگذارید و
+            خودِ کدها را روی کاغذ بنویسید. از این پس ورود با گوشیِ
+            جدید هم کار می‌کند و کدهای تازه جای قدیمی‌ها را می‌گیرند.
+          </p>
+
+          <button
+            type="button"
+            onClick={goToRedirect}
+            className="w-full rounded-full py-3 text-sm font-bold"
+            style={{ background: "var(--color-teal)", color: "var(--color-surface)" }}
+          >
+            ورود به پنل
           </button>
         </div>
       )}

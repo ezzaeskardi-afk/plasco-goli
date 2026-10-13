@@ -313,11 +313,21 @@ validateRuntimeConfig({
   siteUrl: SITE_URL,
   adminPhones: ADMIN_PHONES,
   totpSecretPhones: mfa.configuredPhones(),
+  // کدِ پشتیبان هم مثل کلید در همان یک‌جای اعتبارسنجی می‌ماند: اجبارش همان‌جا
+  // معنا دارد که اجبارِ کلید است («هر مدیرِ کلیددار باید راهِ پشتیبان داشته
+  // باشد»)، وگرنه قاعدهٔ دوم راه می‌افتد و از این جدا می‌شود.
+  recoveryCodePhones: mfa.configuredRecoveryPhones(),
 });
 // ورودیِ ناخوانا در ADMIN_TOTP_SECRETS بی‌صدا نمی‌ماند: کلیدِ غلط یعنی
 // قفل‌شدنِ مدیر از پنل، و بدونِ این هشدار تنها نشانه‌اش «کدت غلط است» می‌شود.
 for (const bad of mfa.invalidEntries()) {
   log.warn('Ignored malformed ADMIN_TOTP_SECRETS entry', { entry: bad.slice(0, 12) + '…' });
+}
+// همین برای کدهای پشتیبان، با یک تفاوتِ مهم: شایع‌ترین ورودیِ ناخوانا این‌جاست
+// که کسی خطِ *خودِ کدها* را جای خطِ *هش‌ها* کپی کند. آن‌وقت مدیر فکر می‌کند
+// کدهایش تنظیم است و روزِ گم‌شدنِ گوشی می‌فهمد که هیچ‌کدام کار نمی‌کند.
+for (const bad of mfa.recoveryInvalidEntries()) {
+  log.warn('Ignored malformed ADMIN_RECOVERY_CODES entry (hashes only, not the codes)', { entry: bad.slice(0, 12) + '…' });
 }
 const SITE_HOST = (() => {
   try { return SITE_URL ? new URL(SITE_URL).host : ''; } catch (e) { return ''; }

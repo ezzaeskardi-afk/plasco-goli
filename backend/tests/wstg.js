@@ -73,6 +73,17 @@ fs.writeFileSync(path.join(SECRET_DIR, 'canary.png'), CANARY_TEXT);
 // وگرنه این سنجش فقط به محافظتِ express.static تکیه می‌کرد و بی‌اثر می‌شد.
 fs.writeFileSync(path.join(SECRET_DIR, 'canary.webp'), CANARY_TEXT);
 
+/* ---------- رمزهای این سنجش ----------
+   عمداً رشتهٔ ثابت نیستند، بلکه در زمانِ اجرا ساخته می‌شوند. چرا: یک رشتهٔ
+   «رمزمانندِ» ثابت در سورس، اسکنرِ راز را بی‌جا قرمز می‌کند و — بدتر — همان
+   عادتی را به خواننده یاد می‌دهد که آن اسکنر برای گرفتنش هست. رفتار عوض
+   نمی‌شود: «رمزِ غلط» چیزی است که هیچ‌وقت روی هیچ حسابی ست نشده، و رمزِ
+   درست هم فقط در همین پروسه زندگی می‌کند (طولش از کفِ سیاستِ سرور بیشتر است).
+   LOCK_PASSWORD عمداً شکلِ رمزِ خودساخته دارد تا مسیرِ «رمز را خودم می‌گذارم»
+   (ATHN-03) با یک مقدارِ واقع‌نما سنجیده شود. */
+const WRONG_PASSWORD = `wrong-${crypto.randomBytes(8).toString('hex')}`;
+const LOCK_PASSWORD = `Wstg-${crypto.randomBytes(6).toString('hex')}`;
+
 const ADMIN_PHONE = '09121110000';
 const PHONE_A = '09121234001';
 const PHONE_B = '09121234002';
@@ -685,10 +696,10 @@ const NOT_COVERED = [
     check('اختلافِ زمانیِ دو مسیر مشکوک نیست (<1500ms)', Math.abs(dt1 - dt2) < 1500, `${dt1}ms در برابرِ ${dt2}ms`);
 
     const unknownLogin = await request(newAgent(), 'POST', '/api/auth/password/login', {
-      json: { phone: PHONE_ENUM, password: 'TotallyWrongPass123' },
+      json: { phone: PHONE_ENUM, password: WRONG_PASSWORD },
     });
     const knownLogin = await request(newAgent(), 'POST', '/api/auth/password/login', {
-      json: { phone: PHONE_B, password: 'TotallyWrongPass123' },
+      json: { phone: PHONE_B, password: WRONG_PASSWORD },
     });
     check('ورودِ ناموفق برای شمارهٔ موجود و ناموجود یک شکل است',
       unknownLogin.status === knownLogin.status && unknownLogin.body === knownLogin.body,
@@ -722,11 +733,11 @@ const NOT_COVERED = [
   section('ATHN-03', 'Weak Lock Out Mechanism');
   {
     // رمزِ اختیاری را خودمان می‌سازیم تا مسیرِ رمزِ عبور قابلِ سنجش شود.
-    const setRes = await request(A, 'POST', '/api/auth/password/set', { json: { password: 'Wstg-Correct-2026' } });
+    const setRes = await request(A, 'POST', '/api/auth/password/set', { json: { password: LOCK_PASSWORD } });
     check('کاربر می‌تواند رمزِ عبور بگذارد (پیش‌شرطِ سنجشِ قفل)', setRes.status === 200, `status=${setRes.status}`);
 
     const fresh = newAgent();
-    const good = await request(fresh, 'POST', '/api/auth/password/login', { json: { phone: PHONE_A, password: 'Wstg-Correct-2026' } });
+    const good = await request(fresh, 'POST', '/api/auth/password/login', { json: { phone: PHONE_A, password: LOCK_PASSWORD } });
     check('رمزِ درست کار می‌کند (کنترلِ مثبت)', good.status === 200, `status=${good.status}`);
 
     let locked = null;
@@ -736,7 +747,7 @@ const NOT_COVERED = [
     }
     check('تلاش‌های پیاپیِ رمزِ غلط به قفل/محدودیت می‌رسد', Boolean(locked), 'پس از ۱۲ تلاش چیزی قفل نشد');
     if (locked) {
-      const duringLock = await request(newAgent(), 'POST', '/api/auth/password/login', { json: { phone: PHONE_A, password: 'Wstg-Correct-2026' } });
+      const duringLock = await request(newAgent(), 'POST', '/api/auth/password/login', { json: { phone: PHONE_A, password: LOCK_PASSWORD } });
       check('در زمانِ قفل، رمزِ درست هم پذیرفته نمی‌شود', duringLock.status >= 400, `status=${duringLock.status}`);
     }
   }

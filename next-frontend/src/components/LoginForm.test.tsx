@@ -27,11 +27,12 @@ import {
   getChallenge,
   passwordLogin,
   requestOtp,
+  saveProfile,
   verifyOtp,
   verifyTotp,
 } from "@/lib/api";
 import { hardNavigate } from "@/lib/navigation";
-import type { User } from "@/lib/types";
+import type { OtpVerifyResponse, User } from "@/lib/types";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -106,6 +107,30 @@ const TEST_USER: User = {
   isStaff: false,
   hasPassword: true,
 };
+
+/**
+ * پاسخِ واقعیِ `POST /api/auth/otp/verify` — همان چیزی که سرور با
+ * `res.json({ ok: true, user: publicUser(user), mfaRequired })` می‌فرستد
+ * (`backend/routes/auth.js`) و `publicUser` = `{ id, phone, fullName, isAdmin,
+ * isStaff, hasPassword }`.
+ *
+ * چرا سازنده و نه سه شیءِ دست‌ساز: آزمون‌های این فایل پیش از این شکلِ *خیالیِ*
+ * پاسخ را می‌ساختند — `fullName` و `isNew` در سطحِ بالا — یعنی همان شکلی که
+ * تایپ هم ادعا می‌کرد و سرور هرگز نمی‌فرستاد. نتیجه: آزمون‌ها سبز بودند و
+ * مشتریِ همیشگی در مرورگر دوباره نامش پرسیده می‌شد. حالا هر سناریو از همین
+ * یکجا می‌آید و نگهبانِ `lib/apiContract.test.ts` فیلدهای همین سازنده را با
+ * سورسِ سرور و با اوراکلِ Express مقایسه می‌کند.
+ */
+function otpVerifyPayload(
+  over: Partial<User> = {},
+  mfaRequired = false,
+): OtpVerifyResponse {
+  return {
+    ok: true,
+    user: { ...TEST_USER, ...over },
+    ...(mfaRequired ? { mfaRequired: true } : {}),
+  };
+}
 
 let container: HTMLDivElement;
 let root: Root;
@@ -220,12 +245,8 @@ beforeEach(() => {
 
   vi.mocked(getChallenge).mockResolvedValue({ token: "challenge-token" });
   vi.mocked(requestOtp).mockResolvedValue({ ok: true });
-  vi.mocked(verifyOtp).mockResolvedValue({
-    ok: true,
-    user: TEST_USER,
-    fullName: TEST_USER.fullName,
-    isNew: false,
-  });
+  vi.mocked(verifyOtp).mockResolvedValue(otpVerifyPayload());
+  vi.mocked(saveProfile).mockResolvedValue({ ok: true });
   vi.mocked(passwordLogin).mockResolvedValue({ ok: true, user: TEST_USER });
 
   container = document.createElement("div");
@@ -490,13 +511,9 @@ describe("بعد از ورود، ناوبری هیچ‌وقت معلّق نمی�
      *رفتارِ کاربر* است: مرحلهٔ درست باز شود، کد به سرور برود، و تا تأیید
      نشده هیچ‌جا نرود. */
   it("اگر سرور کدِ دوم بخواهد، مرحلهٔ کدِ برنامه باز می‌شود و کد به سرور می‌رود", async () => {
-    vi.mocked(verifyOtp).mockResolvedValue({
-      ok: true,
-      user: { ...TEST_USER, isAdmin: true },
-      fullName: TEST_USER.fullName,
-      isNew: false,
-      mfaRequired: true,
-    });
+    vi.mocked(verifyOtp).mockResolvedValue(
+      otpVerifyPayload({ isAdmin: true }, true),
+    );
     vi.mocked(verifyTotp).mockResolvedValue({
       ok: true,
       user: { ...TEST_USER, isAdmin: true },
@@ -530,13 +547,9 @@ describe("بعد از ورود، ناوبری هیچ‌وقت معلّق نمی�
   });
 
   it("کدِ دومِ اشتباه: پیام می‌ماند، باکس‌ها خالی می‌شوند و هیچ ناوبری‌ای رخ نمی‌دهد", async () => {
-    vi.mocked(verifyOtp).mockResolvedValue({
-      ok: true,
-      user: { ...TEST_USER, isAdmin: true },
-      fullName: TEST_USER.fullName,
-      isNew: false,
-      mfaRequired: true,
-    });
+    vi.mocked(verifyOtp).mockResolvedValue(
+      otpVerifyPayload({ isAdmin: true }, true),
+    );
     vi.mocked(verifyTotp).mockRejectedValue(
       new ApiError(400, "کدِ برنامه اشتباه است؛ ۴ تلاش دیگر مانده"),
     );
@@ -567,6 +580,93 @@ describe("بعد از ورود، ناوبری هیچ‌وقت معلّق نمی�
     expect(nav.push).not.toHaveBeenCalled();
     await advance(NAV_FALLBACK_MS * 2);
     expect(vi.mocked(hardNavigate)).not.toHaveBeenCalled();
+  });
+
+  /* ============================================================
+     کدِ پشتیبان — «گم‌شدنِ گوشی نباید قفل‌شدنِ پنل باشد»
+     ============================================================
+     مدیرِ گوشی‌گم‌کرده تنها جایی که می‌رسد همین صفحه است. سه چیز این‌جا
+     سنجیده می‌شود و هر سه لازم است تا خاصیت واقعاً کار کند: راهِ رسیدنش
+     پیدا باشد (دکمه)، کد با همان شکلِ سرور برود، و «چند تا مانده»
+     *پیش از* رفتن به پنل گفته شود. یک چیزِ منفی هم مهم است: ورودیِ
+     بی‌شکل به سرور نمی‌رود تا سهمیهٔ سقفِ نرخِ پلهٔ دوم را نسوزاند. */
+  it("گم‌شدنِ گوشی: کدِ پشتیبان پذیرفته می‌شود و «چند تا مانده» قبل از پنل گفته می‌شود", async () => {
+    vi.mocked(verifyOtp).mockResolvedValue(
+      otpVerifyPayload({ isAdmin: true }, true),
+    );
+    vi.mocked(verifyTotp).mockResolvedValue({
+      ok: true,
+      user: { ...TEST_USER, isAdmin: true },
+      method: "recovery",
+      recoveryRemaining: 2,
+      recoveryMessage: "۲ کدِ پشتیبان دیگر روی کاغذتان مانده",
+    });
+
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+    const otpBoxes = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=text]"));
+    await act(async () => {
+      "12345".split("").forEach((d, i) => typeInto(otpBoxes[i], d));
+    });
+    await flush();
+
+    // مسیرِ کدِ پشتیبان باید از *همین* مرحله پیدا باشد: روزی که گوشی گم شود،
+    // مدیر وقتِ خواندنِ راهنما ندارد.
+    await click(buttonOf("کد پشتیبان دارم"));
+
+    const fields = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=text]"));
+    // شش خانهٔ رقمی جایش را به یک ورودیِ متنی داده — با شش خانه، تایپِ ۱۲ نویسه
+    // ممکن نیست و کلِ خاصیت بی‌اثر می‌ماند.
+    expect(fields).toHaveLength(1);
+    await act(async () => {
+      // همان‌طور که مدیر از روی کاغذ می‌خواند: حروفِ کوچک، با خطِ تیره.
+      typeInto(fields[0], "krnd-sjj2-zunr");
+    });
+    await click(buttonOf("تأیید کد پشتیبان"));
+
+    // خطِ تیره و بزرگی/کوچکیِ حرف بی‌اثر است، ولی آنچه به سرور می‌رود باید همان
+    // شکلِ ۱۲ نویسهٔ Base32 باشد که `mfa.recoveryShaped` می‌شناسد.
+    expect(vi.mocked(verifyTotp)).toHaveBeenCalledWith("KRNDSJJ2ZUNR");
+
+    // هنوز نرفته: اولین چیزی که مدیر باید بخواند «چند تا مانده» است.
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(bodyOf()).toContain("۲ کدِ پشتیبان دیگر روی کاغذتان مانده");
+    expect(bodyOf()).toContain("node tools/admin-recovery.js");
+
+    await advance(NAV_FALLBACK_MS * 2);
+    expect(vi.mocked(hardNavigate)).not.toHaveBeenCalled();
+
+    await click(buttonOf("ورود به پنل"));
+    expect(nav.push).toHaveBeenCalledWith("/checkout");
+  });
+
+  it("کدِ پشتیبانِ بی‌شکل به سرور نمی‌رود (سهمیهٔ سقفِ پلهٔ دوم نمی‌سوزد)", async () => {
+    vi.mocked(verifyOtp).mockResolvedValue(
+      otpVerifyPayload({ isAdmin: true }, true),
+    );
+
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+    const otpBoxes = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=text]"));
+    await act(async () => {
+      "12345".split("").forEach((d, i) => typeInto(otpBoxes[i], d));
+    });
+    await flush();
+
+    await click(buttonOf("کد پشتیبان دارم"));
+    const field = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=text]"))[0];
+    await act(async () => {
+      typeInto(field, "123456"); // شکلِ کدِ اپ: ۶ رقم، نه کدِ پشتیبان
+    });
+    await click(buttonOf("تأیید کد پشتیبان"));
+
+    expect(vi.mocked(verifyTotp)).not.toHaveBeenCalled();
+    expect(bodyOf()).toContain("۱۲ نویسه");
+    // و راهِ برگشت باز است: کسی که کدِ پشتیبان را اشتباه فهمیده، باید بتواند
+    // بی‌\u200cآنکه از شماره شروع کند به کدِ اپ برگردد.
+    expect(buttonLabels().some((l) => l.includes("برگشت به کدِ برنامه"))).toBe(true);
   });
 
   it("ورودِ رمزی هم می‌تواند به پلهٔ دوم بماند (سد در ایستگاهِ ورود است، نه یک مسیر)", async () => {
@@ -611,5 +711,75 @@ describe("بعد از ورود، ناوبری هیچ‌وقت معلّق نمی�
 
     await advance(NAV_FALLBACK_MS * 2);
     expect(vi.mocked(hardNavigate)).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================
+// مرحلهٔ «نام» — به شکلِ واقعیِ پاسخِ سرور
+// ============================================================
+// شکایتِ واقعیِ مشتری: «هر بار دوباره نامم را می‌پرسد». ریشه‌اش یک ناهم‌خوانیِ
+// قرارداد بود: فرم نام را از سطحِ بالای پاسخ می‌خواند، یعنی دو فیلدی که سرور
+// هرگز نمی‌فرستد — پس شرط **همیشه** درست می‌شد و مرحلهٔ نام برای هر ورودِ
+// موفق باز می‌ماند، حتی برای کسی که نامش سال‌هاست ثبت شده.
+//
+// نکتهٔ مهمِ این آزمون‌ها *شکلِ پاسخی* است که تزریق می‌شود: `otpVerifyPayload`
+// عیناً همان چیزی است که `publicUser` می‌سازد (نام زیرِ `user`، و هیچ `isNew`).
+// با شکلِ خیالی، خودِ آزمون هم باگ را باور می‌کند و سبز می‌ماند — که دقیقاً
+// همان اتفاقی بود که افتاد.
+describe("مرحلهٔ نام به شکلِ واقعیِ پاسخِ `otp/verify`", () => {
+  /** کدِ پنج‌رقمیِ پیامکی را تایپ می‌کند — همان کاری که مشتری می‌کند */
+  async function typeOtp(code = "12345") {
+    const boxes = Array.from(
+      container.querySelectorAll<HTMLInputElement>("input[type=text]"),
+    );
+    expect(boxes).toHaveLength(5);
+    await act(async () => {
+      code.split("").forEach((d, i) => typeInto(boxes[i], d));
+    });
+    await flush();
+  }
+
+  /** ورودیِ مرحلهٔ نام — نشانهٔ روشنِ اینکه این مرحله باز شده یا نه */
+  function nameInput() {
+    return container.querySelector<HTMLInputElement>(
+      'input[placeholder="نام و نام خانوادگی"]',
+    );
+  }
+
+  it("مشتریِ همیشگی که نامش ذخیره شده، دوباره نامش پرسیده نمی‌شود", async () => {
+    // همان پاسخِ واقعیِ سرور: نام زیرِ `user` و فیلدی به نامِ `isNew` نیست.
+    vi.mocked(verifyOtp).mockResolvedValue(otpVerifyPayload());
+
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+    await typeOtp();
+
+    // مستقیم به مقصد — بدونِ فرمِ نام و بدونِ هیچ ذخیره‌ای
+    expect(nameInput()).toBeNull();
+    expect(bodyOf()).not.toContain("لطفاً نام خود را وارد کنید");
+    expect(vi.mocked(saveProfile)).not.toHaveBeenCalled();
+    expect(nav.push).toHaveBeenCalledWith("/checkout");
+  });
+
+  it("مشتریِ تازه (نامِ خالی زیرِ `user`) مرحلهٔ نام را می‌بیند و نامش ذخیره می‌شود", async () => {
+    vi.mocked(verifyOtp).mockResolvedValue(otpVerifyPayload({ fullName: "" }));
+
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+    await typeOtp();
+
+    const input = nameInput();
+    expect(input).not.toBeNull();
+    expect(nav.push).not.toHaveBeenCalled();
+
+    await act(async () => {
+      typeInto(input as HTMLInputElement, "سارا محمدی");
+    });
+    await submitForm();
+
+    expect(vi.mocked(saveProfile)).toHaveBeenCalledWith("سارا محمدی");
+    expect(nav.push).toHaveBeenCalledWith("/checkout");
   });
 });

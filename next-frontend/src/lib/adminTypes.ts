@@ -589,11 +589,67 @@ export interface AdminServerInfo {
   };
 }
 
+// ============================================================
+// وضعیتِ امنیتی — `security` در /api/admin/system-status
+// ============================================================
+// این بخش تازه است و دلیلش یک حفره‌ی واقعیِ دید بود، نه تکمیلِ تزئینی: اجبارِ
+// عاملِ دوم روی production فقط در **لحظهٔ بوت** خودش را نشان می‌داد
+// (`lib/security-config.js`). یعنی روی سروری که از قبل بالا آمده بود — و در
+// توسعه، که هیچ‌وقت اجباری نیست — پنل می‌توانست ماه‌ها یک‌عاملی کار کند و
+// هیچ‌جا این را نگوید. حالا خودِ پنل می‌گوید.
+//
+// `covered` در برابر `admins` عمداً خام می‌آید تا رابط بتواند بگوید «۱ از ۲»؛
+// ولی *خودِ هشدار* فقط روی `noneCovered` است: پوششِ ناقص هشدار نیست (تصمیمِ
+// مستندش در `lib/mfa.js → coverage`).
+//
+export interface AdminSecondFactorStatus {
+  /** شمارِ شماره‌های متمایزِ `ADMIN_PHONE` */
+  admins: number;
+  /** چند تا از همان‌ها کلیدِ TOTP دارند */
+  covered: number;
+  /** «هیچ مدیری کلید ندارد» — همان حالتی که هشدارِ پایدار برایش است */
+  noneCovered: boolean;
+  /** ورودی‌های ناخوانای `ADMIN_TOTP_SECRETS` — کلیدِ بی‌صدا بی‌اثر */
+  invalidEntries: number;
+  /** کدِ پشتیبان — راهِ برگشت وقتی گوشیِ مدیر گم شود */
+  recovery: AdminRecoveryStatus;
+}
+
+/**
+ * وضعیتِ کدِ پشتیبانِ عاملِ دوم.
+ *
+ * `keyed` عمداً شمارِ مدیرانِ *کلیددار* است، نه همه‌ی مدیرها: فقط آن‌ها به
+ * پلهٔ دوم می‌رسند و فقط آن‌ها می‌توانند قفل شوند. اگر همه را می‌شمردیم،
+ * عدد برای مدیری که اصلاً عاملِ دوم ندارد هم «قابلِ قفل‌شدن» می‌گفت.
+ *
+ * `missing > 0` یک هشدارِ *قطعی* است و نه یک انتخابِ سیاستی: آن مدیر با
+ * گم‌شدنِ گوشی‌اش برای همیشه از پنل بیرون می‌ماند. همین شرط در production
+ * سرور را هم بالا نمی‌آورد (`lib/security-config.js → validateAdminRecovery`).
+ */
+export interface AdminRecoveryStatus {
+  /** شمارِ مدیرانی که کلیدِ TOTP دارند (همان‌ها که ممکن است قفل شوند) */
+  keyed: number;
+  /** چند تا از همان‌ها کدِ پشتیبان دارند */
+  covered: number;
+  /** چند مدیرِ کلیددار کدِ پشتیبان ندارند — همان‌ها که قفل‌شدنی‌اند */
+  missing: number;
+  /** ورودی‌های ناخوانای `ADMIN_RECOVERY_CODES` (مثلاً خطِ کدها جای خطِ هش‌ها) */
+  invalidEntries: number;
+  /** «خودم چند تا دارم» — `null` یعنی برای این شماره کدی تنظیم نشده */
+  mine: { configured: number; used: number; remaining: number } | null;
+}
+
+export interface AdminSecurityStatus {
+  secondFactor: AdminSecondFactorStatus;
+}
+
 export interface AdminSystemStatus {
   server: AdminServerInfo;
   metrics: AdminMetrics;
   health: AdminDbHealth;
   errors: AdminErrorsDigest;
+  /** عاملِ دومِ ورودِ پنل — مبنای هشدارِ پایدارِ همین صفحه */
+  security: AdminSecurityStatus;
   /** تازه‌ترین اول — از همان پوشه‌ای که دکمه‌ی «بکاپ بگیر» می‌نویسد */
   backups: AdminBackupFile[];
   /** رویدادهای پنل — همان شکلِ ActivityEntry داشبورد */
