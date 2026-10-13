@@ -20,7 +20,7 @@
 
 - Node.js `>=22.5`، Express و SQLite داخلی Node — **فقط ۳ وابستگیِ اجرا** (`express`، `express-session`، `dotenv`)
 - **Next.js 15.5** با App Router، React 19، TanStack Query 5، Tailwind v4 — آزمونِ فرانت‌اند با Vitest 5 + jsdom
-- **۱۵۸ تابع** در `db.js` (۳,۱۰۲ خط) — ۲۹ فایل کتابخانه + ۹ مسیر API + ۶ ابزار مدیریتی
+- **۱۵۸ تابع** در `db.js` (۳,۱۰۲ خط) — ۲۹ فایل کتابخانه + ۹ مسیر API + ۷ ابزار مدیریتی
 - پنل ادمین: **۱۳ نما از ۱۳** در Next.js — پنلِ Express حذف شد؛ یک‌منبعِ حقیقت در `next-frontend/src/lib/adminSections.ts`
 - **بازنشستگیِ نام‌های قدیمی**: هر `.html` عصرِ Express روی همان دامنه ۳۰۱ به مسیرِ تمیز می‌رود (نگاشتِ یکتا در `backend/lib/legacy-redirects.js`)، sitemap و کانونیکال‌ها همان مسیرهای تمیز را می‌گویند، و بازگشتِ درگاهِ پرداخت مستقیم به `/order-success` می‌رسد — بدونِ پرشِ اضافه برای مشتریِ پول‌داده
 - **اوراکلِ منجمد**: متنِ ۹ صفحهٔ بازنشسته با کارنامهٔ SHA-256 در `next-frontend/tests/fixtures/legacy-oracle/` و متنِ کاملِ سورسِ عصرِ Express در `next-frontend/tests/fixtures/legacy-src/` نگه داشته شده؛ سنجشِ برابری بدنه را از فایل می‌خواند و کدِ وضعیت را زنده می‌سنجد
