@@ -408,14 +408,13 @@ const REQUIREMENTS = [
     id: 'V6',
     chapter: 'V6',
     title: 'ورودِ ادمین دو عامل دارد: کدِ پیامکی + کدِ زمانیِ TOTP',
-    status: 'verified',
-    evidence: [
-      'backend/lib/totp.js',
-      'backend/lib/mfa.js',
-      'backend/routes/auth.js',
-      'backend/routes/admin.js',
-      'backend/lib/security-config.js',
-    ],
+    status: 'verified',      evidence: [
+        'backend/lib/totp.js',
+        'backend/lib/mfa.js',
+        'backend/routes/auth.js',
+        'backend/routes/admin.js',
+        'backend/lib/security-config.js',
+      ],
     run() {
       const auth = readFile('backend/routes/auth.js');
 
@@ -461,13 +460,78 @@ const REQUIREMENTS = [
       check('در production بدونِ کلیدِ عاملِ دوم، سرور ادمین را بالا نمی‌آورد',
         Boolean(noKey) && /ADMIN_TOTP_SECRETS/.test(noKey.message));
 
-      let covered = null;
+      /* گم‌شدنِ گوشی نباید پنل را قفل کند: کدِ کلیددارِ بدونِ کدِ پشتیبان هم
+         در production سرور را بالا نمی‌آورد — وگرنه وعدِ «دسترسیِ پشتیبان»
+         فقط یک بندِ README می‌شد که با یک .envِ خالی هم نقض می‌شود. */
+      let noRecovery = null;
       try { validateRuntimeConfig({ ...base, adminPhones: ['09121234567'], totpSecretPhones: ['09121234567'] }); }
-      catch (e) { covered = e; }
-      check('با کلیدِ پوشش‌دهندهٔ همان شماره‌ها مانعی نیست', covered === null);
+      catch (e) { noRecovery = e; }
+      check('در production مدیرِ کلیددار بدونِ کدِ پشتیبان بالا نمی‌آید',
+        Boolean(noRecovery) && /ADMIN_RECOVERY_CODES/.test(noRecovery.message));
+      check('پیامِ خطا خودش راهِ رفع را می‌گوید (دستور و نامِ متغیر)',
+        Boolean(noRecovery)
+        && /tools\/admin-recovery\.js/.test(noRecovery.message)
+        && /ADMIN_RECOVERY_CODES/.test(noRecovery.message));
+
+      let covered = null;
+      try {
+        validateRuntimeConfig({
+          ...base,
+          adminPhones: ['09121234567'],
+          totpSecretPhones: ['09121234567'],
+          recoveryCodePhones: ['09121234567'],
+        });
+      } catch (e) { covered = e; }
+      check('با کلید + کدِ پشتیبانِ پوشش‌دهندهٔ همان شماره‌ها مانعی نیست', covered === null);
+
+      /* ---------- ساختارِ کدِ پشتیبان ----------
+         چهار ویژگیِ امنیتی که اگر یکی‌شان برود این سازوکار به یک درِ پشتی
+         تبدیل می‌شود:
+           ۱) در `.env` فقط هش می‌نشیند، نه کدِ خام؛
+           ۲) کد از `randomBytes` می‌آید و آن‌قدر بلند است که هشِ سریع هم کافی
+              باشد (برخلافِ رمزِ آدمیزاد که باید کُند هش شود — پس این‌جا
+              عمداً scrypt *نیست*: هزینهٔ ۲^۶۰ حدس را نمی‌شود با کُندی جبران کرد)؛
+           ۳) مقایسهٔ ثابت‌زمان و روی همهٔ کاندیدها (بی `break`)؛
+           ۴) هر کد یک بار — مصرف در دیتابیس، نه در حافظه (با ری‌استارت پاک نشود). */
+      const mfaSrc = readFile('backend/lib/mfa.js');
+      check('در محیط فقط هشِ کدِ پشتیبان می‌نشیند، نه کدِ خام',
+        /function hashRecoveryCode\(/.test(mfaSrc)
+        && /recoveryEnvLine\(/.test(mfaSrc)
+        // قالبِ `.env.example` هم خالی است: اگر روزی کسی یک کدِ نمونه (شکلِ
+        // XXXX-XXXX-XXXX) داخلش بگذارد، این سنجش قرمز می‌شود.
+        && /^ADMIN_RECOVERY_CODES=\s*$/m.test(readFile('backend/.env.example')));
+      /* کدِ پشتیبان تصادفی و دست‌کم ۵۰ بیت است. همین عدد است که هشِ
+         *سریع* (SHA-256) را اینجا قابلِ قبول می‌کند و یک KDFِ کُند را
+         لازم نمی‌کند — یعنی اگر روزی کسی طولِ کد را به ۴ نویسه کوتاه کند،
+         این سنجش قرمز می‌شود، نه سنجشِ بی‌ربطی در جای دیگر. */
+      const recMeta = /const RECOVERY = \{ groups: (\d+), groupLen: (\d+)/.exec(mfaSrc);
+      const recAlpha = /RECOVERY_ALPHABET = '([A-Z2-7]+)'/.exec(mfaSrc);
+      const recBits = recMeta && recAlpha
+        ? Number(recMeta[1]) * Number(recMeta[2]) * Math.log2(recAlpha[1].length)
+        : 0;
+      check(`کدِ پشتیبان تصادفیِ ${recBits} بیتی است (randomBytes، بسنده برای هشِ سریع)`,
+        /function generateRecoveryCodes[\s\S]{0,300}?crypto\.randomBytes\(/.test(mfaSrc)
+        && recBits >= 50);
+      check('مقایسهٔ کدِ پشتیبان ثابت‌زمان است و همهٔ کاندیدها سنجیده می‌شوند',
+        /timingSafeEqual\(a, candidate\)/.test(mfaSrc)
+        && !/for \(const hash of stored\) \{[\s\S]{0,200}?break;/.test(mfaSrc));
+      check('هر کدِ پشتیبان فقط یک بار پذیرفته می‌شود و مصرفش در دیتابیس ثبت می‌شود',
+        /consumeRecoveryCode\(/.test(readFile('backend/lib/db.js'))
+        && /recovery_code_use/.test(readFile('backend/lib/db.js'))
+        && /consumeRecoveryCode\(/.test(readFile('backend/routes/auth.js')));
+      /* سد، نه پرچم: کدِ پشتیبان روی مسیری می‌پذیرد که پیش از آن `pendingMfa`
+         را می‌خواهد. اگر روزی کسی این را به یک مسیرِ آزاد تبدیل کند (کدِ
+         پشتیبان به‌جای رمز)، همان ورودیِ بی‌پلهٔ اول هم باید این سطر را داشته
+         باشد — پس این لنگر می‌شکند و ما می‌فهمیم. */
+      check('کدِ پشتیبان فقط از پلهٔ دوم راه دارد (نشستِ معلقِ پیش از آن)',
+        /req\.session\.pendingMfa/.test(auth.slice(auth.indexOf("router.post('/totp/verify'"), auth.indexOf("router.post('/totp/verify'") + 3000))
+        && /mfa\.recoveryShaped\(req\.body\?\.code\)/.test(auth));
+      check('ورودیِ دو‌قالبی نیست: ۶ رقمیِ اپ هرگز به مسیرِ کدِ پشتیبان نمی‌رود',
+        /function recoveryShaped[\s\S]{0,300}?RECOVERY_SHAPE_RE\.test/.test(mfaSrc)
+        && !/recoveryShaped[\s\S]{0,200}?\/\^\\d\{6\}\$\//.test(mfaSrc));
 
       let devOk = null;
-      try { validateRuntimeConfig({ isProduction: false, siteUrl: '', adminPhones: ['09121234567'], totpSecretPhones: [] }); }
+      try { validateRuntimeConfig({ isProduction: false, siteUrl: '', adminPhones: ['09121234567'], totpSecretPhones: [], recoveryCodePhones: [] }); }
       catch (e) { devOk = e; }
       check('خارج از production اجباری نیست (توسعه بدونِ کلید کار می‌کند)', devOk === null);
     },

@@ -25,6 +25,7 @@
     "test:anchors": "node tests/guard-anchors.js",
     "test:handoff": "node tests/error-handoff.js",
     "test:secrets": "node tests/secrets.js",
+    "test:recovery": "node tests/recovery-codes.js",
     "owasp": "node tests/owasp-scan.js",
     "test:asvs": "node tests/asvs.js",
     "test:wstg": "node tests/wstg.js",
@@ -35,7 +36,8 @@
     "bench:read": "node bench-read.js",
     "cluster": "CLUSTER_ENABLED=true node server.js",
     "logs:summary": "node tools/log-summary.js",
-    "security:gitleaks": "gitleaks detect --redact --config ../gitleaks.toml --source .."
+    "security:gitleaks": "node tools/gitleaks.js",
+    "security:gitleaks:inspect": "node tools/gitleaks.js --worktree"
   },
   "engines": {
     "node": ">=22.5"

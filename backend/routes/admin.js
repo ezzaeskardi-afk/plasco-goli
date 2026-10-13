@@ -23,7 +23,7 @@ const {
   getCategoriesFull, ensureCategory, adminCreateCategory, adminUpdateCategoryTx, adminDeleteCategory, adminMoveCategoryTx,
   getProductsWithSales, getUserDetail, logAdminAction, getAdminLog,
   getSettings, setSettingsTx, backupNow, getDbHealth, listBackups, checkIntegrity,
-  findOrCreateUser, updateUserName, createManualOrderTx,
+  findOrCreateUser, updateUserName, createManualOrderTx, usedRecoveryCodes,
   getPendingStockAlerts, markStockAlertsNotified,
   crmGetSummary, crmSearchCustomers, crmGetCustomer,
   crmListTags, crmCreateTag, crmDeleteTag, crmSetUserTags,
@@ -38,7 +38,7 @@ const {
 // با importِ مستقیمِ rateLimit، شمارنده در حافظه‌ی هر worker جدا می‌ماند و سقف
 // عملاً N برابر می‌شود.
 const { makeRateLimit: rateLimit, asyncHandler } = require('../lib/middleware');
-const { isAdminPhone, normalizePhone, isValidIranPhone } = require('../lib/phone');
+const { isAdminPhone, normalizePhone, isValidIranPhone, ADMIN_PHONES } = require('../lib/phone');
 const { notifyCustomerOrderStatus, notifyStockAvailable } = require('../lib/sms');
 const { imageSizeFromBuffer } = require('../lib/imagesize');
 const { stripImageMetadata } = require('../lib/image-clean');
@@ -1229,6 +1229,22 @@ router.get('/db-health', (req, res) => {
   res.json({ health, integrity: deep });
 });
 
+/* ---------- «خودم چند کدِ پشتیبان دارم؟» ----------
+   تنها راهِ فهمیدنِ ته‌کشیدنِ کاغذ تا امروز این بود که آخرین کد را مصرف کنی —
+   یعنی خطر را *بعد* از تمام‌شدنِ راه بفهمی. این عدد از دو طرف می‌آید: «چند تا
+   پیکربندی شده» از mfa (خالص) و «چند تا مصرف شده» از دیتابیس.
+   `null` عمدی است و نه `{remaining: 0}`: مدیرِ بی‌کدِ پشتیبان با مدیرِ
+   تمام‌کردهٔ کدها دو وضعیتِ متفاوت‌اند و اگر هر دو یک شکل بدهند، رابط مجبور
+   می‌شود دوباره حدس بزند. */
+function ownRecoveryStatus(req) {
+  const user = stmtUserById.get(Number(req.session?.userId));
+  if (!user) return null;
+  const configured = mfa.recoveryCountFor(user.phone);
+  if (configured === 0) return null;
+  const used = usedRecoveryCodes(user.id).length;
+  return { configured, used, remaining: Math.max(0, configured - used) };
+}
+
 // ---------- وضعیت سیستم (یکپارچه) ----------
 // تمام متریک‌ها، سلامت دیتابیس، لاگ خطاها و آمار سرور در یک درخواست.
 router.get('/system-status', (req, res) => {
@@ -1265,7 +1281,35 @@ router.get('/system-status', (req, res) => {
         externalMb: Math.round(mem.external / 1048576)
       }
     },
-    metrics, health, errors, backups, adminLog
+    metrics, health, errors, backups, adminLog,
+    // ---------- وضعیتِ امنیتی (عاملِ دومِ ورود) ----------
+    // «آیا پنل یک‌عاملی است؟» — همان چیزی که اجبارِ production فقط در لحظهٔ بوت
+    // می‌گفت (`lib/security-config.js`) و پنلِ در حالِ اجرا هیچ‌وقت نشان نمی‌داد.
+    // قاعده در `lib/mfa.js` است تا این نما و نگهبانِ بوت یک چیز بگویند.
+    security: {
+      secondFactor: {
+        ...mfa.coverage(ADMIN_PHONES),
+        // کلیدِ ناخوانا در `ADMIN_TOTP_SECRETS` بی‌صدا بی‌اثر می‌ماند؛ فقط
+        // شمارشش اینجا می‌آید (متنِ ورودی خطِ .env است، نه چیزِ نمایش‌دادنی).
+        invalidEntries: mfa.invalidEntries().length,
+        /* ---------- کدِ پشتیبان ----------
+           این سیگنال جنسِ دیگری از `coverage` دارد و برای همین هشدارش هم
+           متفاوت است: «کلید ندارد» یک *سیاست* است، ولی «کلید دارد و کدِ
+           پشتیبان ندارد» یک قفل‌شدنِ *قطعی* است که همین حالا قابلِ پیشگیری است
+           — مدیر گوشی‌اش را گم می‌کند و درِ پنل برای همیشه بسته می‌ماند.
+           قاعده در `lib/mfa.js → recoveryGap` است و همان یکی اجبارِ
+           production را هم می‌سازد (`lib/security-config.js`)، تا نما و بوت
+           یک چیز بگویند. */
+        recovery: {
+          ...mfa.recoveryGap(ADMIN_PHONES),
+          // ورودیِ ناخوانا این‌جا معنای دقیقی دارد: کسی خطِ *کدها* را جای خطِ
+          // *هش‌ها* در .env گذاشته. بی‌این عدد، مدیر فکر می‌کند کدهایش تنظیم
+          // است و روزِ گم‌شدنِ گوشی می‌فهمد که هیچ‌کدام کار نمی‌کند.
+          invalidEntries: mfa.recoveryInvalidEntries().length,
+          mine: ownRecoveryStatus(req),
+        },
+      },
+    },
   });
 });
 

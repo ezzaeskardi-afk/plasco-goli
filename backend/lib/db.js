@@ -259,6 +259,19 @@ CREATE TABLE IF NOT EXISTS admin_log (
 );
 CREATE INDEX IF NOT EXISTS idx_adminlog_time ON admin_log(created_at DESC);
 
+-- مصرفِ کدِ پشتیبانِ عاملِ دوم (lib/mfa.js): چرا جدولِ جداست و نه
+-- shared_state — مصرف باید **دائمی** باشد. آن انبارک TTL دارد (حالتِ گذرا
+-- بین workerها)، ولی کدِ پشتیبان تاریخِ انقضا ندارد: اگر «مصرف‌شده» فراموش
+-- شود، همان کاغذی که مدیر کنارِ مانیتور گذاشته دوباره کار می‌کند.
+-- کلیدِ اصلی (user_id, code_hash) خودش جلوی مصرفِ دوباره را می‌گیرد و
+-- INSERT OR IGNORE را اتمیک می‌کند (بدونِ read-modify-write جدا).
+CREATE TABLE IF NOT EXISTS recovery_code_use (
+  user_id   INTEGER NOT NULL REFERENCES users(id),
+  code_hash TEXT NOT NULL,
+  used_at   INTEGER NOT NULL,
+  PRIMARY KEY (user_id, code_hash)
+);
+
 -- ایندکس‌های کاتالوگ: فیلتر دسته‌بندی و بازه‌ی قیمت را از «اسکن کل جدول» نجات می‌دهند
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_products_price    ON products(price);
@@ -1099,6 +1112,26 @@ function ensureAdmin(userId) { stmtSetAdmin.run(userId); return stmtUserById.get
 
 const stmtSetStaff = db.prepare('UPDATE users SET is_staff = ? WHERE id = ?');
 function setStaff(userId, on) { stmtSetStaff.run(on ? 1 : 0, userId); return stmtUserById.get(userId); }
+
+// ---------- کدِ پشتیبانِ عاملِ دوم (lib/mfa.js) ----------
+// «تطبیق» در `lib/mfa.js` است (پیکربندی، خالص و بی‌دیتابیس) و «مصرف» این‌جا.
+// چرا جدا: نگهبانِ قاعدهٔ عاملِ دوم، `lib/mfa.js` را در یک پروسهٔ *بی‌دیتابیس*
+// می‌خواند؛ اگر همان فایل در زمانِ بارگذاری دیتابیس را باز می‌کرد، سنجشِ قاعده
+// به دادهی واقعیِ مغازه دست می‌زد.
+//
+// `changes === 1` یعنی همین حالا مصرف شد و `false` یعنی قبلاً مصرف شده بود —
+// دقیقاً همان چیزی که ردِ «استفادهٔ دوباره از یک کدِ کاغذی» لازم دارد.
+const stmtUseRecovery = db.prepare(
+  'INSERT OR IGNORE INTO recovery_code_use (user_id, code_hash, used_at) VALUES (?, ?, ?)');
+function consumeRecoveryCode(userId, codeHash, atMs = Date.now()) {
+  return stmtUseRecovery.run(Number(userId), String(codeHash), Number(atMs)).changes === 1;
+}
+
+const stmtRecoveryUsed = db.prepare(
+  'SELECT code_hash, used_at FROM recovery_code_use WHERE user_id = ? ORDER BY used_at ASC');
+function usedRecoveryCodes(userId) {
+  return stmtRecoveryUsed.all(Number(userId)).map((r) => ({ hash: r.code_hash, usedAt: r.used_at }));
+}
 
 // لیست همه‌ی مشتری‌ها + آمار خرید هرکدام (برای تب مشتری‌های پنل)
 const stmtAllUsers = db.prepare(`
@@ -3067,7 +3100,8 @@ module.exports = {
   reserveStock, releaseStock,
   findOrCreateUser, stmtUserById, updateUserName,
   setUserPassword, getUserByPhone,
-  ensureAdmin, setStaff, getAllOrders, adminSetOrderStatus, getAdminStats,
+  ensureAdmin, setStaff, consumeRecoveryCode, usedRecoveryCodes,
+  getAllOrders, adminSetOrderStatus, getAdminStats,
   getAllUsers, getUserDetail,
   adminUpdateProduct, adminCreateProduct, adminDeleteProductTx,
   // --- افزوده‌های پنل مدیریت ---

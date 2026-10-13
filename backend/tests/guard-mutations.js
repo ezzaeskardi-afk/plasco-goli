@@ -634,6 +634,132 @@ const GUARDS = [
   },
 
   {
+    name: 'second-factor-visible',
+    scope: 'backend',
+    title: 'پنل باید بگوید ورودش یک‌عاملی است (قاعده، سیم، نما، تایپ)',
+    // چرا این نگهبان لنگر می‌خواهد: چهار لایهٔ جدا را به هم گره می‌زند — قاعده در
+    // `lib/mfa.js`، فیلدِ `/api/admin/system-status`، هشدارِ نمای Next، و تایپِ
+    // فرانت. هیچ typecheck و هیچ مجموعهٔ دیگری این چهار را هم‌زمان نمی‌بیند، پس
+    // یک طرف می‌تواند عقب بماند و بقیه سبز بمانند.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/second-factor-visible.js'] },
+    mutations: [
+      {
+        // همان حفره‌ای که این کار برای بستنش ساخته شد: سرور یک‌عاملی بی‌صدا بماند.
+        label: 'قاعده هیچ‌وقت هشدار ندهد (پنلِ یک‌عاملی سرِ جایش بماند)',
+        file: 'backend/lib/mfa.js',
+        find: '    noneCovered: admins.length > 0 && covered.length === 0,',
+        replace: '    noneCovered: false,',
+        expect: /noneCovered روی HTTPِ واقعی روشن است/,
+      },
+      {
+        label: 'مقدارهای پوشش از پاسخِ system-status بیفتند (فیلد بماند، محتوا نه)',
+        file: 'backend/routes/admin.js',
+        find: '        ...mfa.coverage(ADMIN_PHONES),',
+        replace: '        ...{},',
+        expect: /سیم و تایپ یکی/,
+      },
+      {
+        // «تعریف‌شده ولی مونت‌نشده» یک باگِ بی‌صدا است و تنها آزمونِ ساختاری می‌گیردش.
+        label: 'کارتِ هشدار در صفحه مونت نشود (تعریف شده ولی کسی نمی‌بیندش)',
+        file: 'next-frontend/src/components/admin/SystemContent.tsx',
+        find: '      <SecondFactorPanel sf={s.security?.secondFactor} />',
+        replace: '      {/* کارت موقتاً برداشته شد */}',
+        expect: /مونت می‌شود/,
+      },
+      {
+        // پایداری، خودش یک ویژگی است: هشداری که بسته شود، هشدارِ پایدار نیست.
+        label: 'هشدار یک حالتِ محلی برای پنهان‌شدن بگیرد (پایدار نماند)',
+        file: 'next-frontend/src/components/admin/SystemContent.tsx',
+        find: '  const invalid = sf?.invalidEntries ?? 0;',
+        replace: '  const invalid = sf?.invalidEntries ?? 0;\n  const [hidden] = useState(false);\n  void hidden;',
+        expect: /قطع‌شدنی نیست/,
+      },
+      {
+        label: 'یک‌عاملی بودن از بندِ داوری بیفتد (بالای صفحه بگوید «همه‌چیز مرتب است»)',
+        file: 'next-frontend/src/components/admin/SystemContent.tsx',
+        find: '\n    || Boolean(sf?.noneCovered)',
+        replace: '',
+        expect: /پنلِ یک‌عاملی/,
+      },
+      {
+        label: 'کلیدِ `noneCovered` از تایپِ فرانت بیفتد (سیم و تایپ از هم جدا شوند)',
+        file: 'next-frontend/src/lib/adminTypes.ts',
+        find: '  noneCovered: boolean;',
+        replace: '  noneCovered?: boolean;',
+        expect: /سیم و تایپ یکی/,
+      },
+    ],
+  },
+  {
+    name: 'recovery-codes',
+    scope: 'backend',
+    title: 'کدِ پشتیبانِ عاملِ دوم: قاعده، مصرفِ دائمی، اجبارِ production و نما',
+    // چرا این نگهبان لنگر می‌خواهد: چهار لایهٔ جدا را به هم گره می‌زند — قاعده در
+    // `lib/mfa.js`، مصرفِ دائمی در `lib/db.js`، اجبارِ بوت در
+    // `lib/security-config.js`، و نما/تایپ/صفحهٔ ورود در Next. هیچ‌کدام تنها
+    // «کار می‌کند» نیست: قاعده‌ای که مصرف نشود گوشیِ گم‌شده را برمی‌گرداند ولی
+    // کاغذِ پیدا‌شده را هم برمی‌گرداند، و اجبارِ نبوده فقط یک امکانِ اختیاری است
+    // که ممکن است هیچ‌وقت روشن نشود.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/recovery-codes.js'] },
+    mutations: [
+      {
+        // کوتاه‌شدنِ قالب: ۱۲ نویسه شش‌نویسه شود. آن‌وقت کدِ درست شکلش را از دست
+        // می‌دهد و کاربری که کاغذ را درست خوانده، «قالبِ نامعتبر» می‌گیرد.
+        label: 'طولِ کدِ پشتیبان کوتاه شود (قالبِ درست رد شود)',
+        file: 'backend/lib/mfa.js',
+        find: 'const RECOVERY_CODE_LEN = RECOVERY.groups * RECOVERY.groupLen;',
+        replace: 'const RECOVERY_CODE_LEN = 6;',
+        expect: /قالب: ۱۲ نویسهٔ Base32/,
+      },
+      {
+        // حفره‌ای که کلِ خاصیت را بی‌صدا می‌کند: کدِ خام (نه هش) در پیکربندی
+        // بنشیند. مدیر فکر می‌کند تنظیم است، و هر کس env را ببیند وارد می‌شود.
+        label: 'کدِ خام جای هش در پیکربندی بنشیند',
+        file: 'backend/lib/mfa.js',
+        find: "  return crypto.createHash('sha256').update(normalizeRecoveryCode(code)).digest('hex');",
+        replace: '  return String(code);',
+        expect: /خطِ محیط فقط هش دارد/,
+      },
+      {
+        // مصرفِ دائمی نداشته باشد: `INSERT OR REPLACE` یعنی `changes` همیشه ۱
+        // می‌شود و یک کد را می‌شود بی‌نهایت‌بار خرج کرد — تنها آزمونِ زنده
+        // می‌فهمد، چون نیمهٔ ایستا فقط وجودِ عبارت را می‌بیند.
+        label: 'مصرفِ کد دائمی نباشد (همان کاغذ بی‌نهایت بار کار کند)',
+        file: 'backend/lib/db.js',
+        find: 'INSERT OR IGNORE INTO recovery_code_use',
+        replace: 'INSERT OR REPLACE INTO recovery_code_use',
+        expect: /همان کد بارِ دوم رد می‌شود/,
+      },
+      {
+        // اجبارِ production برداشته شود: خاصیت باقی می‌ماند ولی هیچ‌کس مجبور
+        // نیست روشنش کند — همان «امکانِ اختیاری»ی که هیچ‌وقت روشن نمی‌شود.
+        label: 'اجبارِ production برداشته شود (مدیرِ قفل‌شدنی ساخته شود)',
+        file: 'backend/lib/security-config.js',
+        find: 'function validateAdminRecovery({ isProduction, adminsWithKeys, adminsWithRecovery }) {\n  if (!isProduction) return;',
+        replace: 'function validateAdminRecovery({ isProduction, adminsWithKeys, adminsWithRecovery }) {\n  if (true) return;',
+        expect: /مدیری که کلید دارد ولی کدِ پشتیبان ندارد/,
+      },
+      {
+        // نما خاموش شود: قاعده و اجبار سر جایشان می‌مانند ولی پنل هیچ‌وقت به
+        // مدیر نمی‌گوید قفل‌شدنی است (و در توسعه، اجباری هم نیست).
+        label: 'هشدارِ پنل مونت نشود (مدیر نفهمد قفل‌شدنی است)',
+        file: 'next-frontend/src/components/admin/SystemContent.tsx',
+        find: '      {rec && rec.missing > 0 && (',
+        replace: '      {false && (',
+        expect: /هشدارِ قفل‌شدن را نشان می‌دهد/,
+      },
+      {
+        // ورودِ با کاغذ مثل ورودِ معمولی ثبت شود: صاحبِ فروشگاه دیگر نمی‌فهمد
+        // گوشی گم شده یا کاغذِ کدها دستِ کسی افتاده.
+        label: 'ورودِ با کدِ پشتیبان رویدادِ خودش را نگیرد',
+        file: 'backend/routes/auth.js',
+        find: "    logAdminAction(user.id, 'admin_recovery_ok', maskPhone(user.phone),",
+        replace: "    logAdminAction(user.id, 'admin_mfa_ok', maskPhone(user.phone),",
+        expect: /رویدادِ خودش را در دفترِ پنل ثبت می‌کند/,
+      },
+    ],
+  },
+  {
     name: 'guard-anchors',
     scope: 'backend',
     title: 'هیچ آزمون/نگهبانی بی‌لنگرِ جهش نمی‌ماند (هر فایل لنگر یا دلیلِ مستند دارد)',
@@ -683,8 +809,11 @@ const GUARDS = [
         // قفل است و یک الگو نمی‌تواند بی‌صدا فایل‌های تازه را ببلعد.
         label: 'شمارشِ صریحِ یک معافیتِ گروهی با تطبیق‌ها نخواند',
         file: 'backend/tests/guard-anchors.js',
-        find: '    count: 10,',
-        replace: '    count: 11,',
+        // عدد عمداً از خودِ فایل خوانده نمی‌شود: جهش باید نامعتبر بودنِ شمارشِ
+        // صریح را نشان بدهد، و هر بار که یک آزمونِ کامپوننتِ تازه اضافه می‌شود
+        // این لنگر هم یک واحد جلو می‌رود (شمارشِ عمدی، نه الگوی بی‌قید).
+        find: '    count: 11,',
+        replace: '    count: 12,',
         expect: /یکی نیست/,
       },
       {
@@ -1400,7 +1529,7 @@ const GUARDS = [
   {
     name: 'apiContract',
     scope: 'frontend',
-    title: 'قراردادِ API بین دو فرانت: پوششِ پاسخ‌های آدرس و ادغامِ هدرها',
+    title: 'قراردادِ API: پوششِ پاسخ‌ها، نگاشتِ هدرها، و شکلِ پاسخِ ورود (نام زیرِ `user`)',
     // چرا این نگهبان لنگر می‌خواهد: خاستگاهش دو شکایتِ واقعیِ مشتری است — «آدرس
     // ست شده ولی صفحه می‌گوید انتخاب نشده» — و ریشه‌اش قراردادی بود، نه منطقی:
     // بک‌اند `{addresses:[…]}` می‌دهد و کلاینت همان شیءِ پوشش را با تایپِ
@@ -1414,6 +1543,18 @@ const GUARDS = [
         find: 'return data.addresses ?? [];',
         replace: 'return data as unknown as Address[];',
         failedTest: 'getAddresses',
+      },
+      {
+        // همان باگِ واقعیِ کاربر: «هر بار دوباره نامم را می‌پرسد». نامِ مشتری
+        // فقط زیرِ `user` می‌آید؛ خواندنش از سطحِ بالا همیشه `undefined`
+        // می‌دهد، پس شرط برای *هر* ورودِ موفق درست می‌شد. نگهبانِ تازه‌ی همین
+        // فایل باید این جهش را ببیند (نه آزمونِ کامپوننت، که تا امروز همان
+        // شکلِ خیالی را باور کرده بود).
+        label: 'فرمِ ورود نام را از سطحِ بالای پاسخ بخواند (باگ برگردد)',
+        file: 'next-frontend/src/components/LoginForm.tsx',
+        find: 'if (!res.user?.fullName?.trim())',
+        replace: 'if (res.isNew || !res.fullName)',
+        failedTest: 'نام را از',
       },
     ],
   },

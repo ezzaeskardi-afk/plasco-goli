@@ -222,11 +222,22 @@ export interface OtpRequestResponse {
   mode?: string;
 }
 
+/* ---------- قراردادِ پاسخِ ورودِ پیامکی ----------
+   این تایپ پیش از این دو فیلدِ **سطحِ بالا** اعلام می‌کرد که سرور هیچ‌وقت
+   نمی‌فرستد: `fullName: string | null` و `isNew: boolean`. سرور نام را فقط
+   *زیرِ `user`* می‌دهد (`publicUser` در `backend/routes/auth.js`) و فیلدی به
+   نامِ `isNew` در کلِ مسیرِ ورود وجود ندارد.
+
+   همین ناهم‌خوانیِ تایپ با سیم یک باگِ واقعیِ کاربری ساخت: فرمِ ورود
+   `res.isNew || !res.fullName` را می‌سنجید، هر دو `undefined` بودند، پس شرط
+   **همیشه** درست می‌شد و مرحلهٔ «نام» برای *هر* ورودِ موفق باز می‌شد — همان
+   «هر بار دوباره نامم را می‌پرسد»ی که مشتریِ همیشگی دید. نه `tsc` گرفت و نه
+   هیچ آزمونی، چون هر دو طرفِ آزمون همان شکلِ خیالی را باور کرده بودند.
+   درسش همان قراردادِ `apiContract.test.ts` است: شکلِ داده بین دو طرف یک
+   قرارداد است، نه جزئیاتِ پیاده‌سازی — و نگهبانش در همان فایل نشسته. */
 export interface OtpVerifyResponse {
   ok: boolean;
   user: User;
-  fullName: string | null;
-  isNew: boolean;
   /**
    * آیا ورود تا اینجا آمده و منتظرِ کدِ برنامهٔ Authenticator است؟
    * سرور برای شماره‌هایی که کلیدِ عاملِ دوم دارند این را `true` می‌کند و
@@ -252,8 +263,25 @@ export interface PasswordLoginResponse {
 export interface TotpVerifyResponse {
   ok: boolean;
   user: User;
-  reason?: "format" | "mismatch" | "replay" | "secret" | "not-configured";
+  reason?:
+    | "format"
+    | "mismatch"
+    | "replay"
+    | "secret"
+    | "not-configured"
+    /** کدِ پشتیبان: قبلاً مصرف شده بود — کاغذِ کدها کهنه است یا کسی زده است. */
+    | "used";
   remaining?: number;
+  /**
+   * با کدام عامل تمام شد. `recovery` یعنی گوشیِ مدیر دمِ دست نبوده — یا کاغذِ
+   * کدها به دستِ کسی افتاده. رابط این را جدا نشان می‌دهد، چون «ورودِ موفق»
+   * در این دو حالت یک خبرِ یکسان نیست (سرور هم رویدادِ جدا ثبت می‌کند).
+   */
+  method?: "totp" | "recovery";
+  /** فقط وقتی `method === "recovery"` می‌آید: چند کدِ مصرف‌نشده مانده. */
+  recoveryRemaining?: number;
+  /** جملهٔ فارسیِ همان عدد، آماده برای نمایش (ارقامِ فارسی). */
+  recoveryMessage?: string;
 }
 
 export interface User {

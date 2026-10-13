@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -129,14 +130,19 @@ describe("قراردادِ آدرس‌ها و سفارش بین سرور و فر
     // می‌خواند؛ داخلِ JSON بودنش یعنی «کلید یکتای سفارش معتبر نیست» و همان
     // ۴۰۰ی که کلِ ثبتِ سفارش در نسخهٔ Next را می‌بست.
     const calls = stubFetch({ orderId: 1, paymentUrl: null });
-    await createOrder({ addressId: 3, idempotencyKey: "abcdef1234567890" });
+    // کلیدِ یکتا در زمانِ اجرا ساخته می‌شود، نه به‌شکلِ یک رشتهٔ ثابت. چرا:
+    // یک رشتهٔ هگزمانندِ ثابت در سورس، اسکنرِ راز را بی‌جا قرمز می‌کند.
+    // رفتار عوض نمی‌شود — برای این سنجش همین کافی است که یک مقدارِ یکتا،
+    // دست‌نخورده، در هدر برود و در بدنه نیاید.
+    const idempotencyKey = randomUUID();
+    await createOrder({ addressId: 3, idempotencyKey });
 
     expect(calls).toHaveLength(1);
     const [url, init] = calls[0];
     expect(url).toContain("/api/orders");
     const headers = init.headers as Record<string, string>;
-    expect(headers["Idempotency-Key"]).toBe("abcdef1234567890");
-    expect(String(init.body)).not.toContain("abcdef1234567890");
+    expect(headers["Idempotency-Key"]).toBe(idempotencyKey);
+    expect(String(init.body)).not.toContain(idempotencyKey);
     expect(JSON.parse(String(init.body))).toEqual({ addressId: 3 });
   });
 });
@@ -153,6 +159,116 @@ describe("قراردادِ آدرس‌ها و سفارش بین سرور و فر
 //
 // حالا همان قرارداد روی کلاینتِ زنده سنجیده می‌شود: `api.ts` باید هدرهای
 // پیش‌فرض را با هدرهای فراخوان *ادغام* کند، نه جایگزین.
+// ============================================================
+// قراردادِ پاسخِ ورودِ پیامکی — نام زیرِ `user` می‌آید، نه در سطحِ بالا
+// ============================================================
+// سومین باگِ همان جنس، و این یکی هزینه‌اش را مشتری داد: «همیشه دوباره نامم را
+// می‌پرسد». تایپِ `OtpVerifyResponse` دو فیلدِ سطحِ بالا اعلام می‌کرد که سرور
+// هیچ‌وقت نمی‌فرستد (`fullName` و `isNew`) و فرمِ ورود هم همان‌ها را می‌خواند:
+// هر دو `undefined`، پس شرط **همیشه** درست می‌شد و مرحلهٔ «نام» برای هر ورودِ
+// موفق باز می‌ماند.
+//
+// چرا هیچ نگهبانی نمی‌گرفتش: آزمونِ کامپوننت هم همان شکلِ خیالی را تزریق
+// می‌کرد، پس هر دو طرفِ سنجش یک چیزِ غلط را باور کرده بودند — همان «سبزِ
+// بی‌معنی»ی که این پروژه چند بار خورده است. راهِ بستنش همین‌جاست: شکلِ سیم از
+// **سورسِ سرور** خوانده می‌شود (نه از تایپِ خودمان) و با تایپ و با اوراکلِ
+// Express مقایسه می‌شود. افزودن/برداشتنِ یک فیلد در هر سمت این آزمون را قرمز
+// می‌کند، و اگر کسی دوباره در فرم نام را از سطحِ بالا بخواند، همان‌جا می‌افتد.
+const ROOT_DIR = path.resolve(NEXT_DIR, "..");
+const BACKEND_AUTH = path.join(ROOT_DIR, "backend", "routes", "auth.js");
+const LEGACY_LOGIN = path.join(
+  NEXT_DIR,
+  "tests",
+  "fixtures",
+  "legacy-src",
+  "js",
+  "login.js",
+);
+const TYPES_SRC = path.join(NEXT_DIR, "src", "lib", "types.ts");
+const LOGIN_FORM = path.join(NEXT_DIR, "src", "components", "LoginForm.tsx");
+
+/**
+ * کامنت‌ها را از سورس برمی‌دارد.
+ *
+ * اجباری است، نه سلیقه: همین تایپ یک کامنتِ توضیحی دارد که خودش می‌گوید
+ * `fullName` و `isNew` فیلدهای سطحِ بالا بودند — اگر کامنت را بخوانیم، دقیقاً
+ * همان دو کلیدی را «کشف» می‌کنیم که نگهبان دنبال نبودنشان است. (این مخزن
+ * یک‌بار هم باورکردنِ یک نام از داخل کامنت را به‌عنوانِ شکستِ نگهبان ثبت کرده.)
+ * `//` وقتی پیش از خودش `:` دارد (مثلِ `https://`) دست‌نخورده می‌ماند تا
+ * رشته‌های حاوی نشانی، کدِ بعدِ خودشان را نبلعند.
+ */
+function codeOnly(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, "$1");
+}
+
+/** بدنهٔ آکولادیِ بعد از یک نشانه (تابع یا interface) را برمی‌گرداند. */
+function blockAfter(src: string, marker: string): string {
+  const at = src.indexOf(marker);
+  if (at < 0) throw new Error(`«${marker}» در سورس پیدا نشد`);
+  const open = src.indexOf("{", at);
+  if (open < 0) throw new Error(`آکولادِ «${marker}» پیدا نشد`);
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}") {
+      depth--;
+      if (depth === 0) return src.slice(open + 1, i);
+    }
+  }
+  throw new Error(`بدنهٔ «${marker}» بسته نشد`);
+}
+
+/** کلیدهای یک شیء/واجههٔ متنِ سورس، مرتب‌شده و یکتا. */
+function fieldNames(body: string): string[] {
+  const keys = [...body.matchAll(/([A-Za-z_$][\w$]*)\s*\??\s*:/g)].map((m) => m[1]);
+  return [...new Set(keys)].sort();
+}
+
+const AUTH_SRC = codeOnly(fs.readFileSync(BACKEND_AUTH, "utf8"));
+const TYPES_CODE = codeOnly(fs.readFileSync(TYPES_SRC, "utf8"));
+const LOGIN_FORM_CODE = codeOnly(fs.readFileSync(LOGIN_FORM, "utf8"));
+const LEGACY_CODE = codeOnly(fs.readFileSync(LEGACY_LOGIN, "utf8"));
+
+/** همان چیزی که سرور در پاسخِ کاربرِ عمومی می‌فرستد (`publicUser`). */
+const WIRE_USER_FIELDS = fieldNames(blockAfter(AUTH_SRC, "function publicUser(u)"));
+
+/** فیلدهای سطحِ بالای پاسخِ `POST /auth/otp/verify`. */
+const OTP_RESPONSE_FIELDS = fieldNames(
+  blockAfter(TYPES_CODE, "interface OtpVerifyResponse"),
+);
+
+describe("قراردادِ پاسخِ `otp/verify`: نام زیرِ `user` است، نه در سطحِ بالا", () => {
+  it("فیلدهای `User` در کلاینت با `publicUser` سرور یکی است (سورس در برابر سورس)", () => {
+    const userFields = fieldNames(blockAfter(TYPES_CODE, "interface User "));
+    // کفِ استخراج: اگر نگهبان روزی خالی شود، آزمون سبزِ بی‌معنی نشود.
+    expect(WIRE_USER_FIELDS).toContain("fullName");
+    expect(WIRE_USER_FIELDS).toContain("phone");
+    expect(userFields).toEqual(WIRE_USER_FIELDS);
+  });
+
+  it("پاسخِ `otp/verify` هیچ فیلدِ نامی در سطحِ بالا ندارد (`ok`، `user`، `mfaRequired`)", () => {
+    expect(OTP_RESPONSE_FIELDS).toEqual(["mfaRequired", "ok", "user"]);
+    expect(OTP_RESPONSE_FIELDS).not.toContain("fullName");
+    expect(OTP_RESPONSE_FIELDS).not.toContain("isNew");
+    // و خودِ سرور هم واقعاً همین را می‌فرستد: نام داخلِ `publicUser` می‌نشیند.
+    expect(AUTH_SRC).toMatch(
+      /res\.json\(\{\s*ok:\s*true,\s*user:\s*publicUser\(user\),\s*mfaRequired\s*\}\)/,
+    );
+  });
+
+  it("فرمِ ورودِ Next نام را از `user` می‌خواند — مثلِ اوراکلِ Express", () => {
+    // سمتِ Next: تصمیمِ مرحلهٔ نام از همان‌جایی می‌آید که سرور نام می‌دهد.
+    expect(LOGIN_FORM_CODE).toContain("if (!res.user?.fullName?.trim())");
+    // و هیچ جای این کامپوننت فیلدِ سطحِ بالا خوانده نمی‌شود. اگر روزی کسی
+    // باگ را برگرداند، همین دو خط می‌افتند.
+    expect(LOGIN_FORM_CODE).not.toMatch(/res\.(?:isNew|fullName)\b/);
+    // سمتِ Express (اوراکلِ منجمد): همان قاعده، تا پورت به آن طرف واگرا نشود.
+    expect(LEGACY_CODE).toMatch(/if\s*\(\s*!user\.fullName\s*\)/);
+  });
+});
+
 describe("قراردادِ ادغامِ هدرها در کلاینتِ Next (`src/lib/api.ts`)", () => {
   it("هدرهای فراخوان روی پیش‌فرض‌ها سوار می‌شوند (نه جایگزین)", () => {
     const src = fs.readFileSync(

@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { promisify } = require('util');
-const { findOrCreateUser, stmtUserById, updateUserName, ensureAdmin, setUserPassword, getUserByPhone, otp, logAdminAction } = require('../lib/db');
+const { findOrCreateUser, stmtUserById, updateUserName, ensureAdmin, setUserPassword, getUserByPhone, otp, logAdminAction, consumeRecoveryCode, usedRecoveryCodes } = require('../lib/db');
 // makeRateLimit با نامِ rateLimit — سقف‌ها در حالت cluster مشترک می‌مانند.
 // این فایل حساس‌ترین سقف‌ها را دارد (پیامک، ورود با رمز)، پس اشتراک واجب است.
 const { asyncHandler, makeRateLimit: rateLimit, validate, V } = require('../lib/middleware');
@@ -278,6 +278,40 @@ router.post('/otp/verify', otpVerifyLimiter, validate({
    سقفِ نرخ جدا از سقفِ کدِ پیامکی: این دو حملهٔ متفاوت‌اند (یکی حدس‌زدنِ
    کدِ پیامک است و آن یکی حدس‌زدنِ کدِ ۶ رقمیِ اپ) و سهمیه‌ی یکی نباید
    دیگری را بسوزاند یا بپوشاند. */
+/* ---------- کدِ پشتیبان: چرا «تطبیق» و «مصرف» دو جا هستند ----------
+   تطبیق در `lib/mfa.js` است (پیکربندی، خالص، بی‌دیتابیس) و مصرف این‌جا.
+   دلیلش فقط تمیزکاری نیست: نگهبانِ عاملِ دوم، `lib/mfa.js` را در یک پروسهٔ
+   *بی‌دیتابیس* می‌خواند تا سنجشِ قاعده به داده‌ی واقعیِ مغازه دست نزند؛ اگر
+   همان فایل دیتابیس را باز می‌کرد، آن مرز می‌شکست.
+
+   `remaining` هم این‌جا حساب می‌شود چون به هر دو طرف نیاز دارد: «چند کد
+   پیکربندی شده» از mfa و «چند تا مصرف شده» از دیتابیس. عددِ باقی‌مانده به
+   کاربر گفته می‌شود تا وقتی کاغذش ته می‌کشد از قبل بداند، نه سرِ قفل‌شدن. */
+function consumeRecovery({ userId, phone, code }) {
+  const match = mfa.matchRecoveryCode(phone, code);
+  if (!match.ok) return match;
+  // اگر همین حالا مصرف نشد، یعنی *قبلاً* مصرف شده بود.
+  if (!consumeRecoveryCode(userId, match.hash)) return { ok: false, reason: 'used' };
+  // نامِ `recoveryLeft` و نه `remaining`: نگهبانِ `tests/otp-attempt-cap.js`
+  // الگویِ شمارشِ باقی‌ماندهٔ کدِ پیامکی را در کلِ این فایل **یکتا** فرض می‌کند
+  // (تا بفهمد «چند تلاش مانده» از کدام عدد حساب می‌شود) — و آن الگو متنِ
+  // داخلِ کامنت را هم می‌بیند، پس همین توضیح هم اگر آن انتساب را عیناً نقل
+  // کند نگهبان را به دو انطباق می‌رساند و بی‌دلیل قرمز می‌شود.
+  // عددِ این‌جا مربوط به کدهای پشتیبان است، پس نامش هم جدا می‌شود.
+  const recoveryLeft = Math.max(0, mfa.recoveryCountFor(phone) - usedRecoveryCodes(userId).length);
+  return { ok: true, recoveryLeft };
+}
+
+/* پیامِ خطای هر حالت، تفکیک‌شده. «کدِ پشتیبان اشتباه است» برای مدیری که
+   کد را از روی کاغذ درست خوانده و فقط شکلش را غلط تایپ کرده، بی‌فایده است؛
+   و «برای این شماره تنظیم نشده» جنسِ دیگری از خطاست (پیکربندی، نه تایپ). */
+const RECOVERY_ERROR = {
+  format: 'کدِ پشتیبان ۱۲ نویسه است و شکلِ XXXX-XXXX-XXXX دارد',
+  'not-configured': 'برای این شماره کدِ پشتیبان تنظیم نشده؛ کدِ برنامهٔ Authenticator را وارد کنید',
+  used: 'این کدِ پشتیبان قبلاً مصرف شده؛ کدِ بعدی روی کاغذتان را وارد کنید',
+  mismatch: 'این کدِ پشتیبان شناخته نشد؛ درست بخوانید یا کدِ برنامه را وارد کنید',
+};
+
 const totpVerifyLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: Number(process.env.TOTP_LOGIN_LIMIT) || 30,
@@ -325,7 +359,16 @@ router.post('/totp/verify', totpVerifyLimiter, asyncHandler(async (req, res) => 
     return res.status(429).json({ error: 'تعداد تلاش زیاد بود؛ از ابتدا وارد شوید' });
   }
 
-  const result = mfa.verifyCode({ userId: user.id, phone: user.phone, code: req.body?.code });
+  /* ---------- کدام عامل؟ ----------
+     قالب خودش می‌گوید: کدِ اپ دقیقاً ۶ رقم است، کدِ پشتیبان ۱۲ نویسهٔ Base32.
+     این تفکیک عمدی است و نه یک سلیقه: یک کدِ ۶ رقمی هرگز به مسیرِ کدِ پشتیبان
+     نمی‌رود و برعکس، پس هیچ ورودی‌ای دو تفسیر ندارد. اگر هر دو را به یک تابع
+     می‌دادیم، دامنهٔ مقایسه در هر ورود پهن‌تر می‌شد (سنجیدنِ ۶ رقم در برابر
+     ۸ هشِ ۶۰ بیتی و ۳ کدِ زندهٔ TOTP هم‌زمان) بی‌آنکه چیزی بهتر شود. */
+  const viaRecovery = mfa.recoveryShaped(req.body?.code);
+  const result = viaRecovery
+    ? consumeRecovery({ userId: user.id, phone: user.phone, code: req.body?.code })
+    : mfa.verifyCode({ userId: user.id, phone: user.phone, code: req.body?.code });
   if (!result.ok) {
     pending.mfaTried = mfaTry;
     // کدِ تکراری جدا گفته می‌شود: پیام «کدتی غلط است» برای کسی که کدِ
@@ -339,9 +382,10 @@ router.post('/totp/verify', totpVerifyLimiter, asyncHandler(async (req, res) => 
     logAdminAction(user.id, 'admin_mfa_failed', maskPhone(user.phone), `${clientFingerprint(req)} — ${result.reason}`);
     log.warn('Failed admin second factor', { userId: user.id, reason: result.reason, ip: req.ip });
     return res.status(400).json({
-      error: result.reason === 'replay'
-        ? 'این کد قبلاً استفاده شده؛ کدِ تازهٔ برنامه را وارد کنید'
-        : `کدِ برنامه اشتباه است؛ ${faDigits(mfaLeft)} تلاش دیگر مانده`,
+      error: RECOVERY_ERROR[result.reason]
+        || (result.reason === 'replay'
+          ? 'این کد قبلاً استفاده شده؛ کدِ تازهٔ برنامه را وارد کنید'
+          : `کدِ برنامه اشتباه است؛ ${faDigits(mfaLeft)} تلاش دیگر مانده`),
       reason: result.reason,
       remaining: mfaLeft
     });
@@ -352,8 +396,29 @@ router.post('/totp/verify', totpVerifyLimiter, asyncHandler(async (req, res) => 
   req.session.isAdmin = Boolean(user.is_admin);
   req.session.mfaAt = Date.now();
   delete req.session.pendingMfa;
+  /* ---------- کدِ پشتیبان، رویدادِ خودش را دارد ----------
+     این یکی «کدِ دومِ درست» نیست، جنسِ دیگری از خبر است: یعنی گوشیِ مدیر در
+     دستش نیست (گم شده / عوض شده / اپ پاک شده). گاهی هم بدترین حالت است — کاغذِ
+     کدها به دستِ کسی افتاده که کدِ پیامکیِ شماره را هم گرفته. مدیر باید این
+     سطر را در دفترِ پنل ببیند، پس هم رویدادِ پنل می‌نشیند و هم در لاگ می‌رود. */
+  if (viaRecovery) {
+    const left = Math.max(0, Number(result.recoveryLeft) || 0);
+    logAdminAction(user.id, 'admin_recovery_ok', maskPhone(user.phone),
+      `${clientFingerprint(req)} — ${left} کدِ پشتیبان باقی`);
+    log.warn('Admin signed in with a recovery code', { userId: user.id, remaining: left, ip: req.ip });
+    return res.json({
+      ok: true,
+      user: publicUser(user),
+      method: 'recovery',
+      // عددِ فارسی در جمله، لاتین در فیلد — همان قرارِ بقیهٔ پیام‌های ورود.
+      recoveryRemaining: left,
+      recoveryMessage: left === 0
+        ? 'این آخرین کدِ پشتیبان بود؛ همین امروز کدهای تازه بسازید'
+        : `${faDigits(left)} کدِ پشتیبان دیگر روی کاغذتان مانده`
+    });
+  }
   logAdminAction(user.id, 'admin_mfa_ok', maskPhone(user.phone), clientFingerprint(req));
-  res.json({ ok: true, user: publicUser(user) });
+  res.json({ ok: true, user: publicUser(user), method: 'totp' });
 }));
 
 // شکل عمومی و امن اطلاعات کاربر (بدون هش رمز و فیلدهای داخلی)
