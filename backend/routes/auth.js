@@ -10,6 +10,7 @@ const { normalizeDigits, normalizePhone, isValidIranPhone, isAdminPhone } = requ
 const { lockState, registerFail, registerSuccess, waitText } = require('../lib/login-guard');
 const { destroyOtherSessions, countUserSessions } = require('../lib/session-store');
 const { makeSharedStore } = require('../lib/shared-state');
+const mfa = require('../lib/mfa');
 const log = require('../lib/logger');
 
 const router = express.Router();
@@ -78,6 +79,14 @@ async function verifyPassword(password, stored) {
 const OTP_TTL_MS = 2 * 60 * 1000;   // اعتبار کد
 const RESEND_COOLDOWN_MS = 30 * 1000; // حداقل فاصله بین دو پیامک برای یک شماره
 const MAX_ATTEMPTS = 5;              // حداکثر تلاش برای یک کد
+// عاملِ دوم سه عددِ تازه دارد. جدا نگه داشته شده‌اند چون چرخهٔ عمرشان متفاوت
+// است: آن‌ها به *کدِ پیامکی* ربطی ندارند و نباید با عوض‌شدنِ سقفِ کدِ پیامکی
+// به‌صورتِ جانبی جابه‌جا شوند.
+const MAX_MFA_ATTEMPTS = 5;          // حداکثر تلاش برای کدِ عاملِ دوم
+// عمرِ حالتِ «نیمه‌واردشده». چرا اینجا هم مهلت لازم است: بدونِ انقضا، نشستی
+// که یک بار کدِ پیامکی را درست زد، می‌توانست هفته‌ها نیمه‌باز بماند و منتظرِ
+// حدس‌زدنِ کدِ دوم باشد — یعنی سقفِ پنج‌تالاش به یک پنجرهٔ بی‌پایان پهن شود.
+const MFA_PENDING_TTL_MS = 5 * 60 * 1000;
 const MAX_SMS_PER_PHONE_PER_DAY = 10;
 // قابل‌تنظیم با env فقط برای محیط تست؛ مقدار واقعی همان ۳۰ است
 const MAX_SMS_PER_IP_PER_DAY = Number(process.env.MAX_SMS_PER_IP_PER_DAY) || 30;
@@ -254,7 +263,96 @@ router.post('/otp/verify', otpVerifyLimiter, validate({
 
   otp.del.run(phone);
 
-  const user = await establishSession(req, phone);
+  const { user, mfaRequired } = await establishSession(req, phone);
+  res.json({ ok: true, user: publicUser(user), mfaRequired });
+}));
+
+/* ---------------- عاملِ دوم (TOTP) ----------------
+   این مسیر تنها راهِ تمام‌کردنِ ورودِ مدیری است که کلیدِ دوم دارد. تا وقتی
+   اینجا کدِ درست نرسد، `req.session.userId` ست **نمی‌شود** — و همین یک سطر
+   است که سد را واقعی می‌کند: تمامِ دروازه‌های پنل (`requireAdmin`،
+   `requireStaff`) اول به `userId` نگاه می‌کنند، پس نشستِ نیمه‌واردشده هیچ
+   مسیرِ محافظت‌شده‌ای را باز نمی‌کند، حتی اگر کلاینت زرنگ باشد و مستقیم
+   `/api/admin/*` را صدا بزند.
+
+   سقفِ نرخ جدا از سقفِ کدِ پیامکی: این دو حملهٔ متفاوت‌اند (یکی حدس‌زدنِ
+   کدِ پیامک است و آن یکی حدس‌زدنِ کدِ ۶ رقمیِ اپ) و سهمیه‌ی یکی نباید
+   دیگری را بسوزاند یا بپوشاند. */
+const totpVerifyLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: Number(process.env.TOTP_LOGIN_LIMIT) || 30,
+  skipSuccess: true,
+  message: 'تلاش‌های زیاد برای کدِ دوم؛ چند دقیقه بعد دوباره تلاش کنید'
+});
+
+router.post('/totp/verify', totpVerifyLimiter, asyncHandler(async (req, res) => {
+  const pending = req.session.pendingMfa;
+  // بدونِ حالتِ معلق، این مسیر هیچ کاری نمی‌کند — نه با کدِ درست و نه غلط.
+  // دلیلش: مسیرِ عاملِ دوم نباید خودش یک درِ ورودِ مستقل باشد؛ فقط *پلهٔ
+  // دومِ* ورودی است که با پیامک شروع شده.
+  if (!pending) {
+    return res.status(401).json({ error: 'برای این کار ابتدا با کد پیامکی وارد شوید' });
+  }
+  if (Date.now() - pending.at > MFA_PENDING_TTL_MS) {
+    req.session.destroy(() => {});
+    return res.status(401).json({ error: 'زمانِ وارد کردنِ کدِ دوم تمام شد؛ از ابتدا وارد شوید' });
+  }
+
+  const user = stmtUserById.get(pending.userId);
+  if (!user) {
+    req.session.destroy(() => {});
+    return res.status(401).json({ error: 'حساب پیدا نشد؛ از ابتدا وارد شوید' });
+  }
+
+  // شمارش قبل از مقایسه — همان قرارِ مسیرِ کدِ پیامکی، و همین‌جا در نشست است
+  // نه در دیتابیس: حالتِ معلقِ یک ورودِ نیمه‌تمام چیزی نیست که ارزشِ نوشتنِ
+  // دائمی داشته باشد، و با انقضای نشست خودش می‌رود.
+  //
+  // نامِ `mfaTry` و نه واژهٔ شمارندهٔ سقفِ کدِ پیامکی: نگهبانِ
+  // `tests/otp-attempt-cap.js` تمامِ auth.js را می‌گردد و هر شمارندهٔ
+  // ناشناخته‌ای را «شمارندهٔ دومِ *آن* سقف» می‌داند — که درست است، چون آن سقف
+  // باید فقط از دیتابیس بیاید و با ری‌استارت پاک نشود. شمارندهٔ این‌جا مربوط
+  // به چیزِ دیگری است (پلهٔ دوم، عمرش به همان نشست گره خورده) پس هم نامش و
+  // هم محلش جداست تا آن نگهبان مجبور نشود استثنا بگیرد.
+  const mfaTry = pending.mfaTried + 1;
+  if (mfaTry > MAX_MFA_ATTEMPTS) {
+    req.session.destroy(() => {});
+    // رویدادِ قرمز — «کسی پنج بار پشتِ سرِ هم کدِ دوم را غلط زد» چیزِ کم‌اهمیتی
+    // نیست: یا مدیر اپش را عوض کرده، یا کسی کدِ پیامکی را گرفته و دارد سرِ
+    // مانعِ دوم می‌شکند. هر دو را باید صاحبِ فروشگاه ببیند.
+    logAdminAction(user.id, 'admin_mfa_burned', maskPhone(user.phone), clientFingerprint(req));
+    log.warn('Admin second factor burned after too many tries', { userId: user.id, ip: req.ip });
+    return res.status(429).json({ error: 'تعداد تلاش زیاد بود؛ از ابتدا وارد شوید' });
+  }
+
+  const result = mfa.verifyCode({ userId: user.id, phone: user.phone, code: req.body?.code });
+  if (!result.ok) {
+    pending.mfaTried = mfaTry;
+    // کدِ تکراری جدا گفته می‌شود: پیام «کدتی غلط است» برای کسی که کدِ
+    // درست را دوباره زده گمراه‌کننده است و او را به حدس‌زدنِ بی‌فایده می‌کشاند.
+    // نامِ `mfaLeft` و نه نامِ متعارفِ «عددِ باقی‌مانده»: نگهبانِ
+    // otp-attempt-cap الگوی عددِ باقی‌مانده را در کلِ auth.js یکتا فرض می‌کند
+    // (تا بفهمد «چند تلاش مانده» از کدام عدد حساب می‌شود). عددِ همین‌جا
+    // مربوط به پلهٔ دوم است، پس نامش هم جدا می‌شود؛ فیلدِ پاسخ همچنان
+    // `remaining` می‌ماند چون فرانت‌اند همان را می‌خواند.
+    const mfaLeft = Math.max(0, MAX_MFA_ATTEMPTS - mfaTry);
+    logAdminAction(user.id, 'admin_mfa_failed', maskPhone(user.phone), `${clientFingerprint(req)} — ${result.reason}`);
+    log.warn('Failed admin second factor', { userId: user.id, reason: result.reason, ip: req.ip });
+    return res.status(400).json({
+      error: result.reason === 'replay'
+        ? 'این کد قبلاً استفاده شده؛ کدِ تازهٔ برنامه را وارد کنید'
+        : `کدِ برنامه اشتباه است؛ ${faDigits(mfaLeft)} تلاش دیگر مانده`,
+      reason: result.reason,
+      remaining: mfaLeft
+    });
+  }
+
+  // پلهٔ آخر: هویتِ کاربرِ واردشده می‌نشیند و حالتِ معلق پاک می‌شود.
+  req.session.userId = user.id;
+  req.session.isAdmin = Boolean(user.is_admin);
+  req.session.mfaAt = Date.now();
+  delete req.session.pendingMfa;
+  logAdminAction(user.id, 'admin_mfa_ok', maskPhone(user.phone), clientFingerprint(req));
   res.json({ ok: true, user: publicUser(user) });
 }));
 
@@ -266,7 +364,12 @@ function publicUser(u) {
   };
 }
 
-// ورود را نهایی می‌کند: ساخت/یافتن کاربر، ارتقای ادمین در صورت لزوم، بازسازی امن سشن
+/* ورود را (یا تا پای عاملِ دوم پیش می‌برد) می‌کند: ساخت/یافتن کاربر، ارتقای
+   ادمین در صورت لزوم، بازسازی امن سشن.
+
+   خروجی همیشه `{ user, mfaRequired }` است. تا امروز فقط `user` برمی‌گشت و
+   هر دو مسیرِ ورود (پیامک و رمز) همان را جواب می‌دادند؛ حالا هر دو مسیر باید
+   بدانند که «ورود تمام شد» با «ورود تا نیمه رفت» یکی نیست. */
 async function establishSession(req, phone) {
   let user = findOrCreateUser(phone);
 
@@ -281,10 +384,26 @@ async function establishSession(req, phone) {
   await new Promise((resolve, reject) => {
     req.session.regenerate(err => err ? reject(err) : resolve());
   });
+  // سبد خرید در هر دو حالت برمی‌گردد: مشتری‌ای که وسطِ خرید گیرِ کدِ دوم
+  // می‌افتد نباید سبدش را از دست بدهد.
+  req.session.cart = cart;
+
+  /* ---------- تصمیمِ عاملِ دوم ----------
+     این تصمیم بعد از بازسازیِ نشست گرفته می‌شود تا حالتِ معلق روی همان
+     شناسهٔ تازه بنشیند و محافظتِ fixation هم برای مسیرِ دو‌عاملی پوشش بماند.
+
+     نکتهٔ اصلی: در حالتِ معلق `userId` ست **نمی‌شود**. این عمدی است و تمامِ
+     امنیت همین‌جاست — اگر هویت را می‌نشاندیم و فقط یک پرچم «منتظرِ کد»
+     می‌گذاشتیم، هر مسیری که آن پرچم را نبیند (یا فراموش کند ببیند) با یک
+     کدِ پیامکی باز می‌شد و سد به یک قراردادِ نانوشته تبدیل می‌شد. */
+  if (mfa.requiredFor(user)) {
+    req.session.pendingMfa = { userId: user.id, phone: user.phone, at: Date.now(), mfaTried: 0 };
+    return { user, mfaRequired: true };
+  }
+
   req.session.userId = user.id;
   req.session.isAdmin = Boolean(user.is_admin);
-  req.session.cart = cart;
-  return user;
+  return { user, mfaRequired: false };
 }
 
 // ---------- ورود با رمز عبور ----------
@@ -339,11 +458,15 @@ router.post('/password/login', passwordLoginLimiter, asyncHandler(async (req, re
   }
 
   registerSuccess(phone);
-  const fresh = await establishSession(req, phone);
-  if (fresh.is_admin || fresh.is_staff) {
+  const { user: fresh, mfaRequired } = await establishSession(req, phone);
+  // رویدادِ «ورودِ موفق» تنها وقتی ثبت می‌شود که ورود *تمام* شده باشد. با
+  // ورودِ نیمه‌تمام (منتظرِ کدِ دوم) هنوز کسی وارد نشده؛ ثبتِ login_ok آنجا
+  // یک رویدادِ دروغ می‌ساخت و اگر کدِ دوم هیچ‌وقت نمی‌آمد، دفترِ پنل می‌گفت
+  // «ورودِ موفق» در حالی که نشستی ساخته نشده بود.
+  if (!mfaRequired && (fresh.is_admin || fresh.is_staff)) {
     logAdminAction(fresh.id, 'login_ok', maskPhone(phone), clientFingerprint(req));
   }
-  res.json({ ok: true, user: publicUser(fresh) });
+  res.json({ ok: true, user: publicUser(fresh), mfaRequired });
 }));
 
 // آیا این شماره رمز دارد؟ (برای اینکه صفحه‌ی ورود گزینه‌ی «ورود با رمز» را نشان دهد)
@@ -461,15 +584,23 @@ router.post('/password/remove', passwordSetLimiter, asyncHandler(async (req, res
   res.json({ ok: true, user: publicUser(user), revoked: killed });
 }));
 
+/* چکِ پویا: اگر شماره‌ی این کاربر بعداً به ADMIN_PHONE اضافه شده باشد،
+   بدونِ خروج/ورودِ دوباره ادمین می‌شود — ولی نه همیشه: شرطِ عاملِ دوم در
+   `mfa.allowAdminUpgrade` است (دلیلش آن‌جا نوشته شده). در غیرِ این صورت
+   کاربر همان مشتری می‌ماند و باید دوباره وارد شود؛ آن‌وقت کدِ دوم از او
+   پرسیده می‌شود. اینجا خطا نمی‌دهیم: /me مسیرِ عادیِ فروشگاه است، نه
+   دروازهٔ پنل. */
 router.get('/me', (req, res) => {
   if (!req.session.userId) return res.json({ user: null });
   let user = stmtUserById.get(req.session.userId);
   if (!user) return res.json({ user: null });
-  // چک پویا: اگر شماره‌ی این کاربر بعداً به ADMIN_PHONE اضافه شده باشد،
-  // بدون نیاز به خروج/ورود دوباره ادمین می‌شود
   if (!user.is_admin && isAdminPhone(user.phone)) {
-    user = ensureAdmin(user.id);
-    log.info(`Admin access enabled for ${user.phone} (via /me)`);
+    if (mfa.allowAdminUpgrade(req.session, user)) {
+      user = ensureAdmin(user.id);
+      log.info(`Admin access enabled for ${user.phone} (via /me)`);
+    } else {
+      log.warn('Admin upgrade withheld until the second factor is given', { userId: user.id });
+    }
   }
   res.json({ user: publicUser(user) });
 });

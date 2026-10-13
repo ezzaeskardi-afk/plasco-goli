@@ -6,6 +6,7 @@ import {
   getChallenge,
   requestOtp,
   verifyOtp,
+  verifyTotp,
   passwordLogin,
   saveProfile,
 } from "@/lib/api";
@@ -13,7 +14,14 @@ import { ApiError } from "@/lib/api";
 import { safeRedirectPath } from "@/lib/redirect";
 import { hardNavigate } from "@/lib/navigation";
 
-type Step = "phone" | "otp" | "password" | "name";
+/**
+ * `totp` مرحلهٔ چهارم در ظاهر نیست، ولی در عمل یک پلهٔ *منطقی* جدا است:
+ * فقط برای شماره‌هایی پیش می‌آید که کلیدِ عاملِ دوم دارند (مدیرِ فروشگاه)،
+ * و تا وقتی کدش نرسد سرور هیچ نشستی نمی‌سازد. جدا نگه داشتنش به این معنی
+ * است که «کدِ پیامکیِ اشتباه» و «کدِ برنامهٔ اشتباه» دو پیامِ متفاوت
+ * می‌گیرند و کاربر نمی‌ماند که کدام را دوباره بگیرد.
+ */
+type Step = "phone" | "otp" | "password" | "totp" | "name";
 
 /**
  * مهلتِ ناوبریِ نرم بعد از ورود. دلیلِ وجودش در `goToRedirect` آمده.
@@ -78,12 +86,16 @@ export function LoginForm() {
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [otpDigits, setOtpDigits] = useState(["", "", "", "", ""]);
   const [otpError, setOtpError] = useState("");
+  // کدِ عاملِ دوم ۶ رقمی است (نه ۵)، پس حالتِ جداگانه لازم دارد.
+  const [totpDigits, setTotpDigits] = useState(["", "", "", "", "", ""]);
+  const [totpError, setTotpError] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const totpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // ============================================================
   // رفتن به مقصدِ بازگشت — با سقفِ زمانی
@@ -313,6 +325,15 @@ export function LoginForm() {
       const res = await verifyOtp(ph, code);
       // ورود موفق → مهلتِ ذخیره‌شده دیگر معنی ندارد
       clearCooldown();
+      // عاملِ دوم: ورود *تمام نشده*. اینجا مهلتِ بازفرست هم پاک می‌شود چون
+      // کدِ پیامکی مصرف شده؛ و اگر تا پنج دقیقه کدِ برنامه نرسد، سرور
+      // حالتِ نیمه‌باز را می‌بندد و کاربر باید از شماره شروع کند.
+      if (res.mfaRequired) {
+        setStep("totp");
+        setLoading(false);
+        setTimeout(() => totpRefs.current[0]?.focus(), 100);
+        return;
+      }
       if (res.isNew || !res.fullName) {
         setStep("name");
         setLoading(false);
@@ -327,13 +348,65 @@ export function LoginForm() {
     }
   };
 
+  // ========== مرحله ۲.۵: کدِ برنامهٔ Authenticator (عاملِ دوم) ==========
+  const submitTotp = async (code: string) => {
+    setLoading(true);
+    setTotpError("");
+    try {
+      await verifyTotp(code);
+      // مثلِ مرحلهٔ رمز: تا وقتی ناوبری تعیینِ‌تکلیف نشده، دکمه در حالتِ
+      // انتظار می‌ماند — اما اینجا خودِ ناوبری رخ می‌دهد، پس چیزی برنمی‌گردانیم.
+      goToRedirect();
+    } catch (err) {
+      setTotpError(err instanceof ApiError ? err.message : "کدِ برنامه اشتباه است");
+      setTotpDigits(["", "", "", "", "", ""]);
+      totpRefs.current[0]?.focus();
+      setLoading(false);
+    }
+  };
+
+  const handleTotpInput = (index: number, value: string) => {
+    if (!/^\d?$/.test(value)) return;
+    const next = [...totpDigits];
+    next[index] = value;
+    setTotpDigits(next);
+    if (value && index < 5) totpRefs.current[index + 1]?.focus();
+    if (next.every((d) => d !== "")) submitTotp(next.join(""));
+  };
+
+  const handleTotpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !totpDigits[index] && index > 0) {
+      totpRefs.current[index - 1]?.focus();
+    }
+    // چسباندن — برای کدِ برنامه مهم‌تر از کدِ پیامکی است، چون کاربر آن را
+    // از اپ کپی می‌کند و تایپِ ۶ رقم در ۳۰ ثانیه واقعاً تنگ است.
+    if (e.key === "v" && e.ctrlKey) {
+      e.preventDefault();
+      navigator.clipboard.readText().then((text) => {
+        const digits = text.replace(/\D/g, "").slice(0, 6).split("");
+        const next = [...totpDigits];
+        digits.forEach((d, i) => { if (i < 6) next[i] = d; });
+        setTotpDigits(next);
+        if (digits.length === 6 && next.every((d) => d !== "")) submitTotp(next.join(""));
+      });
+    }
+  };
+
   // ========== مرحله ۳: رمز عبور ==========
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
     try {
-      await passwordLogin(phone.trim(), password);
+      const res = await passwordLogin(phone.trim(), password);
+      // ورودِ رمزی هم می‌تواند نیمه‌کاره بماند — سدِ عاملِ دوم در «ایستگاهِ
+      // ورود» است، نه چسبیده به یک مسیرِ خاص.
+      if (res.mfaRequired) {
+        setStep("totp");
+        setLoading(false);
+        setTimeout(() => totpRefs.current[0]?.focus(), 100);
+        return;
+      }
       // ⚠️ دکمه عمداً در حالتِ «در حال رفتن» می‌ماند و `setLoading(false)`
       // صدا زده نمی‌شود: فرمی که بعد از زدنِ دکمه به حالتِ عادی برگردد، در
       // همان لحظه‌ای که انتقال معلّق است، به کاربر می‌گوید «هیچ اتفاقی
@@ -416,7 +489,7 @@ export function LoginForm() {
         ].map((s, i) => {
           const active =
             (s.num === 1 && step === "phone") ||
-            (s.num === 2 && (step === "otp" || step === "password")) ||
+            (s.num === 2 && (step === "otp" || step === "password" || step === "totp")) ||
             (s.num === 3 && step === "name");
           const done =
             (s.num === 1 && step !== "phone") ||
@@ -611,6 +684,71 @@ export function LoginForm() {
             style={{ color: "var(--color-ink-dim)" }}
           >
             ← تغییر شماره
+          </button>
+        </div>
+      )}
+
+      {/* === مرحله کدِ برنامهٔ Authenticator (عاملِ دوم) === */}
+      {/* چرا این مرحله از `password` جداست: رمز عبور و کدِ برنامه دو چیزِ
+          متفاوت‌اند — یکی «چیزی که می‌دانی» و دیگری «چیزی که داری» — و
+          پیامِ خطایشان هم باید متفاوت باشد، وگرنه مدیر نمی‌فهمد کدام را
+          باید عوض کند. */}
+      {step === "totp" && (
+        <div className="px-6 pb-8">
+          <h2 className="text-lg font-bold text-center mb-1" style={{ color: "var(--color-ink)" }}>
+            کد تأیید دو مرحله‌ای
+          </h2>
+          <p className="text-xs text-center mb-6" style={{ color: "var(--color-ink-soft)" }}>
+            کد ۶ رقمی برنامهٔ Authenticator را وارد کنید
+          </p>
+
+          <div className="flex justify-center gap-1.5 mb-4" dir="ltr">
+            {totpDigits.map((d, i) => (
+              <input
+                key={i}
+                ref={(el) => { totpRefs.current[i] = el; }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                value={d}
+                onChange={(e) => handleTotpInput(i, e.target.value)}
+                onKeyDown={(e) => handleTotpKeyDown(i, e)}
+                className="w-11 h-14 text-center text-xl font-bold rounded-xl outline-none transition-colors"
+                style={{
+                  background: "var(--color-surface-2)",
+                  color: "var(--color-ink)",
+                  border: `2px solid ${
+                    d ? "var(--color-teal)" : "var(--color-line-control)"
+                  }`,
+                }}
+                autoComplete="one-time-code"
+              />
+            ))}
+          </div>
+
+          {totpError && (
+            <p className="text-xs text-center mb-3" style={{ color: "var(--color-coral)" }}>
+              {totpError}
+            </p>
+          )}
+
+          {loading && (
+            <div className="flex justify-center mb-3">
+              <span className="inline-block w-5 h-5 rounded-full border-2 border-teal/30 border-t-teal animate-spin" />
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setStep("phone");
+              setTotpDigits(["", "", "", "", "", ""]);
+              setTotpError("");
+            }}
+            className="w-full text-center text-xs mt-1"
+            style={{ color: "var(--color-ink-dim)" }}
+          >
+            ← شروع دوباره از شماره
           </button>
         </div>
       )}

@@ -846,6 +846,15 @@ const GUARDS = [
         all: true,
         expect: /safeJsonLd/,
       },
+      {
+        // ادعای «در production اجباری است» اگر با .envِ ناقص هم سرور را بالا
+        // بیاورد، فقط یک جمله در README است. این جهش همان ادعا را می‌شکند.
+        label: 'اجبارِ عاملِ دوم در production بی‌اثر شود',
+        file: 'backend/lib/security-config.js',
+        find: '  const missing = admins.filter((p) => !covered.has(p));',
+        replace: '  const missing = [];',
+        expect: /عاملِ دوم/,   // V6
+      },
     ],
   },
 
@@ -907,6 +916,33 @@ const GUARDS = [
         replace: 'if (!order) {',
         all: true,
         expect: /لغو کند|نمی\u200cبیند/,   // ATHZ-02/04
+      },
+      {
+        // سدِ V6: اگر شرطِ عاملِ دوم به `false` تبدیل شود، ادمین با یک کدِ
+        // پیامکی وارد می‌شود. سنجشِ مربوطه باید *همان* لحظه قرمز شود —
+        // وگرنه کلِ آن بخش یک تزئین است.
+        label: 'عاملِ دوم برای ادمین نادیده گرفته شود',
+        file: 'backend/routes/auth.js',
+        find: '  if (mfa.requiredFor(user)) {',
+        replace: '  if (false) {',
+        expect: /کدِ دوم/,   // ATHN-11
+      },
+      {
+        // کدِ ۶ رقمیِ خرج‌شده دوباره خرج شود — همان پنجرهٔ ۹۰ثانیه‌ای که
+        // RFC 6238 جلویش را با «پیگیریِ پذیرنده» می‌گیرد.
+        label: 'نگهبانِ تکراری‌نبودنِ کدِ عاملِ دوم برداشته شود',
+        file: 'backend/lib/mfa.js',
+        find: '    if (typeof cur === \'number\' && result.step <= cur) return cur;',
+        replace: '    if (typeof cur === \'number\' && false) return cur;',
+        expect: /یک بار خرج شده/,   // ATHN-11 — replay
+      },
+      {
+        // و درِ پشتی: ارتقای پویا به ادمین بدونِ گذر از همان سد.
+        label: 'ارتقای پویا به ادمین بی‌سد شود',
+        file: 'backend/routes/admin.js',
+        find: '    if (mfa.allowAdminUpgrade(req.session, user)) {',
+        replace: '    if (true) {',
+        expect: /ارتقای پویا/,   // ATHN-11
       },
     ],
   },

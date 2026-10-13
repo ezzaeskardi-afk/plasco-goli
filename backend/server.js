@@ -31,6 +31,8 @@ const { SqliteSessionStore } = require('./lib/session-store');
 const { makeRateLimit } = require('./lib/middleware');
 const { productsCache, productDetailCache, categoriesCache, relatedCache, facetsCache, settingsCache, invalidateProducts, invalidateCategories, invalidateAll } = require('./lib/cache');
 const { boolEnv, boundedIntEnv, validateProductionConfig, newRequestId, validateRuntimeConfig } = require('./lib/security-config');
+const mfa = require('./lib/mfa');
+const { ADMIN_PHONES } = require('./lib/phone');
 const { compressJson } = require('./lib/static-compress');
 const { webpNegotiate } = require('./lib/webp-negotiate');
 const { isLive: paymentLive } = require('./lib/payment');
@@ -303,7 +305,20 @@ const SITE_URL = String(process.env.SITE_URL || '').trim().replace(/\/+$/, '');
 // `lib/security-config.js` و یک کپیِ درون‌خطی همین‌جا — و آن تابع هیچ‌جا صدا
 // زده نمی‌شد. یعنی «اعتبارسنجیِ تنظیمات» دو حقیقت داشت که می‌توانستند از هم
 // جدا بیفتند. حالا نگهبانِ ASVS روی همان چیزی می‌سنجد که واقعاً اجرا می‌شود.
-validateRuntimeConfig({ isProduction: IS_PRODUCTION, siteUrl: SITE_URL });
+// `adminPhones`/`totpSecretPhones` اینجا گذاشته می‌شوند تا اجبارِ عاملِ دومِ
+// ادمین هم در همان یک جایی بماند که بقیهٔ اعتبارسنجیِ محیط است (وگرنه یک
+// حقیقتِ دوم می‌سازیم که می‌تواند از این جدا بیفتد).
+validateRuntimeConfig({
+  isProduction: IS_PRODUCTION,
+  siteUrl: SITE_URL,
+  adminPhones: ADMIN_PHONES,
+  totpSecretPhones: mfa.configuredPhones(),
+});
+// ورودیِ ناخوانا در ADMIN_TOTP_SECRETS بی‌صدا نمی‌ماند: کلیدِ غلط یعنی
+// قفل‌شدنِ مدیر از پنل، و بدونِ این هشدار تنها نشانه‌اش «کدت غلط است» می‌شود.
+for (const bad of mfa.invalidEntries()) {
+  log.warn('Ignored malformed ADMIN_TOTP_SECRETS entry', { entry: bad.slice(0, 12) + '…' });
+}
 const SITE_HOST = (() => {
   try { return SITE_URL ? new URL(SITE_URL).host : ''; } catch (e) { return ''; }
 })();

@@ -28,6 +28,7 @@ import {
   passwordLogin,
   requestOtp,
   verifyOtp,
+  verifyTotp,
 } from "@/lib/api";
 import { hardNavigate } from "@/lib/navigation";
 import type { User } from "@/lib/types";
@@ -81,6 +82,7 @@ vi.mock("@/lib/api", () => {
     getChallenge: vi.fn(),
     requestOtp: vi.fn(),
     verifyOtp: vi.fn(),
+    verifyTotp: vi.fn(),
     passwordLogin: vi.fn(),
     saveProfile: vi.fn(),
   };
@@ -478,6 +480,119 @@ describe("بعد از ورود، ناوبری هیچ‌وقت معلّق نمی�
     expect(nav.push).toHaveBeenCalledWith("/");
     await advance(NAV_FALLBACK_MS);
     expect(vi.mocked(hardNavigate)).toHaveBeenCalledWith("/");
+  });
+
+  /* ============================================================
+     پلهٔ دومِ ورود (عاملِ دوم)
+     ============================================================
+     این پله فقط برای شماره‌هایی پیش می‌آید که کلیدِ TOTP دارند (مدیر)، و تا
+     وقتی کدش نرسد سرور هیچ نشستی نمی‌سازد. چیزی که اینجا سنجیده می‌شود
+     *رفتارِ کاربر* است: مرحلهٔ درست باز شود، کد به سرور برود، و تا تأیید
+     نشده هیچ‌جا نرود. */
+  it("اگر سرور کدِ دوم بخواهد، مرحلهٔ کدِ برنامه باز می‌شود و کد به سرور می‌رود", async () => {
+    vi.mocked(verifyOtp).mockResolvedValue({
+      ok: true,
+      user: { ...TEST_USER, isAdmin: true },
+      fullName: TEST_USER.fullName,
+      isNew: false,
+      mfaRequired: true,
+    });
+    vi.mocked(verifyTotp).mockResolvedValue({
+      ok: true,
+      user: { ...TEST_USER, isAdmin: true },
+    });
+
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+
+    // پنج رقمِ کدِ پیامکی
+    const otpBoxes = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=text]"));
+    expect(otpBoxes).toHaveLength(5);
+    await act(async () => {
+      "12345".split("").forEach((d, i) => typeInto(otpBoxes[i], d));
+    });
+    await flush();
+
+    // کدِ پیامکی درست بود، ولی *ورود تمام نشده*: شش باکسِ کدِ برنامه باز می‌شود.
+    expect(vi.mocked(verifyOtp)).toHaveBeenCalledWith("09120000042", "12345");
+    expect(nav.push).not.toHaveBeenCalled();
+    const boxes = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=text]"));
+    expect(boxes).toHaveLength(6);
+    expect(bodyOf()).toContain("Authenticator");
+    await act(async () => {
+      "123456".split("").forEach((d, i) => typeInto(boxes[i], d));
+    });
+    await flush();
+
+    expect(vi.mocked(verifyTotp)).toHaveBeenCalledWith("123456");
+    expect(nav.push).toHaveBeenCalledWith("/checkout");
+  });
+
+  it("کدِ دومِ اشتباه: پیام می‌ماند، باکس‌ها خالی می‌شوند و هیچ ناوبری‌ای رخ نمی‌دهد", async () => {
+    vi.mocked(verifyOtp).mockResolvedValue({
+      ok: true,
+      user: { ...TEST_USER, isAdmin: true },
+      fullName: TEST_USER.fullName,
+      isNew: false,
+      mfaRequired: true,
+    });
+    vi.mocked(verifyTotp).mockRejectedValue(
+      new ApiError(400, "کدِ برنامه اشتباه است؛ ۴ تلاش دیگر مانده"),
+    );
+
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+    const otpBoxes = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=text]"));
+    await act(async () => {
+      "12345".split("").forEach((d, i) => typeInto(otpBoxes[i], d));
+    });
+    await flush();
+
+    const boxes = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=text]"));
+    expect(boxes).toHaveLength(6);
+    await act(async () => {
+      "000000".split("").forEach((d, i) => typeInto(boxes[i], d));
+    });
+    await flush();
+
+    expect(bodyOf()).toContain("۴ تلاش دیگر مانده");
+    // باکس‌ها خالی شده‌اند تا کاربر بدونِ پاک‌کردنِ دستی دوباره بزند.
+    expect(
+      Array.from(container.querySelectorAll<HTMLInputElement>("input[type=text]")).every(
+        (b) => b.value === "",
+      ),
+    ).toBe(true);
+    expect(nav.push).not.toHaveBeenCalled();
+    await advance(NAV_FALLBACK_MS * 2);
+    expect(vi.mocked(hardNavigate)).not.toHaveBeenCalled();
+  });
+
+  it("ورودِ رمزی هم می‌تواند به پلهٔ دوم بماند (سد در ایستگاهِ ورود است، نه یک مسیر)", async () => {
+    vi.mocked(passwordLogin).mockResolvedValue({
+      ok: true,
+      user: { ...TEST_USER, isAdmin: true },
+      mfaRequired: true,
+    });
+    vi.mocked(verifyTotp).mockResolvedValue({
+      ok: true,
+      user: { ...TEST_USER, isAdmin: true },
+    });
+
+    await mount();
+    await goToPasswordStep("secret-pass");
+    await submitForm();
+
+    const boxes = Array.from(container.querySelectorAll<HTMLInputElement>("input[type=text]"));
+    expect(boxes).toHaveLength(6);
+    await act(async () => {
+      "654321".split("").forEach((d, i) => typeInto(boxes[i], d));
+    });
+    await flush();
+
+    expect(vi.mocked(verifyTotp)).toHaveBeenCalledWith("654321");
+    expect(nav.push).toHaveBeenCalledWith("/checkout");
   });
 
   it("رمزِ اشتباه: پیام می‌آید، حالتِ انتظار پاک می‌شود و ناوبری‌ای رخ نمی‌دهد", async () => {

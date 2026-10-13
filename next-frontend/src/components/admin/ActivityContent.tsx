@@ -71,6 +71,11 @@ const ACTION_FA: Record<string, string> = {
   login_ok: "ورود به پنل",
   login_failed: "ورود ناموفق به پنل",
   otp_code_burned: "سوختن کد ورود با پیامک",
+  // عاملِ دوم (TOTP) — ورودِ پنل دیگر یک‌عاملی نیست و این سه ردیف
+  // می‌گویند کدام پله رد شد.
+  admin_mfa_ok: "تأیید کد دوم (ورود دو مرحله‌ای)",
+  admin_mfa_failed: "کد دوم اشتباه",
+  admin_mfa_burned: "سوختن کد دوم پس از چند تلاش اشتباه",
   // عمده‌فروشی — در نسخه‌ی Express ترجمه نشده بود
   wholesale_status: "وضعیت درخواست عمده",
   wholesale_delete: "حذف درخواست عمده",
@@ -103,6 +108,10 @@ const ACTION_TONE: Record<string, "bad" | "warn"> = {
   order_cancel: "bad",
   product_delete: "bad",
   otp_code_burned: "bad",
+  // مثلِ `otp_code_burned`: کسی پشتِ سرِ هم کدِ عاملِ دوم را غلط زده و پنجره
+  // سوخته — یعنی یا اپِ مدیر عوض شده، یا کسی که کدِ پیامکی را گرفته سرِ
+  // مانعِ دوم مانده. هر دو را صاحبِ فروشگاه باید ببیند.
+  admin_mfa_burned: "bad",
   product_zeroed: "warn",
   product_bulk: "warn",
   settings_update: "warn",
