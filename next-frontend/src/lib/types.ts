@@ -227,11 +227,32 @@ export interface OtpVerifyResponse {
   user: User;
   fullName: string | null;
   isNew: boolean;
+  /**
+   * آیا ورود تا اینجا آمده و منتظرِ کدِ برنامهٔ Authenticator است؟
+   * سرور برای شماره‌هایی که کلیدِ عاملِ دوم دارند این را `true` می‌کند و
+   * **هیچ نشستی نمی‌سازد**؛ تا وقتی `POST /api/auth/totp/verify` کدِ درست
+   * نگیرد، `/api/auth/me` هم `user: null` می‌دهد.
+   */
+  mfaRequired?: boolean;
 }
 
 export interface PasswordLoginResponse {
   ok: boolean;
   user: User;
+  remaining?: number;
+  /** مثلِ پاسخِ کدِ پیامکی: ورودِ رمزی هم می‌تواند نیمه‌کاره بماند. */
+  mfaRequired?: boolean;
+}
+
+/**
+ * پاسخِ پایانِ ورودِ دو‌عاملی. فیلدِ `reason` فقط برای تشخیص است و چیزی از
+ * کلید یا کد را فاش نمی‌کند (`replay` یعنی همین کد قبلاً خرج شده — که خودِ
+ * کاربر هم می‌داند، چرا که همین حالا زده بودش).
+ */
+export interface TotpVerifyResponse {
+  ok: boolean;
+  user: User;
+  reason?: "format" | "mismatch" | "replay" | "secret" | "not-configured";
   remaining?: number;
 }
 

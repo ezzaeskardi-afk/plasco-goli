@@ -205,6 +205,7 @@ import type {
   CrmTopCustomer,
   WholesaleRequestInput,
   WholesaleRequestResponse,
+  TotpVerifyResponse,
 } from "./types";
 
 // ============================================================
@@ -385,6 +386,17 @@ export async function verifyOtp(
   return fetcher<OtpVerifyResponse>("/api/auth/otp/verify", {
     method: "POST",
     body: JSON.stringify({ phone, code }),
+  });
+}
+
+/* ---------- پلهٔ دومِ ورود (TOTP) ----------
+   جدای از `verifyOtp` است چون دو کارِ متفاوت است: آن یکی «این شماره مالِ
+   من است» را ثابت می‌کند و این یکی «این دستگاه مالِ من است». ادغام‌کردنشان
+   یعنی نتوانیم به کاربر بگوییم کدام مرحله مانده. */
+export async function verifyTotp(code: string): Promise<TotpVerifyResponse> {
+  return fetcher<TotpVerifyResponse>("/api/auth/totp/verify", {
+    method: "POST",
+    body: JSON.stringify({ code }),
   });
 }
 

@@ -43,6 +43,7 @@ const { notifyCustomerOrderStatus, notifyStockAvailable } = require('../lib/sms'
 const { imageSizeFromBuffer } = require('../lib/imagesize');
 const { stripImageMetadata } = require('../lib/image-clean');
 const { queueVariants } = require('../lib/image-encode');
+const mfa = require('../lib/mfa');
 const { errorDigest } = require('../lib/error-digest');
 const { snapshot: metricsSnapshot } = require('../lib/metrics');
 
@@ -70,7 +71,21 @@ function requireAdmin(req, res, next) {
   if (!req.session.userId) return res.status(401).json({ error: 'ابتدا وارد شوید' });
   let user = stmtUserById.get(req.session.userId);
   if (user && !user.is_admin && isAdminPhone(user.phone)) {
-    user = ensureAdmin(user.id); // شماره بعداً به .env اضافه شده — همین حالا ادمین شود
+    /* شماره بعداً به .env اضافه شده — همین حالا ادمین می‌شود، ولی فقط اگر
+       این نشست از سدِ عاملِ دوم گذشته باشد. دلیلِ کاملش در
+       `mfa.allowAdminUpgrade` است؛ خلاصه‌اش: ارتقای پویا یک درِ ورودِ دیگر
+       به پنل است و نباید سدی کمتر از ورودِ تازه داشته باشد. */
+    if (mfa.allowAdminUpgrade(req.session, user)) {
+      user = ensureAdmin(user.id);
+    } else {
+      log.warn('Panel upgrade withheld until the second factor is given', {
+        userId: user.id, ip: req.ip, path: req.originalUrl,
+      });
+      return res.status(403).json({
+        error: 'برای دسترسیِ مدیریتی باید دوباره و با کدِ دومِ تأیید وارد شوید',
+        needsSecondFactor: true,
+      });
+    }
   }
   if (!user || !user.is_admin) {
     log.warn('Unauthorized admin-panel access attempt', { ip: req.ip, userId: req.session.userId });

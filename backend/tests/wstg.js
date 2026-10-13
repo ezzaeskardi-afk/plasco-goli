@@ -88,6 +88,74 @@ const PHONE_DEFAULT = '09121234994';  // ATHN-02 — حدسِ کدِ پیامک�
 const PHONE_RESEND = '09121234995';   // BUSL-05 — سنجشِ سقفِ بازفرست
 const PHONE_EXTRA = '09121234996';    // سنجش‌های مکمل — کد نباید برگردد
 
+/* ---------- کلیدهای عاملِ دوم (+ اوراکلِ مستقلِ TOTP) ----------
+   سندباکس از همان لحظهٔ اول با عاملِ دوم بالا می‌آید. اگر این سنجش را در
+   حالتِ «روشن نبود» اجرا می‌کردیم، سبزش هیچ چیزی را ثابت نمی‌کرد.
+
+   شمارهٔ سومِ مشتری هم عمداً کلید دارد: قاعده این است «هر شماره‌ای که کلید
+   دارد»، نه «هر ادمینی». با کلیدِ کاوشگر ثابت می‌شود که (الف) مسیرِ دومرحله‌ای
+   برای نقشِ کاربر فرق نمی‌کند، و (ب) گذراندنِ عاملِ دوم هیچ نقشِ مدیریتی‌ای
+   نمی‌سازد. */
+const TOTP_SECRET_ADMIN = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';   // همان کلیدِ بردارهای RFC 6238
+const TOTP_SECRET_CUSTOMER = 'MFRGGZDFMZTWQ2LKNNWG23TPOBYXE43U';
+const TOTP_SECRET_MFA = 'ONSWG4TFOQXXA3DPNZSXG5DJNZ2GK4TT';
+const TOTP_SECRET_BURN = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
+// دو شمارهٔ اختصاصیِ همین بخش، به همان دلیلی که شماره‌های دیگر اختصاصی‌اند:
+// مهلتِ ۳۰ثانیه‌ایِ بازفرست نباید دو سنجش را به هم گره بزند.
+const PHONE_MFA = '09121234997';        // ATHN-11 — مسیرِ کاملِ ورودِ دو‌عاملی
+const PHONE_ADMIN_BURN = '09121234998'; // ATHN-11 — سوختنِ پلهٔ دوم
+const MFA_PASSWORD = 'wstg-mfa-pass-2026';
+const TOTP_SECRETS = new Map([
+  [ADMIN_PHONE, TOTP_SECRET_ADMIN],
+  [PHONE_C, TOTP_SECRET_CUSTOMER],
+  [PHONE_MFA, TOTP_SECRET_MFA],
+  [PHONE_ADMIN_BURN, TOTP_SECRET_BURN],
+]);
+
+const totpLib = require('../lib/totp');
+
+/* آیا سرور از این شماره کدِ دوم خواست؟ — از همان پاسخِ otp/verify پر می‌شود.
+   ثبتش عمدی است: اگر روزی این سد بی‌صدا باز شود، سنجشِ ATHN-11 عددِ غلط را
+   می‌بیند، نه اینکه «مسیرِ دوم را رد کردیم» توجیهی برای سبزی باشد. */
+const mfaSeen = new Map();
+let adminPendingProbe = null;
+
+/* ---------- اوراکلِ مستقلِ TOTP ----------
+   این ۱۵ خط عمداً از `lib/totp.js` استفاده نمی‌کند. اگر کد را با همان کدی
+   می‌ساختیم که سرور اجرا می‌کند، یک اشتباه در هر دو طرف (مثلاً ترتیبِ بایتِ
+   شمارنده) هم تولید را خراب می‌کرد و هم سنجش را سبز نگه می‌داشت. با
+   پیاده‌سازیِ مستقل، اشتباهِ یکی به‌صورتِ «کدِ درست رد شد» بیرون می‌زند.
+   درستیِ همین اوراکل هم حدس نیست: با بردارهای رسمیِ RFC 6238 سنجیده
+   می‌شود (بخشِ ATHN-11) — پس زنجیره کامل است: RFC ← اوراکل ← سرورِ واقعی. */
+const ORACLE_B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function oracleBase32(text) {
+  const s = String(text).toUpperCase().replace(/[\s\-_]/g, '').replace(/=+$/, '');
+  let bits = 0, value = 0;
+  const bytes = [];
+  for (const ch of s) {
+    value = (value << 5) | ORACLE_B32.indexOf(ch);
+    bits += 5;
+    if (bits >= 8) { bytes.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
+  }
+  return Buffer.from(bytes);
+}
+function oracleTotp(secret, atMs = Date.now(), digits = 6) {
+  const counter = Math.floor(atMs / 1000 / 30);
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64BE(BigInt(counter));
+  const mac = crypto.createHmac('sha1', oracleBase32(secret)).update(buf).digest();
+  const off = mac[mac.length - 1] & 0x0f;
+  const num = ((mac[off] & 0x7f) << 24) | (mac[off + 1] << 16) | (mac[off + 2] << 8) | mac[off + 3];
+  return String(num % 10 ** digits).padStart(digits, '0');
+}
+/** کدِ لحظه‌ای برای شماره‌ای که کلید دارد — نبودِ کلید باید *بلند* بشکند،
+ *  وگرنه سنجشی که کد لازم دارد بی‌سر‌و‌صدا از خودش رد می‌شود. */
+function secondFactor(phone, atMs = Date.now()) {
+  const secret = TOTP_SECRETS.get(phone);
+  if (!secret) throw new Error(`شمارهٔ «${phone}» در سنجش کلیدِ عاملِ دوم ندارد`);
+  return oracleTotp(secret, atMs);
+}
+
 let serverProcess = null;
 let serverOut = '';       // خروجیِ سرورِ سندباکس (کدِ پیامکی اینجا چاپ می‌شود)
 let pass = 0;
@@ -125,6 +193,14 @@ function startServer() {
       SITE_URL: `http://127.0.0.1:${PORT}`,
       TRUST_PROXY: '0',
       ADMIN_PHONE,
+      // عاملِ دوم از همان اول روشن است و کلیدهای آزمون جای کلیدهای واقعیِ
+      // .env را می‌گیرند (spread اول آمده، پس این‌ها برنده‌اند).
+      ADMIN_TOTP_SECRETS: [
+        `${ADMIN_PHONE}:${TOTP_SECRET_ADMIN}`,
+        `${PHONE_C}:${TOTP_SECRET_CUSTOMER}`,
+        `${PHONE_MFA}:${TOTP_SECRET_MFA}`,
+        `${PHONE_ADMIN_BURN}:${TOTP_SECRET_BURN}`,
+      ].join(','),
       // سقف‌های نرخ باز — این سنجش نباید سهمیهٔ خودش را بسوزاند
       API_RATE_LIMIT: '10000',
       WRITE_RATE_LIMIT: '10000',
@@ -257,11 +333,21 @@ async function requestOtp(phone, agent = newAgent()) {
   return { agent, status: r.status, code, body: r.body, json: r.json };
 }
 
+/* ورودِ کامل — شاملِ پلهٔ دومِ اگر لازم باشد.
+   اینکه این تابع خودش پلهٔ دوم را می‌رود، سه‌تا سود دارد: خطِ ورودِ همهٔ
+   سنجش‌ها یکسان می‌ماند، و هر سنجشی که به «ادمینِ واردشده» نیاز دارد در عمل
+   *هم* سدِ دو‌عاملی را هم پشتِ سر می‌گذارد — یعنی اگر روزی پلهٔ دوم بشکند،
+   دهها سنجشِ دیگر هم می‌شکنند نه فقط بخشِ ATHN-11. */
 async function login(phone, agent = newAgent()) {
   const { status, code, body } = await requestOtp(phone, agent);
   if (status !== 200) throw new Error(`otp/request برای ${phone}: ${status} ${body.slice(0, 120)}`);
   const verify = await request(agent, 'POST', '/api/auth/otp/verify', { json: { phone, code } });
   if (verify.status !== 200) throw new Error(`otp/verify برای ${phone}: ${verify.status} ${verify.body.slice(0, 120)}`);
+  mfaSeen.set(phone, Boolean(verify.json?.mfaRequired));
+  if (verify.json?.mfaRequired) {
+    const step = await request(agent, 'POST', '/api/auth/totp/verify', { json: { code: secondFactor(phone) } });
+    if (step.status !== 200) throw new Error(`totp/verify برای ${phone}: ${step.status} ${step.body.slice(0, 120)}`);
+  }
   return agent;
 }
 
@@ -304,7 +390,6 @@ const NOT_COVERED = [
   ['WSTG-ATHN-05', '«مرا به خاطر بسپار»: کوکیِ نشستِ ۳۰ روزه همان کار را می‌کند و جداگانه سنجیده شده (SESS-02/07).'],
   ['WSTG-ATHN-07 / ATHN-08', 'روشِ ورودِ ضعیف و پرسشِ امنیتی: ورود فقط کدِ پیامکی + رمزِ اختیاری است و پرسشِ امنیتی وجود ندارد.'],
   ['WSTG-ATHN-10', 'کانالِ جایگزین (اپ/SMS دوطرفه) وجود ندارد.'],
-  ['WSTG-ATHN-11', 'MFA سنجیده نمی‌شود چون وجود ندارد — و همین‌یک شکافِ اعلام‌شده در asvs.js (بندِ V6) است.'],
   ['WSTG-ATHZ-05', 'OAuth در پروژه نیست (asvs.js بندِ V10 با وضعیتِ na).'],
   ['WSTG-SESS-04', 'متغیرِ نشستِ بیرون‌ریخته: نشست سرورنگه‌داشته است و کوکی فقط شناسه دارد (SESS-01/02 سنجیده شد).'],
   ['WSTG-SESS-08..11', 'Session puzzling، hijacking و توکنِ JWT: نشست‌ها سرورنگه‌داشته‌اند و توکنِ خودبسنده وجود ندارد.'],
@@ -325,7 +410,7 @@ const NOT_COVERED = [
 (async function main() {
   if (LIST) {
     console.log('\n=== نقشهٔ WSTG (بدونِ اجرا) ===');
-    console.log('  سنجیده می‌شود: CONF-04/05/06/12/14 · IDNT-04/05 · ATHN-02/03/04/06 ·');
+    console.log('  سنجیده می‌شود: CONF-04/05/06/12/14 · IDNT-04/05 · ATHN-02/03/04/06/11 ·');
     console.log('                 ATHZ-01/02/03/04 · SESS-01/02/03/05/06/07 · INPV-01/17/20 ·');
     console.log('                 ERRH-02 · CRYP-04 · BUSL-01/05/08/10 · CLNT-01/04/07/09/12 ·');
     console.log('                 APIT-01/02/03 · INFO-02/03/05');
@@ -349,7 +434,40 @@ const NOT_COVERED = [
   let admin, A, B, C;
   let sessAgent = null;   // نشستِ تازهٔ سنجشِ کوکی؛ SESS-06 همان را می‌سوزاند
   try {
-    admin = await login(ADMIN_PHONE);
+    /* ادمین دستی وارد می‌شود — نه با `login()`.
+       چرا: همین یک درخواستِ کد، فرصتِ دیدنِ «نشستِ نیمه‌واردشده» را هم می‌دهد.
+       اگر بعداً یک درخواستِ کدِ دوم می‌فرستادیم تا آن حالت را بسازیم، به
+       مهلتِ ۳۰ثانیه‌ایِ بازفرست می‌خوردیم و سنجش به «چقدر سریع اجرا شد»
+       گره می‌خورد. اینجا همان لحظهٔ واقعی است، بدونِ هیچ انتظاری. */
+    const adminAgent = newAgent();
+    const adminOtp = await requestOtp(ADMIN_PHONE, adminAgent);
+    const adminVerify = await request(adminAgent, 'POST', '/api/auth/otp/verify', {
+      json: { phone: ADMIN_PHONE, code: adminOtp.code },
+    });
+    if (adminVerify.status !== 200) throw new Error(`otp/verify ادمین: ${adminVerify.status}`);
+    mfaSeen.set(ADMIN_PHONE, Boolean(adminVerify.json?.mfaRequired));
+    adminPendingProbe = {
+      me: await request(adminAgent, 'GET', '/api/auth/me'),
+      stats: await request(adminAgent, 'GET', '/api/admin/stats'),
+      sessions: await request(adminAgent, 'GET', '/api/auth/sessions'),
+    };
+    const adminStep = await request(adminAgent, 'POST', '/api/auth/totp/verify', {
+      json: { code: secondFactor(ADMIN_PHONE) },
+    });
+    /* ---------- چرا اینجا `throw` نیست ----------
+       اگر پلهٔ دوم کامل نشود، این یک **یافته** است، نه «پیش‌شرطِ آماده‌نبود»:
+       کدِ خروجِ ۲ معنایش «محیط خراب است» و کدِ ۱ معنایش «سایت مشکل دارد». سدی
+       که برداشته شده باشد صنفِ دوم است، و نگهبانِ جهش هم عمداً فقط کدِ ۱ را
+       «گرفتن» می‌شمارد — با `throw`، ضعیف‌شدنِ همین سد از تور می‌افتاد.
+       ادامه می‌دهیم با نشستی که ادمین نیست؛ در آن حالت دهها سنجشِ دیگرِ پنل
+       هم قرمز می‌شوند و تصویرِ کامل به دست می‌آید.
+       تنها حالتِ واقعاً «پیش‌شرط» همین بالاست: وقتی *خودِ* ورودِ پیامکی بشکند. */
+    if (adminStep.status !== 200) {
+      notOk('ورودِ دو‌عاملیِ ادمین در شروعِ اجرا کامل می‌شود',
+        `status=${adminStep.status} ${adminStep.body.slice(0, 120)}`);
+    }
+    admin = adminAgent;
+
     A = await login(PHONE_A);
     B = await login(PHONE_B);
     C = await login(PHONE_C);
@@ -630,6 +748,166 @@ const NOT_COVERED = [
       const cc = String(r.headers['cache-control'] || '');
       check(`پاسخِ حساسِ «${p}» کش‌نشدنی است`, /no-store/.test(cc), `Cache-Control=${cc || '(نیست)'}`);
     }
+  }
+
+  /* ---------------- WSTG-ATHN-11 — عاملِ دوم (TOTP) ----------------
+     تا پیش از این، همین گروه در فهرستِ «پوشش داده نشد» بود و دلیلش صریح بود:
+     «MFA وجود ندارد». حالا وجود دارد و باید *زنده* سنجیده شود — نه با
+     دیدنِ نامِ فایل در سورس. هرچه اینجا سنجیده می‌شود روی سرورِ واقعی است. */
+  section('ATHN-11', 'Testing Multi-Factor Authentication (TOTP)');
+  {
+    /* --- الف) خودِ کدسازِ سنجش درست است؟ ---
+       اگر اوراکل غلط باشد، همهٔ سبزی‌های پایین بی‌معنا می‌شوند؛ پس اول خودش را
+       با بردارهای رسمیِ RFC 6238 می‌سنجیم (کلیدِ «12345678901234567890»). */
+    const RFC_VECTORS = [
+      [59, '94287082'], [1111111109, '07081804'], [1111111111, '14050471'],
+      [1234567890, '89005924'], [2000000000, '69279037'], [20000000000, '65353130'],
+    ];
+    const wrongVectors = RFC_VECTORS.filter(([sec, expect8]) => {
+      const at = sec * 1000;
+      return oracleTotp(TOTP_SECRET_ADMIN, at, 8) !== expect8
+        || oracleTotp(TOTP_SECRET_ADMIN, at, 6) !== expect8.slice(2);
+    });
+    check(`اوراکلِ سنجش با ${RFC_VECTORS.length} بردارِ رسمیِ RFC 6238 یکی است`, wrongVectors.length === 0,
+      wrongVectors.map(([s]) => `T=${s}`).join(' , '));
+
+    // و اوراکل با خودِ ماژولِ سرور باید مو‌به‌مو یکی باشد. این دو سنجش با هم
+    // یک زنجیره می‌سازند: RFC ← اوراکل ← ماژول. بدونِ این دومی، یک اشتباه در
+    // ماژول فقط وقتی دیده می‌شد که کدِ درست رد شود — یعنی شکننده.
+    const drift = [0, 1, 7, 29, 30, 31, 61].filter((offset) => {
+      const at = Date.now() + offset * 1000;
+      return totpLib.totp(TOTP_SECRET_ADMIN, at) !== oracleTotp(TOTP_SECRET_ADMIN, at);
+    });
+    check('ماژولِ سرور و اوراکلِ سنجش روی ۷ لحظهٔ مختلف یک کد می‌دهند', drift.length === 0, drift.join(','));
+
+    /* --- ب) ادمین بدونِ پلهٔ دوم، ادمین نیست ---
+       این سه پاسخ در همان لحظه‌ای گرفته شده‌اند که نشستِ ادمین *فقط* کدِ
+       پیامکی خورده بود و هنوز منتظرِ کدِ اپ بود. */
+    check('سرور از ادمین کدِ دوم را خواست (mfaRequired)', mfaSeen.get(ADMIN_PHONE) === true,
+      `mfaRequired=${mfaSeen.get(ADMIN_PHONE)}`);
+    check('نشستِ نیمه‌واردشدهٔ ادمین هویت ندارد (/auth/me → user null)',
+      adminPendingProbe.me.json?.user === null, JSON.stringify(adminPendingProbe.me.json).slice(0, 120));
+    check('نشستِ نیمه‌واردشدهٔ ادمین به «آمارِ پنل» نمی‌رسد (۴۰۱، نه ۲۰۰)',
+      adminPendingProbe.stats.status === 401, `status=${adminPendingProbe.stats.status}`);
+    check('نشستِ نیمه‌واردشدهٔ ادمین به فهرستِ نشستها هم نمی‌رسد',
+      adminPendingProbe.sessions.status === 401, `status=${adminPendingProbe.sessions.status}`);
+
+    /* --- ج) قاعده بر پایهٔ «کلید» است، نه «نقش» --- */
+    check('مشتریِ کلیددار هم کدِ دوم می‌دهد', mfaSeen.get(PHONE_C) === true, `mfaRequired=${mfaSeen.get(PHONE_C)}`);
+    const cOnPanel = await request(C, 'GET', '/api/admin/stats');
+    check('گرفتنِ عاملِ دوم هیچ نقشِ مدیریتی‌ای نمی‌سازد (مشتری ۴۰۳)', cOnPanel.status === 403,
+      `status=${cOnPanel.status}`);
+
+    /* --- د) ورودِ با رمز هم از همان سد می‌گذرد ---
+       این مهم‌ترین بخشِ سنجش است: نشان می‌دهد سد در «ایستگاهِ ورود» نشسته و
+       به یک مسیرِ خاص چسبانده نشده. اگر کسی فردا مسیرِ سومی برای ورود بسازد
+       و این قرارداد را رعایت نکند، همین‌جا معلوم می‌شود.
+
+       ترفندِ دومین نشست: درخواستِ پیامکِ دوباره برای همین شماره تا ۳۰ ثانیه
+       رد می‌شود، پس نشستِ نیمه‌واردشدهٔ بعدی از مسیرِ *رمز* ساخته می‌شود که
+       چنین مهلتی ندارد — بدونِ این، سنجشِ«کدِ تکراری» به یک خوابِ ۳۰ثانیه‌ای
+       در هر اجرا گره می‌خورد. */
+    const MFA_AGENT = newAgent();
+    const mfaOtp = await requestOtp(PHONE_MFA, MFA_AGENT);
+    const mfaVerify = await request(MFA_AGENT, 'POST', '/api/auth/otp/verify', { json: { phone: PHONE_MFA, code: mfaOtp.code } });
+    check('شمارهٔ کلیددار از مسیرِ پیامکی هم پلهٔ دوم می‌خواهد', mfaVerify.json?.mfaRequired === true,
+      `mfaRequired=${mfaVerify.json?.mfaRequired}`);
+
+    const firstCode = secondFactor(PHONE_MFA);
+    const firstVerify = await request(MFA_AGENT, 'POST', '/api/auth/totp/verify', { json: { code: firstCode } });
+    check('کدِ درستِ اوراکل ورودِ دو‌عاملی را تمام می‌کند', firstVerify.status === 200,
+      `${firstVerify.status} ${firstVerify.body.slice(0, 120)}`);
+
+    const setPw = await request(MFA_AGENT, 'POST', '/api/auth/password/set', { json: { password: MFA_PASSWORD } });
+    check('برای نشستِ سنجش رمز گذاشته شد (پیش‌شرطِ نشستِ دوم)', setPw.status === 200, `status=${setPw.status}`);
+
+    const pwLogin = await request(newAgent(), 'POST', '/api/auth/password/login', {
+      json: { phone: PHONE_MFA, password: MFA_PASSWORD },
+    });
+    check('ورودِ رمزیِ ادمین هم کدِ دوم می‌خواهد و نشست نمی‌دهد',
+      pwLogin.status === 200 && pwLogin.json?.mfaRequired === true, `status=${pwLogin.status} ${pwLogin.body.slice(0, 120)}`);
+    const pwAgent = newAgent();
+    await request(pwAgent, 'POST', '/api/auth/password/login', { json: { phone: PHONE_MFA, password: MFA_PASSWORD } });
+    const pwMe = await request(pwAgent, 'GET', '/api/auth/me');
+    check('نشستِ رمزیِ نیمه‌واردشده هیچ هویتی ندارد', pwMe.json?.user === null, JSON.stringify(pwMe.json));
+
+    /* --- ه) کدِ مصرف‌شده دوباره کار نمی‌کند (RFC 6238 این را وظیفهٔ پذیرنده می‌داند) --- */
+    const replay = await request(pwAgent, 'POST', '/api/auth/totp/verify', { json: { code: firstCode } });
+    check('کدِ *همان پله* که یک بار خرج شده، دوباره رد می‌شود',
+      replay.status === 400 && replay.json?.reason === 'replay',
+      `status=${replay.status} reason=${replay.json?.reason}`);
+    const afterReplay = await request(pwAgent, 'GET', '/api/auth/me');
+    check('تلاشِ تکراری هیچ نشستی نمی‌سازد', afterReplay.json?.user === null, JSON.stringify(afterReplay.json));
+
+    /* --- و) مسیرِ عاملِ دوم درِ ورودِ مستقل نیست --- */
+    const orphan = await request(newAgent(), 'POST', '/api/auth/totp/verify', {
+      json: { code: secondFactor(PHONE_MFA) },
+    });
+    check('بدونِ شروعِ ورودِ پیامکی، مسیرِ کدِ دوم جواب نمی‌دهد', orphan.status === 401, `status=${orphan.status}`);
+
+    /* --- ز) پنج تلاش، بعد سوختن --- */
+    const burnAgent = newAgent();
+    const burnOtp = await requestOtp(PHONE_ADMIN_BURN, burnAgent);
+    const burnVerify = await request(burnAgent, 'POST', '/api/auth/otp/verify', { json: { phone: PHONE_ADMIN_BURN, code: burnOtp.code } });
+    check('شمارهٔ کلیددارِ دوم هم پلهٔ دوم می‌خواهد', burnVerify.json?.mfaRequired === true,
+      `mfaRequired=${burnVerify.json?.mfaRequired}`);
+    let lastWrong = null;
+    for (let i = 1; i <= 5; i++) {
+      // کدِ غلط عمداً از خودِ کدِ درست گرفته و یک رقم جابه‌جا می‌شود تا مطمئن
+      // باشیم یک کدِ *نامعتبر* فرستادیم و نه یک کدِ نا-شش‌رقمی (که با
+      // reason=format رد می‌شود و به سنجشِ «شمردن» چیزی اضافه نمی‌کند).
+      const good = secondFactor(PHONE_ADMIN_BURN);
+      const wrongCode = (good[0] === '9' ? '1' : '9') + good.slice(1);
+      lastWrong = await request(burnAgent, 'POST', '/api/auth/totp/verify', { json: { code: wrongCode } });
+      if (lastWrong.status !== 400) break;
+    }
+    check('کدِ غلط ۴۰۰ می‌گیرد (و عددِ تلاشِ باقی‌مانده را می‌گوید)',
+      lastWrong?.status === 400 && typeof lastWrong.json?.remaining === 'number',
+      `${lastWrong?.status} ${lastWrong?.body.slice(0, 100)}`);
+    const burnSixth = await request(burnAgent, 'POST', '/api/auth/totp/verify', {
+      json: { code: (secondFactor(PHONE_ADMIN_BURN)[0] === '9' ? '1' : '9') + secondFactor(PHONE_ADMIN_BURN).slice(1) },
+    });
+    check('تلاشِ ششم وضعیتِ نیمه‌واردشده را می‌سوزاند (۴۲۹)', burnSixth.status === 429, `status=${burnSixth.status}`);
+    const afterBurn = await request(burnAgent, 'POST', '/api/auth/totp/verify', { json: { code: secondFactor(PHONE_ADMIN_BURN) } });
+    check('پس از سوختن، حتی کدِ درست هم باز نمی‌کند', afterBurn.status === 401, `status=${afterBurn.status}`);
+
+    const logRows = await request(admin, 'GET', '/api/admin/activity');
+    check('سوختنِ عاملِ دوم در دفترِ پنل ثبت می‌شود (رویدادِ دیده‌شدنی)',
+      logRows.status === 200 && logRows.body.includes('admin_mfa_burned'), `status=${logRows.status}`);
+
+    /* --- ح) خودِ کلید هیچ‌وقت بیرون نمی‌رود --- */
+    const me = await request(admin, 'GET', '/api/auth/me');
+    check('کلیدِ عاملِ دوم در هیچ پاسخی نیست',
+      !me.body.includes(TOTP_SECRET_ADMIN) && !me.body.includes(TOTP_SECRET_CUSTOMER));
+    check('کلید در خروجیِ خودِ سرور هم چاپ نمی‌شود (لاگِ سندباکس)',
+      !serverOut.includes(TOTP_SECRET_ADMIN), 'کلید در لاگِ سرور پیدا شد');
+    check('پاسخِ /auth/me فیلدی به اسمِ کلید/عاملِ دوم ندارد',
+      !/"(mfaSecret|totpSecret|totp_secret|secret)"/.test(me.body), me.body.slice(0, 140));
+
+    /* --- ط) پاکِ‌بودنِ رمزنگاریِ همین ماژول --- */
+    const totpSrc = fs.readFileSync(path.join(DIR, 'lib', 'totp.js'), 'utf8');
+    /* دو سنجش، دو جهتِ متفاوت:
+       • درهم‌سازِ *تنها* نباید وجود داشته باشد — همان چیزی که SHA-1 را در
+         امضا/برخورد خطرناک می‌کند؛ TOTP فقط به HMAC نیاز دارد.
+       • digest پیش‌فرض باید همان SHA-1 بماند، چون تنها چیزی است که همهٔ
+         اپ‌های Authenticator می‌فهمند. اگر کسی پنهانی به SHA-256 عوض کند،
+         از نگاهِ سرور همه‌چیز سالم است و فقط «کد روی گوشیِ مدیر نمی‌آید» —
+         یک خرابیِ بی‌صدا که جز اینجا جای دیگری دیده نمی‌شود. */
+    check('هیچ درهم‌سازِ تنهایی در ماژول نیست (HMAC کافی است)', !/createHash\(/.test(totpSrc));
+    check('digest پیش‌فرض SHA-1 مانده (سازگاری با اپ‌های Authenticator)',
+      totpSrc.includes("algorithm: 'sha1'"), 'اگر به SHA-256 عوض شود، کدِ هیچ اپی خوانده نمی‌شود');
+    check('مقایسهٔ کد ثابت‌زمان است (نه === روی رشته)', totpSrc.includes('timingSafeEqual'));
+    check('پنجرهٔ کشسانِ ساعت وجود دارد (یک پله، نه بیشتر)', /window/.test(totpSrc));
+    const adminSrc = fs.readFileSync(path.join(DIR, 'routes', 'admin.js'), 'utf8');
+    const authSrc = fs.readFileSync(path.join(DIR, 'routes', 'auth.js'), 'utf8');
+    /* لنگر عمداً «محلِ فراخوانی» است و نه فقط نامِ تابع: نامِ تابع در همین
+       فایل یک بار در کامنت هم آمده، و سنجشی که کامنت را باور کند دقیقاً
+       همان چیزی را نمی‌گیرد که برایش نوشته شده (جهشِ حذفِ فراخوانی سبز
+       می‌ماند). همان درسِ `tests/panel-retired.js`: کامنت ارجاع نیست. */
+    check('هر دو مسیرِ «ارتقای پویا به ادمین» از همین سد می‌گذرند',
+      adminSrc.includes('mfa.allowAdminUpgrade(req.session')
+      && authSrc.includes('mfa.allowAdminUpgrade(req.session'),
+      'ارتقای بی‌سد یعنی یک درِ ورودِ دیگر به پنل');
   }
 
   /* ---------------- WSTG-ATHZ-01 — پیمایشِ مسیر ---------------- */
@@ -1202,7 +1480,7 @@ const NOT_COVERED = [
   /* ---------------- نتیجه ---------------- */
   console.log(`\n${'='.repeat(64)}`);
   console.log(`  سنجش‌های WSTG: ${pass + fail}  |  ✅ ${pass}  |  ❌ ${fail}`);
-  console.log(`  شناسه‌های پوشش‌داده‌شده: ${(await request(newAgent(), 'GET', '/api/health'), '')}CONF-04/05/06/12/14 · IDNT-04/05 · ATHN-02/03/04/06`);
+  console.log(`  شناسه‌های پوشش‌داده‌شده: ${(await request(newAgent(), 'GET', '/api/health'), '')}CONF-04/05/06/12/14 · IDNT-04/05 · ATHN-02/03/04/06/11`);
   console.log('                          ATHZ-01/02/03/04 · SESS-01/02/03/05/06/07 · INPV-01/17/20');
   console.log('                          ERRH-02 · CRYP-04 · BUSL-01/05/08/10 · CLNT-01/04/07/09/12 · APIT-01/02/03');
   console.log(`  پوشش داده نشد: ${NOT_COVERED.length} گروه — دلیلِ هر کدام با --list`);

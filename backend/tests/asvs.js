@@ -397,15 +397,80 @@ const REQUIREMENTS = [
     },
   },
   {
+    /* ---------- این بند تا دیروز `gap` بود ----------
+       متنش این بود: «ورود فقط با تصرفِ شمارهٔ موبایل است... هر کس کدِ پیامک را
+       بگیرد ادمین است». حالا بسته شده و بندِ `gap` به سنجشِ زنده تبدیل شده.
+       چیزی که مواظبش بودیم: عوض‌کردنِ برچسب به `verified` بدونِ اینکه واقعاً
+       چیزی عوض شده باشد — همان «فهرستِ تیک» که این فایل در سرصفحه‌اش از
+       آن حذر می‌کند. پس هر سنجِ زیر به فایل و رشتهٔ واقعی گره خورده است، و
+       رفتارِ زندهٔ همین مسیر (نشستِ نیمه‌واردشده، کدِ تکراری، سوختن) در
+       `tests/wstg.js` بخشِ ATHN-11 روی سرورِ واقعی سنجیده می‌شود. */
     id: 'V6',
     chapter: 'V6',
-    title: 'عاملِ دومِ مستقل برای ورودِ ادمین نداریم',
-    status: 'gap',
-    evidence: ['backend/lib/phone.js', 'backend/routes/admin.js'],
-    why:
-      'ورود فقط با «تصرفِ شمارهٔ موبایل» است (کدِ پیامکی). برای مشتری این قانع‌کننده است، ولی پنلِ مدیریت ' +
-      'روی همان یک عامل بند است: هر کس کدِ پیامک را بگیرد ادمین است. درمانِ درست TOTP یا کلیدِ سخت‌افزاری ' +
-      'روی همان حسابِ ADMIN_PHONE است. عمداً همین‌جا اعلام می‌شود تا فراموش نشود، نه اینکه «پوششِ کامل» ادعا شود.',
+    title: 'ورودِ ادمین دو عامل دارد: کدِ پیامکی + کدِ زمانیِ TOTP',
+    status: 'verified',
+    evidence: [
+      'backend/lib/totp.js',
+      'backend/lib/mfa.js',
+      'backend/routes/auth.js',
+      'backend/routes/admin.js',
+      'backend/lib/security-config.js',
+    ],
+    run() {
+      const auth = readFile('backend/routes/auth.js');
+
+      check('ماژولِ TOTP هست و کد را با HMAC می‌سازد',
+        exists('backend/lib/totp.js') && has('backend/lib/totp.js', 'createHmac('));
+      check('درهم‌سازِ تنهایی به کار نرفته (SHA-1 فقط به‌عنوان digestِ HMAC)',
+        !/createHash\(/.test(readFile('backend/lib/totp.js')));
+      check('مقایسهٔ کد ثابت‌زمان است (نه === روی رشته)', has('backend/lib/totp.js', 'timingSafeEqual'));
+      check('پنجرهٔ کشسانِ ساعت هست تا کدِ درست با اختلافِ ساعت رد نشود',
+        has('backend/lib/totp.js', 'window'));
+
+      check('کلید از محیط می‌آید، نه از یک مسیرِ «ثبت‌نامِ عاملِ دوم» در API',
+        has('backend/lib/mfa.js', 'ADMIN_TOTP_SECRETS')
+        && !/router\.(post|get)\(\s*['"][^'"]*totp\/setup/.test(auth));
+      check('هر کد فقط یک بار پذیرفته می‌شود (replay)', has('backend/lib/mfa.js', 'usedSteps.mutate'));
+
+      /* ساختارِ امن، نه فقط وجودِ رشته: اگر روزی کسی هویت را *قبل* از سدِ دوم
+         بنشاند و فقط یک پرچم بگذارد، این سنجش قرمز می‌شود — چون دیگر همهٔ
+         مسیرهای پنل باید آن پرچم را به یاد بیاورند و یکی یادش می‌رود. */
+      check('در حالتِ نیمه‌واردشده هویتِ کاربر ست نمی‌شود (سد، نه پرچم)',
+        /if \(mfa\.requiredFor\(user\)\) \{\s*req\.session\.pendingMfa = \{[^}]*\};\s*return \{ user, mfaRequired: true \};/.test(auth));
+      check('مسیرِ کامل‌کردنِ ورود با کدِ دوم وجود دارد',
+        auth.includes("router.post('/totp/verify'"));
+
+      // هر دو راهِ رسیدن به پنل باید از همان سد بگذرند — وگرنه سد یک درِ
+      // پشتی دارد. «ورود با رمز» و «ارتقای پویا به ادمین» دو موردِ واقعی‌اند.
+      check('ورود با رمز هم از همان ایستگاه می‌گذرد',
+        (auth.match(/await establishSession\(/g) || []).length >= 2);
+      /* لنگر، محلِ *فراخوانی* است نه نامِ تابع: نام در کامنتِ همان فایل هم
+         هست، و سنجشی که کامنت را باور کند با حذفِ فراخوانی هم سبز می‌ماند. */
+      check('ارتقای پویا به ادمین از همین سد می‌گذرد (نه یک راهِ دیگرِ ورود)',
+        has('backend/routes/admin.js', 'mfa.allowAdminUpgrade(req.session')
+        && has('backend/routes/auth.js', 'mfa.allowAdminUpgrade(req.session'));
+
+      /* ---------- رفتار، نه فقط ساختار ----------
+         اینجا ماژول را واقعاً اجرا می‌کنیم: ادعای «در production اجباری است»
+         اگر با یک .envِ خالی هم سرور بالا بیاید، یک ادعای توخالی می‌شود. */
+      const { validateRuntimeConfig } = require(path.join(BACKEND, 'lib', 'security-config'));
+      const base = { isProduction: true, siteUrl: 'https://shop.example' };
+      let noKey = null;
+      try { validateRuntimeConfig({ ...base, adminPhones: ['09121234567'], totpSecretPhones: [] }); }
+      catch (e) { noKey = e; }
+      check('در production بدونِ کلیدِ عاملِ دوم، سرور ادمین را بالا نمی‌آورد',
+        Boolean(noKey) && /ADMIN_TOTP_SECRETS/.test(noKey.message));
+
+      let covered = null;
+      try { validateRuntimeConfig({ ...base, adminPhones: ['09121234567'], totpSecretPhones: ['09121234567'] }); }
+      catch (e) { covered = e; }
+      check('با کلیدِ پوشش‌دهندهٔ همان شماره‌ها مانعی نیست', covered === null);
+
+      let devOk = null;
+      try { validateRuntimeConfig({ isProduction: false, siteUrl: '', adminPhones: ['09121234567'], totpSecretPhones: [] }); }
+      catch (e) { devOk = e; }
+      check('خارج از production اجباری نیست (توسعه بدونِ کلید کار می‌کند)', devOk === null);
+    },
   },
 
   {
@@ -417,9 +482,23 @@ const REQUIREMENTS = [
     run() {
       const auth = readFile('backend/routes/auth.js');
       check('نشست پس از ورود بازسازی می‌شود', auth.includes('req.session.regenerate'));
-      const iRegen = auth.indexOf('req.session.regenerate');
-      const iUser = auth.indexOf('req.session.userId = user.id');
-      check('بازسازی پیش از نشاندنِ هویتِ کاربر انجام می‌شود', iRegen !== -1 && iUser !== -1 && iRegen < iUser);
+      /* ---------- چرا مقایسه به بدنهٔ همین تابع محدود شد ----------
+         نسخهٔ قبلی، جایگاهِ *اولین* `req.session.userId = user.id` را در کلِ
+         فایل با جایگاهِ اولین `regenerate` مقایسه می‌کرد. این دو چیزِ درست را
+         می‌سنجید ولی به موقعیتِ خطیِ کد در فایل گره خورده بود: با اضافه‌شدنِ
+         یک مسیرِ تازه که آن سطر را *زودتر* دارد (مسیرِ عاملِ دوم)، سنجش
+         قرمز می‌شود بدونِ اینکه چیزی شکسته باشد — و بدتر: اگر کسی
+         `userId` را جایی *بعد* از regenerate بگذارد، همان سنجش سبز می‌ماند.
+         حالا داخلِ بدنهٔ همان تابعی می‌گردد که ورود را می‌سازد — یعنی دقیقاً
+         همان جایی که خطرِ fixation هست — و برای مسیرِ دوم هم سنجشِ خودش را
+         دارد (بندِ V6: در حالتِ معلق هویت ست نمی‌شود). */
+      const start = auth.indexOf('async function establishSession(');
+      const endMark = auth.indexOf('return { user, mfaRequired: false }', start);
+      const body = auth.slice(start, auth.indexOf('\n}', endMark));
+      const iRegen = body.indexOf('req.session.regenerate');
+      const iUser = body.indexOf('req.session.userId = user.id');
+      check('داخلِ establishSession، بازسازی پیش از نشاندنِ هویت انجام می‌شود',
+        start !== -1 && endMark !== -1 && iRegen !== -1 && iUser !== -1 && iRegen < iUser);
     },
   },
 
