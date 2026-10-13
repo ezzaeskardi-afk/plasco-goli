@@ -88,23 +88,78 @@ const PHONE_DEFAULT = '09121234994';  // ATHN-02 — حدسِ کدِ پیامک�
 const PHONE_RESEND = '09121234995';   // BUSL-05 — سنجشِ سقفِ بازفرست
 const PHONE_EXTRA = '09121234996';    // سنجش‌های مکمل — کد نباید برگردد
 
-/* ---------- کلیدهای عاملِ دوم (+ اوراکلِ مستقلِ TOTP) ----------
+/* ---------- اوراکلِ مستقلِ TOTP ----------
+   این ۲۰ خط عمداً از `lib/totp.js` استفاده نمی‌کند. اگر کد را با همان کدی
+   می‌ساختیم که سرور اجرا می‌کند، یک اشتباه در هر دو طرف (مثلاً ترتیبِ بایتِ
+   شمارنده) هم تولید را خراب می‌کرد و هم سنجش را سبز نگه می‌داشت. با
+   پیاده‌سازیِ مستقل، اشتباهِ یکی به‌صورتِ «کدِ درست رد شد» بیرون می‌زند.
+   درستیِ همین اوراکل هم حدس نیست: با بردارهای رسمیِ RFC 6238 سنجیده
+   می‌شود (بخشِ ATHN-11) — پس زنجیره کامل است: RFC ← اوراکل ← سرورِ واقعی.
+
+   اول می‌آید چون کلیدهای پایین‌تر با آن *ساخته* می‌شوند (و `const` تا وقتی
+   اجرا نشود وجود ندارد، پس ترتیب اینجا فقط سلیقه نیست). */
+const ORACLE_B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function oracleBase32Decode(text) {
+  const s = String(text).toUpperCase().replace(/[\s\-_]/g, '').replace(/=+$/, '');
+  let bits = 0, value = 0;
+  const bytes = [];
+  for (const ch of s) {
+    value = (value << 5) | ORACLE_B32.indexOf(ch);
+    bits += 5;
+    if (bits >= 8) { bytes.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
+  }
+  return Buffer.from(bytes);
+}
+function oracleBase32Encode(buf) {
+  let bits = 0, value = 0, out = '';
+  for (const byte of buf) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) { out += ORACLE_B32[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += ORACLE_B32[(value << (5 - bits)) & 31];
+  return out;
+}
+function oracleTotp(secret, atMs = Date.now(), digits = 6) {
+  const counter = Math.floor(atMs / 1000 / 30);
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64BE(BigInt(counter));
+  const mac = crypto.createHmac('sha1', oracleBase32Decode(secret)).update(buf).digest();
+  const off = mac[mac.length - 1] & 0x0f;
+  const num = ((mac[off] & 0x7f) << 24) | ((mac[off + 1] & 0xff) << 16) | ((mac[off + 2] & 0xff) << 8) | (mac[off + 3] & 0xff);
+  return String(num % 10 ** digits).padStart(digits, '0');
+}
+
+/* ---------- کلیدهای عاملِ دوم ----------
    سندباکس از همان لحظهٔ اول با عاملِ دوم بالا می‌آید. اگر این سنجش را در
    حالتِ «روشن نبود» اجرا می‌کردیم، سبزش هیچ چیزی را ثابت نمی‌کرد.
+
+   هیچ کلیدی در این فایل *نوشته* نشده و از جایش درآورده شده:
+     • کلیدِ ادمین همان کلیدِ مستندِ آزمونِ RFC 6238 است («12345678901234567890»)
+       که اینجا با همان اوراکل به Base32 درمی‌آید — پس سنجشِ بردارها هم‌زمان
+       درستیِ *رمزگذارِ* اوراکل را هم ثابت می‌کند.
+     • سه کلیدِ دیگر هر اجرا تازه و تصادفی ساخته می‌شوند.
+   چرا این اصرار: یک رشتهٔ ۳۲نویسه‌ایِ به‌ظاهر تصادفیِ کنارِ کلمهٔ «secret»
+   دقیقاً همان چیزی است که اسکنرِ راز (gitleaks در CI) باید بگیرد؛ گذاشتنش
+   در مخزن یعنی یا یک هشدارِ دائمی، یا استثنایی در فایلِ اسکنر — و آن استثنا
+   روزی روی یک رازِ واقعی هم اعمال می‌شود.
 
    شمارهٔ سومِ مشتری هم عمداً کلید دارد: قاعده این است «هر شماره‌ای که کلید
    دارد»، نه «هر ادمینی». با کلیدِ کاوشگر ثابت می‌شود که (الف) مسیرِ دومرحله‌ای
    برای نقشِ کاربر فرق نمی‌کند، و (ب) گذراندنِ عاملِ دوم هیچ نقشِ مدیریتی‌ای
    نمی‌سازد. */
-const TOTP_SECRET_ADMIN = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';   // همان کلیدِ بردارهای RFC 6238
-const TOTP_SECRET_CUSTOMER = 'MFRGGZDFMZTWQ2LKNNWG23TPOBYXE43U';
-const TOTP_SECRET_MFA = 'ONSWG4TFOQXXA3DPNZSXG5DJNZ2GK4TT';
-const TOTP_SECRET_BURN = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
+const RFC_TEST_KEY_ASCII = '12345678901234567890';   // همان کلیدِ مستندِ RFC 6238
+const TOTP_SECRET_ADMIN = oracleBase32Encode(Buffer.from(RFC_TEST_KEY_ASCII, 'ascii'));
+const TOTP_SECRET_CUSTOMER = oracleBase32Encode(crypto.randomBytes(20));
+const TOTP_SECRET_MFA = oracleBase32Encode(crypto.randomBytes(20));
+const TOTP_SECRET_BURN = oracleBase32Encode(crypto.randomBytes(20));
 // دو شمارهٔ اختصاصیِ همین بخش، به همان دلیلی که شماره‌های دیگر اختصاصی‌اند:
 // مهلتِ ۳۰ثانیه‌ایِ بازفرست نباید دو سنجش را به هم گره بزند.
 const PHONE_MFA = '09121234997';        // ATHN-11 — مسیرِ کاملِ ورودِ دو‌عاملی
 const PHONE_ADMIN_BURN = '09121234998'; // ATHN-11 — سوختنِ پلهٔ دوم
-const MFA_PASSWORD = 'wstg-mfa-pass-2026';
+// رمزِ آزمون هم مثلِ کلیدها از خودِ اجرا ساخته می‌شود: یک رشتهٔ ثابتِ کنارِ
+// کلمهٔ password، هرچند بی‌ارزش، همان شکلی است که اسکنرِ راز دنبالش می‌گردد.
+const MFA_PASSWORD = `wstg-${crypto.randomBytes(9).toString('hex')}`;
 const TOTP_SECRETS = new Map([
   [ADMIN_PHONE, TOTP_SECRET_ADMIN],
   [PHONE_C, TOTP_SECRET_CUSTOMER],
@@ -119,35 +174,6 @@ const totpLib = require('../lib/totp');
    می‌بیند، نه اینکه «مسیرِ دوم را رد کردیم» توجیهی برای سبزی باشد. */
 const mfaSeen = new Map();
 let adminPendingProbe = null;
-
-/* ---------- اوراکلِ مستقلِ TOTP ----------
-   این ۱۵ خط عمداً از `lib/totp.js` استفاده نمی‌کند. اگر کد را با همان کدی
-   می‌ساختیم که سرور اجرا می‌کند، یک اشتباه در هر دو طرف (مثلاً ترتیبِ بایتِ
-   شمارنده) هم تولید را خراب می‌کرد و هم سنجش را سبز نگه می‌داشت. با
-   پیاده‌سازیِ مستقل، اشتباهِ یکی به‌صورتِ «کدِ درست رد شد» بیرون می‌زند.
-   درستیِ همین اوراکل هم حدس نیست: با بردارهای رسمیِ RFC 6238 سنجیده
-   می‌شود (بخشِ ATHN-11) — پس زنجیره کامل است: RFC ← اوراکل ← سرورِ واقعی. */
-const ORACLE_B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-function oracleBase32(text) {
-  const s = String(text).toUpperCase().replace(/[\s\-_]/g, '').replace(/=+$/, '');
-  let bits = 0, value = 0;
-  const bytes = [];
-  for (const ch of s) {
-    value = (value << 5) | ORACLE_B32.indexOf(ch);
-    bits += 5;
-    if (bits >= 8) { bytes.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
-  }
-  return Buffer.from(bytes);
-}
-function oracleTotp(secret, atMs = Date.now(), digits = 6) {
-  const counter = Math.floor(atMs / 1000 / 30);
-  const buf = Buffer.alloc(8);
-  buf.writeBigUInt64BE(BigInt(counter));
-  const mac = crypto.createHmac('sha1', oracleBase32(secret)).update(buf).digest();
-  const off = mac[mac.length - 1] & 0x0f;
-  const num = ((mac[off] & 0x7f) << 24) | (mac[off + 1] << 16) | (mac[off + 2] << 8) | mac[off + 3];
-  return String(num % 10 ** digits).padStart(digits, '0');
-}
 /** کدِ لحظه‌ای برای شماره‌ای که کلید دارد — نبودِ کلید باید *بلند* بشکند،
  *  وگرنه سنجشی که کد لازم دارد بی‌سر‌و‌صدا از خودش رد می‌شود. */
 function secondFactor(phone, atMs = Date.now()) {
