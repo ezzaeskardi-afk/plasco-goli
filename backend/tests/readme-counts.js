@@ -105,9 +105,11 @@ const derived = {
 // آزمون «سبزِ خالی» می‌شد (صفر صفحه، صفر ایراد). منبعِ حقیقتِ آن نام‌ها امروز
 // جدولِ ریدایرکتِ Next است، پس همان جدول خوانده می‌شود.
 const legacyUrlsSrc = fs.readFileSync(
-  path.join(ROOT, 'next-frontend', 'src', 'lib', 'legacyUrls.ts'), 'utf8');
+  path.join(ROOT, 'next-frontend', 'src', 'lib', 'legacyUrls.js'), 'utf8');
 const legacySection = (name) => {
-  const at = legacyUrlsSrc.indexOf(`export const ${name}`);
+  // شکلِ CJS: `const X = { … };` (فایلِ مشترکِ Next و Express دیگر `.ts` نیست
+  // — تنها منبعِ حقیقت است و Express هم باید بتواند requireش کند).
+  const at = legacyUrlsSrc.indexOf(`const ${name} = {`);
   if (at === -1) return [];
   const chunk = legacyUrlsSrc.slice(at, legacyUrlsSrc.indexOf('};', at));
   return [...chunk.matchAll(/["'](\/?[a-z0-9-]+\.html)["']/g)].map((m) => m[1].replace(/^\//, ''));

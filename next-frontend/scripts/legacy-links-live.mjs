@@ -5,7 +5,7 @@
 // «هیچ لینکی ۴۰۴ یا واگرا نشود.» این فایل همان جمله را می‌سنجد.
 //
 // ---------- شکافی که این اسکریپت می‌بندد ----------
-// `src/lib/legacyUrls.ts` نگاشتِ نام‌های عصرِ Express به مسیرهای تمیز است و
+// `src/lib/legacyUrls.js` نگاشتِ نام‌های عصرِ Express به مسیرهای تمیز است و
 // `middleware.ts` همان را ۳۰۷ می‌کند. `parityManifest` هم برای هر صفحه یک
 // probe دارد (`legacy-cart-html`: Express 200 / Next 307). ولی هیچ‌کدام از آن‌ها
 // یک چیز را نمی‌سنجیدند:
@@ -66,7 +66,7 @@ import {
   LEGACY_PAGE_ALIASES,
   isLegacyHtmlPath,
   legacyRedirect,
-} from "../src/lib/legacyUrls.ts";
+} from "../src/lib/legacyUrls.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NEXT_DIR = path.resolve(HERE, "..");
