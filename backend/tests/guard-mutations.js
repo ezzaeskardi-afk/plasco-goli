@@ -52,6 +52,7 @@
      node tests/guard-mutations.js --scope=frontend   # فقط Vitest/اسکریپت‌های Next
      node tests/guard-mutations.js --scope=live       # فقط برابریِ زنده (هر دو سرور لازم است)
      node tests/guard-mutations.js --scope=static     # فقط سنجشِ زنده‌ی دارایی‌ها (Next بالا، بک‌اند خواب)
+     node tests/guard-mutations.js --scope=encoder    # فقط نیمه‌ی «با انکودرِ عکس» (انکودر لازم است)
      node tests/guard-mutations.js --scope=all        # همه‌ی دامنه‌های سازگار
      node tests/guard-mutations.js --only=panel       # فقط نگهبان‌هایی که نامشان این را دارد
      node tests/guard-mutations.js --list             # فهرستِ نگهبان‌ها و جهش‌ها بدونِ اجرا
@@ -79,6 +80,12 @@
    نمی‌سنجد). پس `static` می‌خواهد Next بالا و بک‌اند **خواب** باشد — و همین
    دلیلِ نبودنش در `all` است: یک پروسه نمی‌تواند هر دو محیط را هم‌زمان داشته
    باشد. اگر پیش‌شرط برقرار نباشد، با پیامِ روشن و کدِ ۲ رد می‌شود.
+    `encoder` هم مثلِ `static` پیش‌شرط دارد، ولی جنسِ دیگری: نمی‌شود نبودِ
+   انکودر را شبیه‌سازی کرد و *نتیجه‌ی واقعیِ* انکود را سنجید. جهش‌های آن نیمه
+   (عرضِ نسخه‌ی کوچک، نامِ خروجیِ WebP) فقط روی ماشینی معنی دارند که
+   `cwebp`/ImageMagick/ffmpeg/Pillow دارد. پس دامنه‌ی جدا است: روی ماشینِ
+   بی‌انکودر با پیامِ روشن و کدِ ۲ رد می‌شود و سبزِ بی‌معنی نمی‌دهد. در CI،
+   پای «انکودر نصب‌شده» همین دامنه را اجرا می‌کند.
    ============================================================ */
 'use strict';
 
@@ -112,10 +119,13 @@ const SCOPES = {
   frontend: ['frontend'],
   live: ['live'],
   static: ['static'],
+  encoder: ['encoder'],
   offline: ['backend', 'frontend'],
   // `static` عمداً اینجا نیست: `live` بک‌اندِ بالا می‌خواهد و `static` بک‌اندِ
   // خواب — جمع‌کردنشان یعنی یک محیطِ غیرِقابلِ‌برآورده و یک شکستِ ساختگی.
-  all: ['backend', 'frontend', 'live'],
+  // `encoder` هست: پیش‌شرطش «انکودری روی این ماشین باشد» است که با `live`
+  // تضادی ندارد؛ اگر نباشد، خودِ پیش‌شرط با پیامِ روشن رد می‌شود.
+  all: ['backend', 'frontend', 'live', 'encoder'],
 };
 if (!SCOPES[SCOPE]) {
   console.error(`دامنه‌ی ناشناخته: ${SCOPE} — یکی از ${Object.keys(SCOPES).join('، ')}`);
@@ -330,6 +340,59 @@ const GUARDS = [
         replace: 'const POLL_CHECKS_TOTAL = 30;',
         expect: /کوتاه‌تر/,
       },
+      /* ---------- نقاطِ کوری که تا امروز هیچ جهشی نداشتند ----------
+         تا پیش از این، نگهبان فقط *نامِ* دو تابع و وجودِ `Math.min` را می‌سنجید؛
+         پس هر دست‌کاری در خودِ فرمول سبز می‌ماند. این چهار جهش همان حفره‌ها را
+         هدف می‌گیرند و باید همان سنجش‌های بازسازی‌شده را قرمز کنند. */
+      {
+        // پله‌ی آرام با ضریبِ پله‌ی سریع: پنجره‌ی واقعی از ۴۱ دقیقه به چند
+        // دقیقه می‌افتد و صفحه قبل از روشن‌شدنِ سفارش تسلیم می‌شود — همان
+        // باگی که کلِ این نگهبان برایش نوشته شده، ولی این‌بار داخلِ فرمول.
+        label: 'ضریبِ پله‌ی آرام به ضریبِ پله‌ی سریع عوض شود',
+        file: 'next-frontend/src/components/OrderSuccessContent.tsx',
+        find: ': POLL_CHECKS_FAST * POLL_MS_FAST + (n - POLL_CHECKS_FAST) * POLL_MS_SLOW;',
+        replace: ': POLL_CHECKS_FAST * POLL_MS_FAST + (n - POLL_CHECKS_FAST) * POLL_MS_FAST;',
+        expect: /two-phase schedule/,
+      },
+      {
+        // جهتِ شاخه جابه‌جا: شاخه‌ی سریع برای nهای بزرگ اجرا می‌شود، پس مهلت‌ها
+        // نزولی می‌شوند و `delayToNextCheck` منفی — یعنی حلقه‌ی بی‌وقفه.
+        label: 'شاخه‌ی checkTimeMs برعکس شود (مهلتِ نزولی)',
+        file: 'next-frontend/src/components/OrderSuccessContent.tsx',
+        find: '  return n <= POLL_CHECKS_FAST\n',
+        replace: '  return n > POLL_CHECKS_FAST\n',
+        // شاخهٔ برعکس *اول* سنجشِ دوپله‌ای را می‌شکند (مهلتِ اول منفی می‌شود) و
+        // سنجشِ صعودی سرِ جایش می‌ماند؛ پس هر دو پیام پذیرفته است.
+        expect: /two-phase schedule|monotonic schedule/,
+      },
+      {
+        // مرزِ «اولین موعد» از `<` به `<=` عوض شود: سرِ ۱۵ ثانیه هنوز صفر
+        // برمی‌گرداند، پس اولین بررسی یک پله دیر می‌رود.
+        label: 'مرزِ اولین موعد در checksDue یک‌واحد جابه‌جا شود',
+        file: 'next-frontend/src/components/OrderSuccessContent.tsx',
+        find: '  if (elapsedMs < POLL_MS_FAST) return 0;\n',
+        replace: '  if (elapsedMs <= POLL_MS_FAST) return 0;\n',
+        expect: /checksDue boundaries/,
+      },
+      {
+        // سقفِ `Math.min` برداشته شود: بررسیِ سقفیدیگری که مشتری را با عددی
+        // چند‌برابری رها می‌کند.
+        label: 'سقفِ checksDue برداشته شود',
+        file: 'next-frontend/src/components/OrderSuccessContent.tsx',
+        find: '    POLL_CHECKS_TOTAL,\n    POLL_CHECKS_FAST +\n',
+        replace: '    Number.MAX_SAFE_INTEGER,\n    POLL_CHECKS_FAST +\n',
+        expect: /checksDue cap/,
+      },
+      {
+        // حلقه موعدِ *همین* بررسی را بخواند نه موعدِ بعدی: تأخیر همیشه صفر
+        // می‌شود و صفحه به سرور می‌کوبد — دقیقاً همان چیزی که سقف جلویش را
+        // می‌گیرد. تا امروز هیچ‌چیز این خط را نمی‌سنجید.
+        label: 'حلقه موعدِ بعدی را نخواند (تأخیرِ همیشه صفر)',
+        file: 'next-frontend/src/components/OrderSuccessContent.tsx',
+        find: 'checkTimeMs(checks + 1) - elapsed()',
+        replace: 'checkTimeMs(checks) - elapsed()',
+        expect: /loop wiring/,
+      },
     ],
   },
   {
@@ -358,15 +421,24 @@ const GUARDS = [
       {
         label: 'مهلتِ Next بدونِ شماره ذخیره شود',
         file: 'next-frontend/src/components/LoginForm.tsx',
-        find: 'localStorage.setItem(RESEND_KEY, JSON.stringify({ phone, until }))',
+        find: 'localStorage.setItem(RESEND_KEY, JSON.stringify({ phone, until, codeUntil: codeUntilAbs }))',
         replace: 'localStorage.setItem(RESEND_KEY, JSON.stringify({ until }))',
         expect: /کدام شماره/,
+      },
+      {
+        // عمرِ کد هم‌جای مهلتِ ارسال مجدد ذخیره شود: همان باگی که این دور
+        // بسته شد («کد منقضی شده» از پنجرهٔ ۳۰ ثانیه‌ای ساخته شود).
+        label: 'عمرِ کد با مهلتِ ارسال مجدد یکی شود (هشدارِ انقضایِ زودهنگام)',
+        file: 'next-frontend/src/components/LoginForm.tsx',
+        find: 'const codeLeft = codeSeconds === null ? FALLBACK_CODE_TTL_SECONDS : codeSeconds;',
+        replace: 'const codeLeft = seconds;',
+        expect: /عمرِ کد/,
       },
       {
         // همان باگی که همین امروز بسته شد: پنجره‌ی Next با عددِ هاردکد باز شود.
         label: 'پنجرهٔ Next دوباره عددِ هاردکد بگیرد (نه مهلتِ سرور)',
         file: 'next-frontend/src/components/LoginForm.tsx',
-        find: 'const res = await requestOtp(phone.trim(), ch.token);\n      startCooldown(serverResendSeconds(res));',
+        find: 'const res = await requestOtp(phone.trim(), ch.token);\n      startCooldown(serverResendSeconds(res), serverCodeSeconds(res));',
         replace: 'await requestOtp(phone.trim(), ch.token);\n      startCooldown(30);',
         expect: /هاردکد/,
       },
@@ -375,8 +447,8 @@ const GUARDS = [
         // یعنی عددی که کاربر می‌شمارد با عددی که سرور اعمال می‌کند یکی نباشد.
         label: 'سرور در ۴۲۹ مهلتِ کامل بدهد، نه مهلتِ باقی‌مانده',
         file: 'backend/routes/auth.js',
-        find: 'retryAfter: wait });',
-        replace: 'retryAfter: Math.ceil(RESEND_COOLDOWN_MS / 1000) });',
+        find: 'retryAfter: wait,',
+        replace: 'retryAfter: Math.ceil(RESEND_COOLDOWN_MS / 1000),',
         expect: /باقی/,
       },
       {
@@ -756,6 +828,292 @@ const GUARDS = [
         find: "    logAdminAction(user.id, 'admin_recovery_ok', maskPhone(user.phone),",
         replace: "    logAdminAction(user.id, 'admin_mfa_ok', maskPhone(user.phone),",
         expect: /رویدادِ خودش را در دفترِ پنل ثبت می‌کند/,
+      },
+    ],
+  },
+  {
+    name: 'picture-self-sufficiency',
+    scope: 'backend',
+    title: 'هر عکسی که روی دیسک است با همان بایت از /picture می‌آید',
+    // چرا لنگر می‌خواهد: این نگهبان از هر سه لایه‌ی تحویلِ عکس رد می‌شود — ریشه‌ی
+    // پوشه، مذاکره‌ی WebP، و نسخه‌ی کم‌عرضِ `?w=`. هر لایه می‌تواند بی‌صدا خاموش شود
+    // (کاربر کادرِ خالی می‌بیند) و هیچ نگهبانِ ایستایی نیستی. علاوه بر آن، خودِ
+    // آزمون با نام‌های فارسیِ URL-encode‌شده کار می‌کند که یک ظرفیتِ واقعیِ
+    // شکستن است.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/picture-self-sufficiency.js'] },
+    mutations: [
+      {
+        // مسیرِ مونت عوض شود (معادلِ «ریشه یک پله جابه‌جا شد»): نه ۴۰۴ می‌آید و
+        // نه ۵۰۰؛ فقط همه‌ی عکس‌ها غیب می‌شوند و صفحه‌ها کادرِ خالی نشان می‌دهند.
+        //
+        // عمداً `lib/paths.js` دست‌کاری نمی‌شود: در سندباکس، ریشه از
+        // `PG_PICTURE_DIR` می‌آید و عوض‌کردنِ ثابتِ پیش‌فرض هیچ اثری ندارد — یعنی
+        // جهشی که *سبز* می‌ماند و خودش یک درس است: نگهبانِ توخالی همان است که
+        // با تغییری که در راهِ واقعی بی‌اثر است، سبز بماند.
+        label: 'مسیرِ مونتِ عکس‌ها تغییر کند',
+        file: 'backend/server.js',
+        find: "app.use('/picture', express.static(PICTURE_DIR, {",
+        replace: "app.use('/pictures', express.static(PICTURE_DIR, {",
+        expect: /با همان بایت/,
+      },
+      {
+        // مذاکره‌ی WebP از مدارِ مونت خارج شود: همه‌ی عکس‌ها هنوز ۲۰۰ می‌دهند
+        // (static همان جا نشسته) ولی مرورگرِ مدرن هیچ‌وقت نسخه‌ی سبک‌تر را نمی‌گیرد.
+        label: 'میدل‌ورِ مذاکره‌ی WebP از مدار خارج شود',
+        file: 'backend/server.js',
+        find: "app.use('/picture', webpNegotiate(PICTURE_DIR));\n",
+        replace: '',
+        expect: /همان فایلِ \\.webp|WebP/, // دو برچسبش: تعاملِ موفق و نوعِ محتوا
+      },
+      {
+        // فهرستِ عرض‌های مجاز خالی شود: `?w=320` بی‌صدا می‌افتد روی عکسِ کامل و
+        // همان ۴۰ تا درخواستِ سنگینِ قبلی برمی‌گردد — بدونِ هیچ خطایی.
+        label: 'فهرستِ عرض‌های مجاز `?w=` خالی شود',
+        file: 'backend/lib/webp-negotiate.js',
+        find: 'const ALLOWED_WIDTHS = new Set([320, 560]);',
+        replace: 'const ALLOWED_WIDTHS = new Set([]);',
+        expect: /جفتِ اصل/,
+      },
+      {
+        // `Vary: Accept` برداشته شود: هر پاسخ درست است، ولی کشِ میانی — که همه
+        // دنیا را یک URL می‌بیند — جوابِ مرورگرِ webp را به مرورگرِ قدیمی پس
+        // می‌دهد و کاربر عکسِ خراب می‌بیند.
+        label: 'هدرِ Vary: Accept برداشته شود',
+        file: 'backend/lib/webp-negotiate.js',
+        find: "    res.vary('Accept');\n",
+        replace: '',
+        expect: /Vary/,
+      },
+    ],
+  },
+  {
+    name: 'image-encoder-paths',
+    scope: 'backend',
+    title: 'مسیرِ بی‌انکودر باید بی‌صدا و سالم ادامه بدهد (نه بی‌هشدار، نه با کدِ خطا)',
+    // چرا لنگر می‌خواهد: دو شاخه‌ی این نگهبان تنها وقتی دیده می‌شوند که
+    // انکودری *نباشد* — و روی ماشینی که انکودر دارد، هیچ‌کس به‌یاد نمی‌آورد آن
+    // شاخه را دست بزند. شکست‌هایش هیچ خطایی نمی‌دهند:
+    //   • برداشتنِ هشدارِ یک‌باره ⇒ مدیر هیچ‌وقت نمی‌فهمد چرا عکس‌ها سبک نمی‌شوند.
+    //   • عوض‌کردنِ کدِ خروجِ ابزار ⇒ اسکریپتِ راه‌اندازی/CI بی‌دلیل قرمز می‌شود.
+    // این نیمه روی هر ماشینی اجرا می‌شود (بی‌انکودر با PATHِ خالی شبیه‌سازی
+    // می‌شود)، پس دامنه‌اش `backend` است؛ نیمه‌ی «با انکودرِ واقعی» دامنه‌ی
+    // جدا دارد و در ادامه می‌آید.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/image-encoder-paths.js'] },
+    mutations: [
+      {
+        // هشدارِ یک‌باره برداشته شود: آپلودِ بی‌انکودر *کار* می‌کند (عکس ذخیره
+        // می‌شود، فقط سنگین می‌ماند) پس هیچ چیزِ دیگری این را نمی‌گیرد.
+        label: 'هشدارِ «بدونِ انکودر» خفه شود',
+        file: 'backend/lib/image-encode.js',
+        find: 'let warnedNoEncoder = false;',
+        replace: 'let warnedNoEncoder = true;',
+        expect: /هشدارِ «بدونِ انکودر»/, // گارد دقیقاً همین جمله را قرمز می‌کند
+      },
+      {
+        // کدِ خروجِ شاخه‌ی بی‌انکودر از صفر به غیرِصفر: ابزاری که *کارِ درست* را
+        // می‌کند (دست نمی‌زند و می‌گوید چه نصب کن) به چشمِ هر اسکریپتی «خراب»
+        // می‌آید — و هیچ آزمونِ دیگری به این فایل نگاه نمی‌کند.
+        label: 'ابزارِ بی‌انکودر با کدِ خروجِ غیرِصفر تمام شود',
+        file: 'backend/tools/optimize-images.js',
+        // `String.raw` تا `\n`ِ درونِ رشتهٔ سورسِ ابزار با نویسهٔ واقعیِ خطِ نو
+        // قاطی نشود؛ لنگر باید *بایت‌به‌بایت* همان متنِ فایل باشد.
+        find: String.raw`  console.log('\n  The site works fine without this; images just stay heavier.\n');
+  process.exit(0);`,
+        replace: String.raw`  console.log('\n  The site works fine without this; images just stay heavier.\n');
+  process.exit(3);`,
+        expect: /کدِ خروجِ صفر/,
+      },
+    ],
+  },
+
+  {
+    // ---------- دامنه‌ی `encoder`: سنجیده‌شدن نیاز به انکودرِ واقعی دارد ----------
+    name: 'image-encoder-real',
+    scope: 'encoder',
+    title: 'انکودرِ واقعی باید عرض‌ها و نام‌های عهدشده را بسازد (نه بیشتر، نه بزرگ‌تر)',
+    // چرا لنگر می‌خواهد: این نیمه عهدهای عددی دارد و همه‌شان بی‌صدا برمی‌گردند.
+    // عوض‌کردنِ عرضِ ۳۲۰ به هر عددِ دیگری هیچ خطایی نمی‌دهد — فقط روزی که
+    // کادرِ ۴۰ پیکسلیِ لیستِ جست‌وجو عکسِ تار نشان بدهد یا یک فایلِ اضافه روی
+    // دیسک بماند، معلوم می‌شود. `tests/image-encoder-real.js` دروازه‌ی همین
+    // نیمه است (ادعای EXPECT_ENCODER=1) و نامِ رشته‌ها هم قراردادِ سرور است:
+    // `lib/webp-negotiate.js` فقط `x.webp` را می‌گردد.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/image-encoder-real.js'] },
+    mutations: [
+      {
+        // عرضِ بندانگشتی جابه‌جا شود: همه‌چیز سبز می‌ماند ولی مصرف‌کننده (کادرِ
+        // جست‌وجو/سبد/پنل) نه نسخه‌ای که می‌خواست را می‌گیرد نه نامی که می‌شناسد.
+        label: 'عرضِ نسخه‌ی کوچک از ۳۲۰ به ۳۰۰ عوض شود',
+        file: 'backend/lib/image-encode.js',
+        find: '  { w: 320, minSource: 420 },',
+        replace: '  { w: 300, minSource: 420 },',
+        expect: /۳۲۰/,
+      },
+      {
+        // پسوندِ خروجی عوض شود: فایل‌ها ساخته می‌شوند (دیسک پر می‌شود) ولی
+        // سرور همان نامِ `x.webp` را می‌گردد و هیچ‌وقت پیدایش نمی‌کند — یعنی
+        // حالتِ «همه چیز سبز، هیچ عکسی سبک نشده».
+        label: 'نامِ خروجیِ WebP عوض شود (سرور پیدایش نمی‌کند)',
+        file: 'backend/lib/image-encode.js',
+        find: "const webpPathFor = (src) => src.replace(/\\.(jpe?g|jfif|png)$/i, '.webp');",
+        replace: "const webpPathFor = (src) => src.replace(/\\.(jpe?g|jfif|png)$/i, '.webp2');",
+        expect: /خروجی‌ها همان سه نامِ عهدشده/, // گارد نام‌ها را نام می‌برد
+      },
+    ],
+  },
+
+  {
+    name: 'journal-recovery',
+    scope: 'backend',
+    title: 'اجرای سخت‌کشته‌شده باید در اجرای بعدی خودش بازیابی شود (ژورنالِ روی دیسک)',
+    // چرا لنگر می‌خواهد: تا امروز بازگردانی فقط در حافظه بود و SIGKILL/قطعِ برق
+    // فایل‌های تخریب‌شده را روی دیسک می‌گذاشت — یعنی ابزارِ نگهبانی خودش منبعِ
+    // خرابی می‌شد. قاعده دو مصرف‌کننده دارد (هارنس و نگهبان) و هر نیمه‌اش
+    // می‌تواند بی‌صدا برداشته شود: مالکیت، ترتیبِ پشتیبان‌گیری، و بازیابیِ سرِ شروع.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/journal-recovery.js'] },
+    mutations: [
+      {
+        // پروسهٔ زنده دیگر محترم شمرده نمی‌شود: دو اجرای موازی، کارِ هم را
+        // بازگردانی می‌کنند و هر دو نتیجهٔ غلط می‌دهند.
+        label: 'سنجشِ «مالکِ ژورنال زنده است» برداشته شود',
+        file: 'backend/tests/lib/journal.js',
+        find: '    if (pidAlive(j.pid) && j.pid !== pid) {',
+        replace: '    if (false) {',
+        expect: /پروسهٔ زنده/,
+      },
+      {
+        // پایانِ خوش، پشتیبانِ اجرای دیگری را هم می‌بلعد — همان حادثه‌ای که
+        // یک‌بار تنها نسخهٔ سالمِ یک فایلِ تخریب‌شده را از بین برد.
+        label: 'پاک‌سازیِ پایان، مالِ اجرای دیگر را هم ببرد',
+        file: 'backend/tests/lib/journal.js',
+        find: '    const foreign = j.entries.filter((e) => e.pid && e.pid !== pid);',
+        replace: '    const foreign = [];',
+        expect: /سطرِ اجرای/,
+      },
+      {
+        // فایلی که قبل از جهش نبود، بعد از بازیابی هم نباید باشد — وگرنه
+        // نگهبان یک فایلِ آشغال جا می‌گذارد که به کامیت بعدی می‌رسد.
+        label: 'شاخهٔ «فایلِ تازه‌ساخته» در بازگردانی برداشته شود',
+        file: 'backend/tests/lib/journal.js',
+        find: '        if (!e.existed) {',
+        replace: '        if (false) {',
+        expect: /فایلی که قبل از جهش وجود نداشت/,
+      },
+      {
+        // سنجشِ هش برداشته شود: پشتیبانِ دست‌کاری‌شده همان‌قدر معتبر شمرده
+        // می‌شود که پشتیبانِ سالم — یعنی فایلِ خراب به‌جای فایلِ درست می‌نشیند.
+        label: 'سنجشِ هشِ پشتیبان برداشته شود',
+        file: 'backend/tests/lib/journal.js',
+        find: '        if (sha(bytes) !== e.sha) {',
+        replace: '        if (false) {',
+        expect: /هشِ نامطابق/,
+      },
+      {
+        // ترتیبِ حیاتی: پشتیبان‌گیری *بعد* از نوشتنِ جهش — یعنی در حالتِ خوش هم
+        // چیزی برای برگرداندن نیست.
+        label: 'پشتیبان‌گیری به بعد از نوشتنِ جهش منتقل شود',
+        file: 'backend/tests/guard-mutations.js',
+        find: '    journalize(abs, active.get(abs));\n',
+        replace: '',
+        expect: /نوشتنِ جهش/,
+      },
+      {
+        // بازیابی سرِ پایان به‌جای سرِ شروع: در بازهٔ میانِ دو اجرا، فایل‌ها
+        // تخریب‌شده می‌مانند — یعنی همان حفره‌ای که این قاعده بسته است.
+        label: 'بازیابی از سرِ شروع به پایان منتقل شود',
+        file: 'backend/tests/guard-mutations.js',
+        find: '  recoverFromJournal();\n',
+        replace: '',
+        expect: /اولین جهش/,
+      },
+      {
+        // بازگردانیِ یک فایل، سطرش را در ژورنال جا می‌گذارد: اجرای بعدی
+        // (بی‌خطر) همان سطر را دوباره بازیابی می‌کند و گزارشِ کاذب می‌سازد.
+        label: 'بازگردانی، سطرِ ژورنال را برندارد',
+        file: 'backend/tests/guard-mutations.js',
+        find: '  dejournalize(abs);\n',
+        replace: '',
+        expect: /کارِ تکراری/,
+      },
+    ],
+  },
+  {
+    name: 'legacy-map-single-source',
+    scope: 'backend',
+    title: 'نگاشتِ `.html` یک منبع دارد، نه دو تا (Express و Next همان فایل را می‌خوانند)',
+    // چرا لنگر می‌خواهد: تا امروز دو جدولِ جدا بود و واگرایی‌شان فقط با یک سنجشِ
+    // *زنده* گرفته می‌شد؛ روی ماشینی که آن دو سرور بالا نیستند، دو فهرست
+    // می‌توانستند بی‌صدا از هم دور شوند. حالا یک فایلِ مشترک است و همین نگهبان
+    // آن را آفلاین تضمین می‌کند — ولی هر سه راهِ برگشتِ آن حفره («جدولِ دوم»،
+    // «تابعِ دوم»، «فایلِ .ts دوباره») بی‌صدا و بی‌آزمون‌اند.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/legacy-map-single-source.js'] },
+    mutations: [
+      {
+        // جدولِ دوم در پوستهٔ Express: همان الگویی که REVIEW آن را ریسک شمرده بود.
+        // امروز مقصدها یکی‌اند، پس هیچ سنجشِ رفتاری‌ای نمی‌گیردش — فقط نگهبانِ
+        // «هیچ `.html`ی در پوسته نباشد» می‌بیندش.
+        label: 'جدولِ نام‌ها دوباره در پوستهٔ Express کپی شود',
+        file: 'backend/lib/legacy-redirects.js',
+        find: 'module.exports = require(SHARED);',
+        replace:
+          "const LEGACY_PAGE_ALIASES = { 'cart.html': '/cart' };\n" +
+          'module.exports = Object.assign({}, require(SHARED), { LEGACY_PAGE_ALIASES });',
+        expect: /جدولِ دوم/,
+      },
+      {
+        // تابعِ دوم: مقصدِ یک نام عوض می‌شود. این همان خرابیِ واقعی است —
+        // مشتری روی Express به صفحه‌ای می‌رود که Next ندارد (یا برعکس).
+        label: 'مقصدِ cart.html روی Express از منبعِ مشترک جدا شود',
+        file: 'backend/lib/legacy-redirects.js',
+        find: 'module.exports = require(SHARED);',
+        replace:
+          'module.exports = Object.assign({}, require(SHARED), {\n' +
+          "  legacyRedirect: (p, q) => (p === '/cart.html' ? '/cart-taghiri-karde' : require(SHARED).legacyRedirect(p, q)),\n" +
+          '});',
+        expect: /همان تابع/, // نگهبان برابریِ *مرجع* را می‌سنجد، نه برابریِ محتوا
+      },
+      {
+        // نسخهٔ .ts دوباره ساخته شود: دو منبعِ حقیقت، بی‌آنکه چیزی بشکند.
+        // سنجشِ «فایلِ بازنشسته» باید زودتر از هر رفتارشناسی‌ای بگیردش.
+        label: 'نسخهٔ .ts منبعِ حقیقت دوباره ساخته شود',
+        file: 'next-frontend/src/lib/legacyUrls.ts',
+        create: 'export const LEGACY_PAGE_ALIASES: Record<string, string> = {\n  "cart.html": "/cart",\n};\n',
+        expect: /برنگشته است/,
+      },
+    ],
+  },
+  {
+    name: 'startsite-diagnostics',
+    scope: 'backend',
+    title: 'حالتِ عیب‌یابیِ `StartSite.bat` دقیقاً می‌گوید چه چیز خراب است',
+    // چرا لنگر می‌خواهد: این حالت خودش یک نگهبان است (هر شاخه‌اش یک «قرمزِ
+    // دقیق» تولید می‌کند) و اگر روزی یکی از بررسی‌ها بی‌اثر شود — یعنی وقتی
+    // همه‌چیز خراب است «سبز» بدهد — هیچ آزمونِ دیگری نمی‌گیردش. هر سه جهش
+    // عمداً «سبزِ قلابی» می‌سازند، نه خطای واضح.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/startsite-diagnostics.js'] },
+    mutations: [
+      {
+        // بررسیِ پورت بی‌اثر شود: پورتِ اشغال «آزاد» گزارش می‌شود.
+        label: 'بررسیِ پورت از کار بیفتد (اشغال = آزاد)',
+        file: 'StartSite.bat',
+        find: "for /f \"tokens=5\" %%p in ('netstat -ano ^| findstr /r /c:\":%1 .*LISTENING\"') do if not defined OWNER_PID set \"OWNER_PID=%%p\"",
+        replace: 'rem mutation: port check disabled',
+        expect: /پورتِ اشغال/, // نگهبان همان سناریو را می‌زند و می‌گوید پورتِ اشغال گرفته نشد
+      },
+      {
+        // مقایسهٔ دو مبدأ به خودش مقایسه شود: همیشه «موافق» می‌دهد.
+        label: 'مقایسهٔ SITE_URL با خودش (همیشه موافق)',
+        file: 'StartSite.bat',
+        find: 'if /i "%BE_SITE%"=="%NEXT_SITE%" (',
+        replace: 'if /i "%BE_SITE%"=="%BE_SITE%" (',
+        expect: /ناهم‌خوانی/, // نگهبان همان سناریو را می‌زند و متنِ دقیقِ هر دو مقدار را می‌خواهد
+      },
+      {
+        // آستانهٔ نسخه به ۵ برود: Node ۲۰ «تازه» شمرده شود.
+        label: 'آستانهٔ نسخهٔ Node از ۲۲ به ۵ برود',
+        file: 'StartSite.bat',
+        find: 'if %NODE_MAJ% LSS 22 goto :node_old',
+        replace: 'if %NODE_MAJ% LSS 5 goto :node_old',
+        expect: /20\.11\.0/, // Nodeِ ۲۰ حالا «تازه» شمرده می‌شود — نگهبان همان نسخه را نام می‌برد
       },
     ],
   },
@@ -1359,14 +1717,14 @@ const GUARDS = [
     mutations: [
       {
         label: 'محصولِ قدیمی به فهرست برگردد، نه صفحه‌ی خودش',
-        file: 'next-frontend/src/lib/legacyUrls.ts',
+        file: 'next-frontend/src/lib/legacyUrls.js',
         find: '? `/product/${id}` : "/products";',
         replace: '? "/products" : "/products";',
         failedTest: 'را به مسیرِ',
       },
       {
         label: 'نگهبانِ html مسیرهای عمیق‌تر را هم بگیرد',
-        file: 'next-frontend/src/lib/legacyUrls.ts',
+        file: 'next-frontend/src/lib/legacyUrls.js',
         find: 'return /^\\/[^/]+\\.html$/.test(pathname);',
         replace: 'return /^\\/.*\\.html$/.test(pathname);',
         failedTest: 'عمقِ بیشتر',
@@ -1746,14 +2104,14 @@ const GUARDS = [
     mutations: [
       {
         label: 'مقصدِ cart.html در نگاشت به مسیری برود که وجود ندارد',
-        file: 'next-frontend/src/lib/legacyUrls.ts',
+        file: 'next-frontend/src/lib/legacyUrls.js',
         find: '  "cart.html": "/cart",',
         replace: '  "cart.html": "/cart-taghiri-karde",',
         expect: /مقصدِ ریدایرکت/,
       },
       {
         label: 'نامِ cart.html از نگاشت حذف شود (بی‌مقصد بماند)',
-        file: 'next-frontend/src/lib/legacyUrls.ts',
+        file: 'next-frontend/src/lib/legacyUrls.js',
         find: '  "cart.html": "/cart",\n',
         replace: '',
         expect: /نه مقصدی/,
@@ -1899,6 +2257,20 @@ const tail = (r, n = 2200) => {
   return out.length > n ? `…${out.slice(-n)}` : out;
 };
 
+/* ---------- ژورنالِ روی دیسک (در tests/lib/journal.js، تا خودش آزمون‌پذیر باشد) ----------
+   بازگردانیِ درون‌حافظه‌ای SIGKILL و قطعِ برق را پوشش نمی‌دهد؛ این ژورنال
+   پیش از هر جهش، بایت‌های اصلی را روی دیسک می‌نشاند تا اجرای بعدی بتواند
+   فایل‌های تخریب‌شده را پیدا و برگرداند. */
+const { makeJournal } = require('./lib/journal');
+const JOURNAL = makeJournal({ root: ROOT, pid: process.pid });
+const journalize = (abs, original) => JOURNAL.journalize(abs, original);
+const dejournalize = (abs) => JOURNAL.dejournalize(abs);
+const clearJournal = () => JOURNAL.clear();
+const recoverFromJournal = () => {
+  const { restored } = JOURNAL.recover();
+  return restored.length;
+};
+
 function restoreAll() {
   const problems = [];
   for (const [abs, original] of [...active]) {
@@ -1923,6 +2295,7 @@ function bail(reason) {
   const problems = restoreAll();
   if (problems.length) console.error(`\n❌ بازگردانیِ اضطراری ناتمام: ${problems.join('، ')}`);
   else console.error('\n⚠️  اجرا وسطِ راه قطع شد؛ همه‌ی فایل‌های جهش‌دیده بایت‌به‌بایت برگردانده شدند.');
+  if (!problems.length) clearJournal();
   process.exit(reason === 'SIGINT' ? 130 : 143);
 }
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => bail(sig));
@@ -1930,6 +2303,7 @@ process.on('exit', () => {
   if (active.size) {
     const problems = restoreAll();
     if (problems.length) console.error(`❌ فایل‌های بازگردانی‌نشده: ${problems.join('، ')}`);
+    else clearJournal();
   }
 });
 
@@ -1940,7 +2314,11 @@ function countOccurrences(hay, needle) {
 
 function applyMutation(m) {
   const abs = path.join(ROOT, m.file);
-  if (!active.has(abs)) active.set(abs, fs.existsSync(abs) ? fs.readFileSync(abs) : null);
+  if (!active.has(abs)) {
+    active.set(abs, fs.existsSync(abs) ? fs.readFileSync(abs) : null);
+    // پیش از تخریب، پشتیبان روی دیسک — وگرنه SIGKILL هیچ راهِ برگشتی ندارد.
+    journalize(abs, active.get(abs));
+  }
   if (m.create !== undefined) {
     fs.mkdirSync(path.dirname(abs), { recursive: true });
     fs.writeFileSync(abs, m.create);
@@ -1970,6 +2348,7 @@ function restoreOne(abs) {
   if (original === null) fs.rmSync(abs, { force: true });
   else fs.writeFileSync(abs, original);
   active.delete(abs);
+  dejournalize(abs);
   const now = fs.existsSync(abs) ? fs.readFileSync(abs) : null;
   return original === null ? now === null : now !== null && sha(now) === sha(original);
 }
@@ -2207,7 +2586,35 @@ async function preflightStatic() {
   return false;
 }
 
+/**
+ * پیش‌شرطِ دامنه‌ی `encoder`.
+ *
+ * نیمه‌ی «با انکودر» نگهبان فقط روی ماشینی معنی دارد که واقعاً انکودر دارد؛
+ * روی ماشینِ بی‌انکودر، نگهبان صریح آن نیمه را `[SKIP]` می‌کند — و آن‌وقت
+ * جهش‌های این دامنه «گرفته نشد» می‌شوند و آن یک شکستِ *ساختگی* است، نه
+ * خرابیِ کد. (دقیقاً همان استدلالی که `static` را جدا کرد.)
+ */
+function preflightEncoder() {
+  let name = null;
+  try {
+    const enc = require(path.join(BACKEND, 'lib', 'image-encode')).pickEncoder();
+    name = enc ? enc.name : null;
+  } catch (e) {
+    console.error(`\n❌ دامنه‌ی encoder نتوانست داورِ انکودر را بخواند: ${e.message}`);
+    return false;
+  }
+  if (name) return true;
+  console.error(
+    '\n❌ دامنه‌ی encoder روی این ماشین انکودرِ عکس نمی‌بیند.\n' +
+    '   جهش‌های این دامنه (عرضِ نسخه‌ی کوچک، نامِ خروجی) بدونِ انکودر قابلِ سنجش نیستند.\n' +
+    '   یکی را نصب کن (cwebp، ImageMagick، ffmpeg، یا Python+Pillow) و دوباره اجرا کن.\n' +
+    '   نیمه‌ی «بی‌انکودر» همان نگهبان، دامنه‌ی backend است و همین حالا هم اجرا می‌شود.',
+  );
+  return false;
+}
+
 async function main() {
+  recoverFromJournal();
   // خروجیِ ماشین‌خوان — پیش از هر دامنه‌بندی: پرسشِ «چه کسی در رجیستری است»
   // دامنه‌ای نیست. اگر نگاشتِ فایل نشکند، این‌جا با کد ۲ می‌مانیم و نه با
   // یک JSONِ ناقص که مصرف‌کننده‌اش را گمراه کند.
@@ -2260,6 +2667,7 @@ async function main() {
 
   if (ACTIVE_SCOPES.has('live') && !(await preflightLive())) process.exit(2);
   if (ACTIVE_SCOPES.has('static') && !(await preflightStatic())) process.exit(2);
+  if (ACTIVE_SCOPES.has('encoder') && !preflightEncoder()) process.exit(2);
 
   console.log(`\n=== هارنسِ تخریبیِ نگهبان‌ها — دامنه: ${SCOPE} | ${selected.length} نگهبان ===`);
   const startedAt = Date.now();
@@ -2282,6 +2690,7 @@ async function main() {
   }
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
   console.log(`\n${failed === 0 ? 'SUCCESS' : 'FAILURE'}: ${pass} بررسی گذشت، ${failed} ناموفق — ${seconds} ثانیه`);
+  clearJournal();
   if (failed > 0) process.exit(1);
 }
 

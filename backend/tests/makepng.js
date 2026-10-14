@@ -11,6 +11,10 @@
    تازه‌ای به پروژه اضافه نمی‌شود.
 
    یک جا نگه داشته شده تا اگر روزی حدِ ابعاد عوض شد، دو نسخه‌ی واگرا نداشته باشیم.
+
+   دو سازنده دارد و تفاوتشان مهم است: `makePng` یکدست است (برای سنجشِ ابعاد و
+   حجم)، `makeNoisePng` نویزی است و فشرده نمی‌شود (برای سنجشِ مسیرِ انکودر،
+   جایی که باید حجمِ خروجی با حجمِ منبع مقایسه شود).
    ============================================================ */
 
 const zlib = require('zlib');
@@ -38,23 +42,57 @@ function pngChunk(type, data) {
   return Buffer.concat([len, body, crc]);
 }
 
-/** یک PNG خاکستریِ یکدست به ابعادِ w×h. @returns {Buffer} */
-function makePng(w, h) {
+/** بدنه‌ی PNGِ خاکستریِ ۸بیتی را با هدر/چانک‌های درست بسته‌بندی می‌کند.
+ *  جدا شد تا سازنده‌های مختلف (یکدست و نویزی) یک مسیرِ بسته‌بندی داشته باشند. */
+function pngFromRaw(w, h, raw) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(w, 0);
   ihdr.writeUInt32BE(h, 4);
   ihdr[8] = 8;   // عمقِ بیت
   ihdr[9] = 0;   // خاکستریِ ساده — سبک‌ترین حالتِ ممکن
-  // هر خطِ PNG یک بایتِ «نوعِ فیلتر» جلوش دارد. همه صفر ⇒ zlib خیلی کوچکش
-  // می‌کند، پس حتی ۴۵۰۰×۴۵۰۰ هم چند کیلوبایت می‌شود و زیرِ سقفِ ۲ مگابایتیِ
-  // آپلود می‌ماند؛ یعنی تست واقعاً نگهبانِ *ابعاد* را می‌سنجد نه نگهبانِ حجم.
-  const raw = Buffer.alloc(h * (w + 1));
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
     pngChunk('IHDR', ihdr),
     pngChunk('IDAT', zlib.deflateSync(raw)),
     pngChunk('IEND', Buffer.alloc(0))
   ]);
+}
+
+/** یک PNG خاکستریِ یکدست به ابعادِ w×h. @returns {Buffer} */
+function makePng(w, h) {
+  // هر خطِ PNG یک بایتِ «نوعِ فیلتر» جلوش دارد. همه صفر ⇒ zlib خیلی کوچکش
+  // می‌کند، پس حتی ۴۵۰۰×۴۵۰۰ هم چند کیلوبایت می‌شود و زیرِ سقفِ ۲ مگابایتیِ
+  // آپلود می‌ماند؛ یعنی تست واقعاً نگهبانِ *ابعاد* را می‌سنجد نه نگهبانِ حجم.
+  const raw = Buffer.alloc(h * (w + 1));
+  return pngFromRaw(w, h, raw);
+}
+
+/**
+ * یک PNGِ **نویزیِ** خاکستری به ابعادِ w×h.
+ *
+ * چرا جدا از `makePng`: آن یکی عمداً یکدست است و zlib آن را به چند کیلوبایت
+ * می‌رساند. برای سنجیدنِ مسیرِ انکودرِ عکس این بی‌فایده است: هر انکودری روی
+ * تصویرِ یکدست فایلِ *کوچک‌تری* از منبعِ چندکیلوبایتی می‌سازد یا نه، و مقایسه‌ی
+ * حجم معنی ندارد. نویزِ شبه‌تصادفیِ زیر قابلِ فشرده‌سازی نیست، پس PNGِ منبع
+ * واقعاً بزرگ می‌ماند — همان حالتی که «WebP کوچک‌تر است» را قابلِ سنجش می‌کند.
+ *
+ * عددِ شبه‌تصادفی از یک xorshiftِ بانویِ ثابت می‌آید: هر اجرا همان بایت‌ها را
+ * می‌دهد، پس سنجش تصادفی نیست و در دو پای CI یک چیز را می‌سنجد.
+ * @returns {Buffer}
+ */
+function makeNoisePng(w, h) {
+  const raw = Buffer.alloc(h * (w + 1));
+  let seed = 0x2545F491;
+  for (let y = 0; y < h; y++) {
+    const row = y * (w + 1);
+    for (let x = 0; x < w; x++) {
+      seed ^= seed << 13; seed >>>= 0;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5; seed >>>= 0;
+      raw[row + 1 + x] = seed & 0xFF;
+    }
+  }
+  return pngFromRaw(w, h, raw);
 }
 
 /**
@@ -85,4 +123,4 @@ function makePngWithMetadata(w, h) {
   };
 }
 
-module.exports = { makePng, makePngWithMetadata };
+module.exports = { makePng, makeNoisePng, makePngWithMetadata };

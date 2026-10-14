@@ -190,6 +190,22 @@ jobs:
       - name: Recovery code guard
         run: node tests/recovery-codes.js
 
+      # و ابزارِ نگهبانی نباید خودش خرابی جا بگذارد: هارنسِ جهش فایل‌های واقعیِ
+      # مخزن را عمداً می‌شکند و بازگردانی‌اش تا امروز فقط در حافظه بود — پس
+      # SIGKILL/قطعِ برق، فایل‌های تخریب‌شده را روی دیسک می‌گذاشت. این نگهبان
+      # ژورنالِ روی دیسک، مالکیتِ پروسه، و بازیابیِ سرِ اجرای بعدی را می‌سنجد
+      # (بی‌سرور، در پوشهٔ موقت؛ به مخزنِ واقعی دست نمی‌زند).
+      - name: Journal recovery guard
+        run: node tests/journal-recovery.js
+
+      # عکس‌ها سه لایه دارند (ریشه + مذاکرهٔ WebP + نسخهٔ کم‌عرضِ `?w=`) و تا
+      # امروز هیچ‌کدام سرتاسری سنجیده نمی‌شد: نگهبان‌های ایستا فقط وجودِ خطِ
+      # میدل‌ور را می‌دیدند و نگهبانِ دروازهٔ خطا فقط مسیرهای ناموجود را. این
+      # نگهبان روی سندباکس، *هر فایلِ روی دیسک* را می‌خواهد و بایت‌به‌بایت با
+      # اصلش مقایسه می‌کند — با نام‌های فارسیِ URL-encode‌شده.
+      - name: Picture self-sufficiency guard
+        run: node tests/picture-self-sufficiency.js
+
       # نه سرور می‌خواهد نه دیتابیس: عددهای README را با خودِ مخزن می‌سنجد. اگر
       # کسی عددی را عوض کند و شمارشِ مستندات جا بماند (که یک‌بار شد: سئو سه جا ۸۵
       # و یک جا ۸۶)، همین step گیر می‌اندازد — پیش از اینکه عددِ غلط عادت شود.
@@ -231,6 +247,77 @@ jobs:
       #     `tests/static-compress-cache.js` با میان‌افزار و فایلِ واقعی.
       # دارایی‌های ثابتِ خودِ Next (مانیفست/سرویس‌ورکر/فونت/آفلاین) هم در
       # jobِ فرانت‌اند، stepِ «Static and PWA paths on a live Next».
+
+  # ------------------------------------------------------------
+  # دو پای انکودرِ عکس
+  # ------------------------------------------------------------
+  # `lib/image-encode.js` دو شاخه‌ی واقعی دارد و تا امروز فقط یکی‌شان روی CI
+  # آزموده می‌شد: پای بک‌اند روی runnerی اجرا می‌شد که ImageMagick و ffmpeg از
+  # پیش رویش نصبند، پس شاخه‌ی «هیچ انکودری نیست» هیچ‌وقت اجرا نمی‌شد. حالا
+  # یک پای کوچک و مستقل با دو حالت: یکی با `cwebp` نصب‌شده و یکی که انکودرها
+  # از رویش برداشته می‌شوند. هر دو یک آزمون را اجرا می‌کنند و متغیرِ
+  # `EXPECT_ENCODER` ادعای همان پا را به خودِ آزمون می‌دهد — پس اگر نصب یا
+  # حذف اشتباه انجام شود، به‌جای «سبزِ بی‌معنی» قرمز می‌شود.
+  #
+  # چرا در jobِ بک‌اند ادغام نشد: آن job با ماتریسِ Node چهار بار اجرا می‌شود و
+  # این سنجش به نسخهٔ Node گره نخورده؛ سوارکردنش یعنی چهار بار نصب/حذفِ انکودر
+  # و کندشدنِ بی‌دلیلِ CI. این job دو اجرا دارد و هر دو سبک است.
+  image-encoder:
+    name: Image encoder paths (${{ matrix.encoder }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        encoder: ['present', 'absent']
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # ادعای همین پا. آزمون خودش با reality مقایسه‌اش می‌کند.
+      EXPECT_ENCODER: ${{ matrix.encoder == 'present' && '1' || '0' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
+      - name: Install cwebp (this leg only)
+        if: matrix.encoder == 'present'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends webp
+          cwebp -version          # اگر نصب نشده باشد، همین‌جا قرمز می‌شود
+
+      # روی runnerهای گیت‌هاب، ImageMagick و ffmpeg **از پیش** نصبند و Pillow
+      # هم معمولاً. «پای بدونِ انکودر» یعنی همین‌ها برداشته شوند، وگرنه آن پا
+      # در واقع پای دیگری است با اسمِ اشتباه.
+      - name: Remove every image encoder (this leg only)
+        if: matrix.encoder == 'absent'
+        run: |
+          set -euo pipefail
+          sudo apt-get remove -y --purge webp ffmpeg imagemagick imagemagick-6.q16 imagemagick-6-common 2>/dev/null || true
+          python3 -m pip uninstall -y pillow 2>/dev/null || true
+          echo '--- what is left ---'
+          for c in cwebp magick convert ffmpeg; do
+            command -v "$c" && echo "::error::$c survived the purge" || echo "$c: absent"
+          done
+          python3 -c 'import PIL' 2>/dev/null && echo '::error::Pillow survived the purge' || echo 'PIL: absent'
+
+      - name: Image encoder paths
+        run: npm run test:images
+
+      # و همان نیمه، این‌بار زیرِ جهش — فقط روی پایی که واقعاً انکودر دارد.
+      # دامنه‌ی `encoder` جدا است چون جهش‌هایش (عرضِ نسخه‌ی کوچک، نامِ خروجیِ
+      # WebP) بدونِ انکودر قابلِ سنجش نیستند: روی پای «بی‌انکودر» نتیجه‌اش یک
+      # شکستِ ساختگی می‌شد، نه یک خرابیِ واقعی. دامنه‌ی `backend` که نیمه‌ی
+      # بی‌انکودر را می‌سنجد، در jobِ بک‌اند اجرا می‌شود.
+      - name: Guard mutation harness (real-encoder guards)
+        if: matrix.encoder == 'present'
+        run: node ../backend/tests/guard-mutations.js --scope=encoder
 
   frontend:
     name: Next.js typecheck, lint, test and build (Node ${{ matrix.node }})

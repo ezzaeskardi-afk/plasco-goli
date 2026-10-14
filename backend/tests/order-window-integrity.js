@@ -165,15 +165,173 @@ if (rhythmKnown && POLL_MS_FAST < POLL_MS_SLOW && POLL_CHECKS_FAST < POLL_CHECKS
 // سقف باید همان جایی تمام شود که `checkTimeMs` می‌گوید. اگر کسی فرمولِ زمان‌بندیِ
 // کامپوننت را عوض کند و اینجا هم‌زمان به‌روز نشود، عددی که این آزمون می‌سنجد
 // دیگر پنجره‌ی واقعی نیست — پس خودِ فرمول را هم قفل می‌کنیم.
-if (/function\s+checkTimeMs\s*\(/.test(orderSuccess) && /Math\.min\(\s*POLL_CHECKS_TOTAL/.test(orderSuccess)) {
-  ok('پنجره همان سقفِ checksDue/checkTimeMs است (POLL_CHECKS_TOTAL)');
-} else {
-  notOk('schedule formula', 'checkTimeMs/checksDue عوض شده — عددِ سنجیده‌شده دیگر پنجره‌ی واقعی نیست');
-}
-
 const windowMs = rhythmKnown
   ? POLL_CHECKS_FAST * POLL_MS_FAST + (POLL_CHECKS_TOTAL - POLL_CHECKS_FAST) * POLL_MS_SLOW
   : 0;
+
+// ---------- ۳.۵) بازسازیِ واقعیِ فرمولِ زمان‌بندی، نه فقط نامِ دو تابع ----------
+// پیش از این فقط دو regex بود: «تابعی به نامِ checkTimeMs هست» و «جایی
+// `Math.min(POLL_CHECKS_TOTAL` نوشته شده». آن دو با هر فرمولِ اشتباهی هم سبز
+// می‌ماندند: کافی بود کسی ضریبِ پله‌ی آرام را عوض کند تا پنجره‌ی *واقعی* نصف
+// شود و این نگهبان همچنان سبز بماند — یعنی عددش دیگر پنجره‌ی مشتری نبود.
+//
+// حالا **بدنه‌ی خودِ تابع‌ها** از سورس بیرون کشیده و با همان ثابت‌ها اجرا
+// می‌شود؛ پس عددِ سنجیده‌شده از خودِ فرمول می‌آید و محاسبه‌ی موازیِ این فایل
+// فقط تا جایی مجاز است که با آن یکی بخواند.
+const bodyOf = (source, name) => {
+  const at = source.search(new RegExp(`function\\s+${name}\\s*\\(`));
+  if (at === -1) return null;
+  const open = source.indexOf('{', source.indexOf(')', at));
+  if (open === -1) return null;
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') {
+      depth--;
+      if (depth === 0) return source.slice(open + 1, i);
+    }
+  }
+  return null;
+};
+
+// نامِ پارامترها هم از خودِ سورس خوانده می‌شود: بدنه‌ای که با نامِ سخت‌کدشده
+// فراخوانی شود (`n`، `elapsedMs`) به `ReferenceError` می‌رسد و آن‌وقت شکستِ
+// آزمون برچسبِ گمراه‌کننده‌ای می‌گیرد.
+const paramsOf = (source, name) => {
+  const at = source.search(new RegExp(`function\\s+${name}\\s*\\(`));
+  if (at === -1) return null;
+  const open = source.indexOf('(', at);
+  const close = source.indexOf(')', open);
+  if (open === -1 || close === -1) return null;
+  // فایلِ TypeScript است: `n: number` و `n?: number` باید به همان نامِ پارامتر
+  // برسند. اگر روزی نوعِ پارامتر پیچیده شود (شیء با `:` داخلی)، این نگهبان
+  // بی‌صدا از کار نمی‌افتد بلکه پایین‌تر صریح قرمز می‌شود.
+  return source.slice(open + 1, close).split(',')
+    .map((p) => p.split(/[:=]/)[0].trim().replace(/\?$/, ''))
+    .filter(Boolean);
+};
+
+const SCOPE = {
+  POLL_MS_FAST, POLL_MS_SLOW, POLL_CHECKS_FAST, POLL_CHECKS_TOTAL,
+};
+const REBUILT = {
+  checkTimeMs: bodyOf(orderSuccess, 'checkTimeMs'),
+  checksDue: bodyOf(orderSuccess, 'checksDue'),
+};
+const PARAMS = {
+  checkTimeMs: paramsOf(orderSuccess, 'checkTimeMs'),
+  checksDue: paramsOf(orderSuccess, 'checksDue'),
+};
+
+if (!rhythmKnown || !REBUILT.checkTimeMs || !REBUILT.checksDue
+    || !PARAMS.checkTimeMs?.length || !PARAMS.checksDue?.length
+    || [...PARAMS.checkTimeMs, ...PARAMS.checksDue].some((p) => !/^[A-Za-z_$][\w$]*$/.test(p))) {
+  notOk(
+    'schedule formula rebuilt',
+    `بازسازیِ فرمول ممکن نشد — ثابت‌ها=${rhythmKnown}`
+    + ` checkTimeMs=${Boolean(REBUILT.checkTimeMs)} checksDue=${Boolean(REBUILT.checksDue)}`,
+  );
+} else {
+  // ثابت‌ها + نامِ پارامترها به خودِ بدنه تزریق می‌شوند، بعد با آرگومان‌های
+  // واقعی صدا زده می‌شود — یعنی همان چیزی که مرورگر اجرا می‌کند.
+  // eslint-disable-next-line no-new-func
+  const build = (name) => new Function(...Object.keys(SCOPE), ...PARAMS[name], REBUILT[name]);
+  const checkTimeMs = (n) => build('checkTimeMs')(...Object.values(SCOPE), n);
+  const checksDue = (ms) => build('checksDue')(...Object.values(SCOPE), ms);
+
+  ok('فرمولِ زمان‌بندی از خودِ سورس بازسازی شد (بدنه‌ی checkTimeMs/checksDue، نه نامشان)');
+
+  // مهلتِ بررسیِ n اُم باید دو پله باشد: پله‌ی سریع تا POLL_CHECKS_FAST و بعد
+  // پله‌ی آرام. اگر کسی ضریبِ پله‌ی دوم را به ثابتِ اول عوض کند (شایع‌ترین
+  // اشتباه)، دقیقاً دو مهلتِ سرِ پله فرق می‌کنند.
+  const firstFast = checkTimeMs(1);
+  const lastFast = checkTimeMs(POLL_CHECKS_FAST);
+  const afterFast = checkTimeMs(POLL_CHECKS_FAST + 1);
+  if (firstFast === POLL_MS_FAST && lastFast === POLL_CHECKS_FAST * POLL_MS_FAST
+      && afterFast - lastFast === POLL_MS_SLOW) {
+    ok('مهلت‌ها دو‌پله‌ای‌اند: پله‌ی سریع، بعد پله‌ی آرام (اجرا روی فرمولِ بازسازی‌شده)');
+  } else {
+    notOk(
+      'two-phase schedule',
+      `۱→${firstFast} · ${POLL_CHECKS_FAST}→${lastFast} · ${POLL_CHECKS_FAST + 1}→${afterFast}`
+      + ` (پله‌ی بعد از ${POLL_CHECKS_FAST} باید ${POLL_MS_SLOW} میلی‌ثانیه باشد)`,
+    );
+  }
+
+  // آخرین مهلت باید **دقیقاً** همان پنجره‌ای باشد که پایین‌تر با آن مقایسه
+  // می‌شود. این خط، محاسبه‌ی موازیِ همین فایل را به فرمولِ واقعی گره می‌زند: هر
+  // جابه‌جایی در فرمول یا در ثابت‌ها همین‌جا لو می‌رود.
+  const lastDeadline = checkTimeMs(POLL_CHECKS_TOTAL);
+  if (lastDeadline === windowMs) {
+    ok(`تنها پنجره‌ی واقعی ${mmss(windowMs)} است (مطابقِ آخرین مهلتِ checkTimeMs)`);
+  } else {
+    notOk(
+      'window vs checkTimeMs',
+      `این فایل ${mmss(windowMs)} حساب می‌کند ولی آخرین مهلتِ فرمول ${mmss(lastDeadline)} است`,
+    );
+  }
+
+  // صعودی بودنِ مهلت‌ها: شاخه‌ی جابه‌جاشده (`<=` که `>` شود) عددی می‌سازد که با
+  // بزرگ‌شدنِ n کوچک می‌شود؛ آن‌وقت `delayToNextCheck` منفی می‌شود و حلقه
+  // بی‌وقفه به سرور می‌کوبد.
+  let monotonic = true;
+  for (let n = 2; n <= POLL_CHECKS_TOTAL; n++) {
+    if (!(checkTimeMs(n) > checkTimeMs(n - 1))) monotonic = false;
+  }
+  if (monotonic) {
+    ok('مهلت‌ها اکیداً صعودی‌اند (هیچ موعدی از موعدِ قبلی عقب‌تر نیست)');
+  } else {
+    notOk('monotonic schedule', 'فرمول جایی نزولی است — یعنی تأخیرِ منفی و حلقه‌ی بی‌وقفه');
+  }
+
+  // مرزِ تسلیم: کامپوننت همان‌جا می‌ایستد که `checksDue` عددِ کل را بدهد. اگر
+  // سقفِ `Math.min` برداشته شود، `checksDue` بعد از پنجره هم بالا می‌رود ولی
+  // شرطِ توقف (`checks >= POLL_CHECKS_TOTAL`) باز هم درست می‌شود — پس این
+  // سنجش به‌تنهایی سقف را قفل نمی‌کند و «دقیقاً سرِ پنجره» را می‌سنجد.
+  const atEnd = checksDue(windowMs);
+  const justBefore = checksDue(windowMs - 1);
+  if (atEnd === POLL_CHECKS_TOTAL && justBefore === POLL_CHECKS_TOTAL - 1) {
+    ok('مرزِ تسلیم دقیقاً سرِ پنجره است (`checksDue` سرِ این عدد به سقف می‌رسد)');
+  } else {
+    notOk(
+      'give-up boundary',
+      `checksDue(${mmss(windowMs)})=${atEnd} (باید ${POLL_CHECKS_TOTAL})`
+      + ` و checksDue(${mmss(windowMs - 1)})=${justBefore}`,
+    );
+  }
+
+  const beforeFirst = checksDue(POLL_MS_FAST - 1);
+  const atFirst = checksDue(POLL_MS_FAST);
+  const endOfFast = checksDue(POLL_CHECKS_FAST * POLL_MS_FAST);
+  if (beforeFirst === 0 && atFirst === 1 && endOfFast === POLL_CHECKS_FAST) {
+    ok('شمارشِ موعدها سرِ مرزها درست است (پیش از اولی صفر، سرِ اولی یک، سرِ پله دقیقاً سقفِ پله)');
+  } else {
+    notOk('checksDue boundaries', `${beforeFirst} / ${atFirst} / ${endOfFast}`);
+  }
+
+  // سقفِ `Math.min` یک کمربندِ امنیتی است، نه تزئین: مشتری که ساعتی بعد برمی‌گردد
+  // (یا همان پنجره را در یک تبِ دیگر باز می‌کند) زمانی سپری‌شده می‌دهد که
+  // بی‌سقف به عددی چند‌برابری تبدیل می‌شود. شرطِ توقفِ کامپوننت با آن هم درست
+  // کار می‌کند، ولی عددِ «چند بررسی مانده» و پیامِ کاربر از همان سقف می‌آید.
+  const wayPast = checksDue(windowMs + 20 * POLL_MS_SLOW);
+  if (wayPast === POLL_CHECKS_TOTAL) {
+    ok('شمارشِ موعدها هرگز از سقفِ کل بیشتر نمی‌شود (بازگشتِ مشتری بعد از ساعت‌ها)');
+  } else {
+    notOk('checksDue cap', `${wayPast} در حالی که سقف ${POLL_CHECKS_TOTAL} است`);
+  }
+
+  // و حلقه باید از همین دو تابع بخواند، نه از یک شمارنده‌ی موازی. اگر
+  // `delayToNextCheck` موعدِ بررسیِ *بعدی* را نخواند، تأخیر همیشه صفر می‌شود.
+  if (/checkTimeMs\(checks \+ 1\)\s*-\s*elapsed\(\)/.test(orderSuccess)
+      && /let checks = checksDue\(elapsed\(\)\)/.test(orderSuccess)) {
+    ok('حلقه از همین دو تابع می‌خواند (موعدِ بعدی و شمارِ موعدهای رسیده)');
+  } else {
+    notOk(
+      'loop wiring',
+      'حلقه دیگر `checkTimeMs(checks + 1) - elapsed()` را نمی‌خواند — عددِ بازسازی‌شده رفتارِ واقعی نیست',
+    );
+  }
+}
 
 // ---------- ۴) همان رابطه‌ای که این آزمون برایش ساخته شده ----------
 if (rhythmKnown && ORDER_TTL_MS && RECONCILE_INTERVAL_MS) {
