@@ -333,12 +333,44 @@ if (nextWriter.expr) {
 // «فرستادنِ دوباره‌ی کد» است که خودش مهلت را با یک پنجره‌ی تازه بازنویسی
 // می‌کند — یعنی عددِ ذخیره‌شده هیچ‌وقت به چشم نمی‌آمد و مکانیزم مرده بود.
 check('مهلت به‌همراهِ شماره ذخیره می‌شود تا بعد از رفرش معلوم باشد مالِ کدام شماره است',
-  NEXT.includes('localStorage.setItem(RESEND_KEY, JSON.stringify({ phone, until }))') &&
+  NEXT.includes('localStorage.setItem(RESEND_KEY, JSON.stringify({ phone, until, codeUntil: codeUntilAbs }))') &&
   NEXT.includes('JSON.parse(localStorage.getItem(RESEND_KEY) || "null")') &&
-  NEXT.includes('if (!stored?.phone || !Number.isFinite(remain) || remain <= 0) return;'));
+  NEXT.includes('if (!stored?.phone || !Number.isFinite(remain) || remain <= 0) {'));
 
+// عمرِ کد هم باید کنارِ مهلت ذخیره شود؛ وگرنه رفرش آن را پاک می‌کند و مشتریِ
+// برگشته هیچ‌وقت نمی‌فهمد کدش مرده است (یا برعکس، کدِ زنده را مرده می‌پندارد).
+check('عمرِ کد هم ذخیره می‌شود و در بازگشت به صفحه برمی‌گردد',
+  NEXT.includes('const storedCodeUntil = Number(stored?.codeUntil) || 0;') &&
+  NEXT.includes('setCodeUntil(storedCodeUntil);'), 'لنگرِ `codeUntil` پیدا نشد');
+
+// ---------- هشدارِ انقضا باید از عمرِ *کد* ساخته شود، نه از مهلتِ ارسال مجدد ----------
+// این همان اشتباهی است که در نسخهٔ Express هم بود (`codeExpiresAt: Date.now() +
+// wait * 1000` در شاخهٔ ۴۲۹): هشدارِ «کد منقضی شده» سرِ مهلتِ ارسال مجدد ساخته
+// می‌شد، در حالی که کد ۱۲۰ ثانیه زنده است.
+check('هشدارِ انقضا از `codeUntil` می‌آید (نه از مهلتِ ارسال مجدد)',
+  NEXT.includes('if (codeUntil > 0 && nowMs >= codeUntil) {') &&
+  NEXT.includes('setCodeExpired(true);'), 'لنگرِ هشدارِ انقضا پیدا نشد');
+// عمرِ کد باید از **استدلالِ دوم** بیاید (عددِ سرور یا پشتیبانِ نام‌دار).
+// اگر روزی کسی همان‌جا مهلتِ ارسال مجدد را بگذارد، همه‌چیز سبز می‌ماند و فقط
+// مشتری سرِ ۳۰ ثانیه می‌بیند «کد منقضی شده» در حالی که کد سالم است.
+check('عمرِ کد از استدلالِ دوم می‌آید، نه از مهلتِ ارسال مجدد',
+  NEXT.includes('const codeLeft = codeSeconds === null ? FALLBACK_CODE_TTL_SECONDS : codeSeconds;') &&
+  !/const codeLeft = seconds\b/.test(NEXT));
+check('و عمرِ کد هرگز از مهلتِ ارسال مجدد ساخته نمی‌شود (الگوی `+ wait * 1000` در تابعِ مهلت نیست)',
+  !/startCooldown[\s\S]{0,400}?codeUntilAbs = Date\.now\(\) \+ seconds \* 1000/.test(
+    NEXT.slice(NEXT.indexOf('function startCooldown'))));
+const fbCodeNext = grab(NEXT, /const FALLBACK_CODE_TTL_SECONDS = (\d+);/g);
+const fbCodeExpress = grab(EXPRESS, /const ttl = Number\(res\.expiresIn\) \|\| (\d+);/g);
+check('عددِ پشتیبانِ عمرِ کد در دو فروشگاه یکی است',
+  fbCodeNext.count === 1 && fbCodeExpress.count === 1 && fbCodeNext.expr === fbCodeExpress.expr,
+  `Next: ${fbCodeNext.expr} · Express: ${fbCodeExpress.expr}`);
+// تطبیقِ پشتیبانِ فرانت با TTLِ سرور در بخضِ زنده سنجیده می‌شود (آن‌جا هم
+// `OTP_TTL_MS` و هم سورسِ سرور در دسترس است).
+
+// بازهٔ خواندن عمداً پهن است: حتی اگر میانِ خواندنِ وضعیت و بازگردانیِ مرحله
+// شرطِ «فقط عمرِ کد مانده» اضافه شود، لنگر باز هم همان سه فراخوانی را می‌بیند.
 const resumeAnchor = NEXT.indexOf('localStorage.getItem(RESEND_KEY)');
-const resume = resumeAnchor >= 0 ? NEXT.slice(resumeAnchor, resumeAnchor + 700) : '';
+const resume = resumeAnchor >= 0 ? NEXT.slice(resumeAnchor, resumeAnchor + 1400) : '';
 check('بازگشت به صفحه کاربر را به همان مرحله‌ی کد می‌برد (وگرنه مهلت هرگز به چشم نمی‌آید)',
   resumeAnchor >= 0 &&
   resume.includes('setPhone(stored.phone);') &&
@@ -370,20 +402,28 @@ check('نگهبانِ Next: شمارنده‌ی کاهنده‌ای در کد ن
 const nextTick = grab(NEXT, /const left = ([^;]+);/g);
 check('لنگرِ تیکِ Next پیدا شد و یکتاست', nextTick.count === 1, `تطبیق: ${nextTick.count}`);
 if (nextTick.expr) {
+  // `nowMs` در همان تیک یک‌بار خوانده می‌شود (`Date.now()`)؛ همان چیزی که
+  // به تیک می‌دهیم تا این عبارت هم واقعاً اجرا شود، نه فقط دیده شود.
   const jumped = evalExpr(nextTick.expr, {
-    Math, Date: fakeNow(1_600_000), cooldownUntil: 1_030_000, // ده دقیقه بعد از مهلت
+    Math, nowMs: 1_600_000, cooldownUntil: 1_030_000, // ده دقیقه بعد از مهلت
   });
   check('اجرا (Next): اگر تب ده دقیقه خواب رفته باشد، تیکِ بعدی صفر می‌دهد (نه ۲۹)',
     jumped === 0, `شد: ${jumped}`);
   const mid = evalExpr(nextTick.expr, {
-    Math, Date: fakeNow(1_010_000), cooldownUntil: 1_030_000,
+    Math, nowMs: 1_010_000, cooldownUntil: 1_030_000,
   });
   check('اجرا (Next): وسطِ پنجره هم عددِ درست را می‌دهد', mid === 20, `شد: ${mid}`);
 }
 check('تیکِ Next همان مهلتِ مطلق را مصرف می‌کند و با تمام‌شدنش می‌ایستد',
   /setInterval\(tick, 1000\)/.test(NEXT) &&
   /if \(left <= 0\) setCooldownUntil\(0\);/.test(NEXT) &&
-  /useEffect\(\(\) => \{\s*\n\s*if \(cooldownUntil <= 0\) return;/.test(NEXT));
+  /useEffect\(\(\) => \{\s*\n\s*if \(cooldownUntil <= 0 && codeUntil <= 0\) return;/.test(NEXT),
+  'شرطِ شروعِ تیک یا تیکِ ۱۰۰۰میلی‌ثانیه‌ای پیدا نشد');
+check('همان تیک با ساعتِ یک‌بارخوانده‌شده کار می‌کند (`nowMs`، نه دو `Date.now()` جدا)',
+  /const nowMs = Date\.now\(\);/.test(NEXT) &&
+  !/Math\.ceil\(\(cooldownUntil - Date\.now\(\)\)/.test(NEXT));
+check('و همان تیک، عمرِ کد را هم می‌سنجد و با تمام‌شدنش تیک را می‌بندد',
+  /if \(codeUntil > 0 && nowMs >= codeUntil\) \{\s*\n\s*setCodeExpired\(true\);\s*\n\s*setCodeUntil\(0\);/.test(NEXT));
 
 /* ================= ۶) سرور، تنها منبعِ حقیقتِ مهلت ================= */
 // قراردادِ چهارم (و مهم‌ترینش): عددی که کاربر می‌شمارد باید *همان* عددی باشد
@@ -430,8 +470,30 @@ if (remaining.expr) {
     rest === 8, `شد: ${rest}`);
 }
 check('همان عددِ باقی‌مانده در بدنه‌ی ۴۲۹ برمی‌گردد (کوتاه‌ترِ واقعی، نه مهلتِ کامل)',
-  AUTH_SRC.split('retryAfter: wait });').length - 1 === 1,
-  `${AUTH_SRC.split('retryAfter: wait });').length - 1} جا`);
+  AUTH_SRC.split('retryAfter: wait,').length - 1 === 1,
+  `${AUTH_SRC.split('retryAfter: wait,').length - 1} جا`);
+
+// ۶.۱.۲) همان ۴۲۹ باید عمرِ *خودِ کد* را هم بدهد — عددی جدا از مهلتِ ارسال مجدد.
+// چرا اینجا و نه فقط زنده: اگر روزی کسی این دو را یکی کند (مثلاً
+// `expiresIn: wait`)، سرور همان جوابِ قبلی را می‌دهد و فقط فرانت‌اند بی‌خبر
+// می‌ماند — یعنی «کد منقضی شده» از مهلتِ ارسال مجدد ساخته می‌شود.
+const codeLeftGrab = grab(AUTH_SRC, /const codeLeft = (Math\.max\(0, Math\.ceil\(\(Number\(existing\.expires_at \|\| 0\) - now\) \/ 1000\)\));/g);
+check('سرور در ۴۲۹ عمرِ واقعیِ کد را از `expires_at` حساب می‌کند (یک عبارت، یک‌جا)',
+  codeLeftGrab.count === 1, `تطبیق: ${codeLeftGrab.count}`);
+if (codeLeftGrab.expr) {
+  const early = evalExpr(codeLeftGrab.expr,
+    { Math, Number, now: 1_000_000, existing: { expires_at: 1_000_000 + 118_000 } });
+  const late = evalExpr(codeLeftGrab.expr,
+    { Math, Number, now: 1_000_000, existing: { expires_at: 1_000_000 - 5_000 } });
+  check('اجرا: کدِ تازه ۱۱۸ ثانیه عمر دارد (و مهلتِ ارسال مجدد را در خود نمی‌بلعد)',
+    early === 118, `شد: ${early}`);
+  check('اجرا: کدِ گذشته صفر می‌شود، نه منفی (تنها حالتی که هشدارِ انقضا حق دارد)',
+    late === 0, `شد: ${late}`);
+}
+check('و همان عدد با همان نام در بدنه می‌رود (`expiresIn`)، با پرچمِ `codeValid`',
+  AUTH_SRC.includes('expiresIn: codeLeft,') && AUTH_SRC.includes('codeValid: codeLeft > 0'));
+check('عمرِ کد هرگز از مهلتِ ارسال مجدد ساخته نمی‌شود (`expiresIn: wait` ممنوع)',
+  !/expiresIn:\s*wait\b/.test(AUTH_SRC));
 
 // ۶.۲) Express: عدد از پاسخ می‌آید، نه از کد
 const exRetry = grab(EXPRESS,
@@ -460,7 +522,9 @@ check('Express: پنجرهٔ کوتاه‌تر، «کلِ مهلت» را هم �
   `پیدا شد: ${[...EXPRESS.matchAll(/resendTotal:\s*wait/g)].length}`);
 
 // ۶.۳) Next: همان قرارداد، این‌بار در فروشگاهِ دیگر
-const nextFromServer = [...NEXT_CODE.matchAll(/startCooldown\(serverResendSeconds\(res\)\)/g)].length;
+// استدلالِ دوم همان عمرِ کد است — عددی جدا که هرگز نباید از مهلتِ ارسال مجدد
+// ساخته شود.
+const nextFromServer = [...NEXT_CODE.matchAll(/startCooldown\(serverResendSeconds\(res\), serverCodeSeconds\(res\)\)/g)].length;
 check('Next: هر دو جای شروعِ پنجره، مهلت را از پاسخِ سرور می‌گیرند',
   nextFromServer === 2, `پیدا شد: ${nextFromServer}`);
 check('Next: هیچ پنجره‌ای با عددِ هاردکد باز نمی‌شود (نه ۳۰، نه ۶۰)',
@@ -478,9 +542,15 @@ if (secondsGuard.expr) {
     `۱۲→${evalTruthy(secondsGuard.expr, { seconds: 12 })} · ۰→${evalTruthy(secondsGuard.expr, { seconds: 0 })}`);
 }
 
-const nextAdopt = [...NEXT_CODE.matchAll(/startCooldown\(wait\)/g)].length;
+const nextAdopt = [...NEXT_CODE.matchAll(/startCooldown\(wait, codeSecondsFromError\(err\)\)/g)].length;
 check('Next: ۴۲۹ در هر دو مرحله پنجره را با مهلتِ سرور کوک می‌کند (کوتاه‌تر → کوتاه‌تر)',
   nextAdopt === 2, `پیدا شد: ${nextAdopt}`);
+check('Next: عمرِ کد از خودِ خطا خوانده می‌شود (`codeValid === false` یعنی صفر)',
+  /if \(err\.codeValid === false\) return 0;/.test(NEXT_CODE) &&
+  /return serverCodeSeconds\(err\);/.test(NEXT_CODE));
+check('Next: عددِ عمرِ کد هرگز جایش را با مهلتِ ارسال مجدد عوض نمی‌کند',
+  !/startCooldown\(wait, wait\)/.test(NEXT_CODE) &&
+  /function serverCodeSeconds\(res: \{ expiresIn\?: number \}\): number \| null \{/.test(NEXT));
 const nextWaitRead = [...NEXT_CODE.matchAll(/const wait = err instanceof ApiError \? Number\(err\.retryAfter\) : NaN;/g)].length;
 check('Next: عددِ سرور از خودِ خطای ۴۲۹ می‌آید',
   nextWaitRead === 2, `پیدا شد: ${nextWaitRead}`);
@@ -493,6 +563,9 @@ check('ApiError عددِ مهلتِ سرور را حمل می‌کند',
   /retryAfter\?: number;/.test(API_SRC) && API_SRC.includes('err.retryAfter = wait;'));
 check('fetcher در ۴۲۹ عدد را از بدنهٔ پاسخ برمی‌دارد',
   API_SRC.includes('retryAfter?: number;') && /const wait = Number\(data\.retryAfter\);/.test(API_SRC));
+check('ApiError عمرِ کد را هم حمل می‌کند (`expiresIn`) — وگرنه فرانت همان حدسِ قدیمی را می‌زند',
+  /expiresIn\?: number;/.test(API_SRC) && API_SRC.includes('err.expiresIn = codeLeft;') &&
+  API_SRC.includes('if (typeof data.codeValid === "boolean") err.codeValid = data.codeValid;'));
 check('نوعِ OtpRequestResponse میدانِ retryAfter را دارد (ریشهٔ هاردکدِ ۳۰ نبودِ همین فیلد بود)',
   /interface OtpRequestResponse \{[\s\S]*?retryAfter\?: number;[\s\S]*?\n\}/.test(TYPES_SRC));
 
@@ -582,6 +655,10 @@ let child = null;
 // لنگرِ «مهلتِ کامل» از خودِ سورسِ سرور خوانده می‌شود، نه دوباره نوشته شود.
 const cooldownGrab = grab(AUTH_SRC, /const RESEND_COOLDOWN_MS = ([\d_]+) \* 1000;/g);
 const COOLDOWN_MS = cooldownGrab.expr ? Number(cooldownGrab.expr.replace(/_/g, '')) * 1000 : NaN;
+// عمرِ خودِ کد هم از سورسِ سرور خوانده می‌شود (نه هاردکد در آزمون): اگر روزی
+// ۱۲۰ به ۹۰ عوض شود، سنجش‌های پایین خودشان همراه می‌آیند.
+const ttlGrab = grab(AUTH_SRC, /const OTP_TTL_MS = ([\d_]+) \* 60 \* 1000;/g);
+const OTP_TTL_MS = ttlGrab.expr ? Number(ttlGrab.expr.replace(/_/g, '')) * 60 * 1000 : NaN;
 
 // خواندنِ مستقیمِ ردیفِ کد از دیتابیسِ سندباکس (`node:sqlite` همان وابستگیِ
 // موجودِ `lib/db.js` و `test-smoke.js` است). `null` یعنی ردیف نیست، `undefined`
@@ -731,6 +808,26 @@ async function stopServer() {
     `سرور=${r2.data?.retryAfter} · بازه‌ی واقعی=[${lower},${upper}]`);
   check('عدد در پیامِ کاربر هم همان عدد است (فارسی، به ثانیه)',
     String(r2.data?.error || '').includes(fa(retry)) && /ثانیه دیگر/.test(r2.data?.error || ''), r2.data?.error);
+
+  // ---------- عمرِ *خودِ کد* در همان ۴۲۹ — عددِ دوم، جدا از مهلتِ ارسال مجدد ----------
+  // چرا اینجا: تا امروز ۴۲۹ فقط مهلتِ ارسال مجدد را می‌داد و فرانت‌اند هشدارِ
+  // «کد منقضی شده» را از همان می‌ساخت — یعنی مشتری را از کدِ سالم می‌ترساند.
+  // اگر این عدد برگردد، هیچ آزمونِ دیگری نمی‌گیردش (ریدایرکت‌ها و ۴۲۹ِ قبلی
+  // همه سرِ جایشان می‌مانند).
+  const codeLeft = Number(r2.data?.expiresIn);
+  const ttlSec = OTP_TTL_MS / 1000;
+  check('۴۲۹ عمرِ واقعیِ خودِ کد را هم می‌فرستد (`expiresIn`)',
+    Number.isFinite(codeLeft) && codeLeft > 0, `expiresIn=${r2.data?.expiresIn}`);
+  check('و آن عدد عمرِ کد است، نه مهلتِ ارسال مجدد (≈۱۲۰ در برابرِ <۳۰)',
+    Number.isFinite(codeLeft) && codeLeft > retry && codeLeft <= ttlSec && codeLeft >= ttlSec - 2,
+    `کد=${codeLeft} · ارسال مجدد=${retry} · TTL=${ttlSec}`);
+  check('پرچمِ ماشین‌خوانِ «کد هنوز معتبر است» با همان عدد می‌خواند',
+    r2.data?.codeValid === true, `codeValid=${r2.data?.codeValid}`);
+  check('TTLِ اعلام‌شده با عددی که در پاسخِ ۲۰۰ آمده یکی است (یک منبع، نه دو تا)',
+    r1.data?.expiresIn === ttlSec, `۲۰۰=${r1.data?.expiresIn} · انتظار=${ttlSec}`);
+  check('عددِ پشتیبانِ عمرِ کد در فرانت با TTLِ سرور یکی است (عددِ سومِ جدا وجود ندارد)',
+    Number(fbCodeNext.expr) === ttlSec,
+    `فرانت: ${fbCodeNext.expr} · سرور: ${ttlSec}`);
   const codeLogs = (serverOut.match(new RegExp(`Login code for ${phone}:`, 'g')) || []).length;
   check('درخواستِ ردشده پیامکِ تازه نفرستاد (فقط یک کد در لاگِ سرور)',
     codeLogs === 1, `${codeLogs} کد در لاگ`);
@@ -775,8 +872,9 @@ async function stopServer() {
     nextSeconds === retry, `فرانت=${nextFn ? nextFn({ retryAfter: retry }) : 'تابع اجرا نشد'} · سرور=${retry}`);
   const nextUntil = evalExpr(nextWriter.expr || 'NaN',
     { Date: fakeNow(writeAt), seconds: nextSeconds });
+  // تیکِ Next ساعت را یک‌بار می‌خواند (`nowMs`)، پس همان را به عبارت می‌دهیم.
   const nextLeft = evalExpr(nextTick.expr || 'NaN',
-    { Math, Date: fakeNow(writeAt), cooldownUntil: nextUntil });
+    { Math, nowMs: writeAt, cooldownUntil: nextUntil });
   check('اجرا (Next): لحظه‌ی شروع، ثانیه‌شمار همان عدد را نشان می‌دهد',
     nextLeft === retry, `روی صفحه=${nextLeft} · سرور=${retry}`);
   const nextLabelGrab = grab(NEXT, /(`ارسال مجدد کد \(\$\{cooldown\} ثانیه\)`)/g);

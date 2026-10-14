@@ -36,7 +36,7 @@
 //      کاربر را به ۴۰۴ بفرستد، پس اول کامنت‌ها خنثی می‌شوند (با حفظِ شماره‌ی
 //      خط).
 //   ۲. **استثنا روی «فایل + نام» است، نه کلِ فایل.** جدولِ نشانی‌های عصرِ
-//      Express در `legacyUrls.ts` ناچاراً `/admin.html` را می‌نویسد تا بگوید
+//      Express در `legacyUrls.js` ناچاراً `/admin.html` را می‌نویسد تا بگوید
 //      چرا ۴۰۴ می‌ماند، و دو آزمون همان تصمیم را می‌سنجند. ولی همان فایل
 //      نباید اجازه بگیرد `js/admin.js` یا `invoice.css` را هم ببرد — آن دو
 //      داراییِ واقعیِ پنل‌اند. پس استثنا جفت‌محور است و خودش هم کهنه‌شدنی نیست
@@ -77,7 +77,7 @@ const REF_ALLOWED_FILES = new Set([
 
 // استثناهای دقیق‌تر: «فایل::نام». این پنج، جاهایی هستند که نامِ *نشانیِ*
 // بازنشسته عمداً می‌آید و ارجاع نیست — همه هم می‌گویند «۴۰۴ بماند»:
-//   • جدولِ `legacyUrls.ts`: کارش همین است که بگوید کدام نشانیِ عصرِ Express
+//   • جدولِ `legacyUrls.js`: کارش همین است که بگوید کدام نشانیِ عصرِ Express
 //     تغییرِ مسیر می‌خورد و کدام نمی‌خورد؛ `/admin.html` عمداً در فهرستِ
 //     «بدونِ تغییرِ مسیر» است.
 //   • سه آزمونی که همین ماندنِ ۴۰۴ را می‌سنجند (یکی در همان جدول، یکی در
@@ -96,7 +96,11 @@ const REF_ALLOWED_FILES = new Set([
 //     `invoice.css` هنوز هیچ مجوزی در آن فایل ندارند — آن دو داراییِ واقعیِ
 //     پنل‌اند و نباید در هیچ آزمونی نام برده شوند.
 const REF_ALLOWED_PAIRS = new Set([
-  'next-frontend/src/lib/legacyUrls.ts::admin.html',
+  'next-frontend/src/lib/legacyUrls.js::admin.html',
+  // `legacy-map-single-source.js` هم مثلِ `retiredPaths.test.ts` تنها یک
+  // *سنجشِ منفی* روی این نام دارد: «هیچ مقصدی در جدول ندارد و داشتنش تخلف
+  // است». یعنی این نام این‌جا برای *دور زدنِ* تور نیست؛ ادعای همان تور است.
+  'backend/tests/legacy-map-single-source.js::admin.html',
   'next-frontend/src/lib/legacyUrls.test.ts::admin.html',
   'next-frontend/src/components/BottomNav.test.tsx::admin.html',
   'next-frontend/src/app/retiredPaths.test.ts::admin.html',

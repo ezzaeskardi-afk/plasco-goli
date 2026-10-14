@@ -425,6 +425,109 @@ describe("شمارش در هر مسیر از خودِ سرور خوانده می
   });
 });
 
+// ============================================================
+// عمرِ خودِ کد ≠ مهلتِ ارسال مجدد
+// ============================================================
+// چرا این آزمون‌ها: کد ۱۲۰ ثانیه زنده است ولی مهلتِ ارسال مجدد ۳۰ ثانیه.
+// تا امروز این کامپوننت عمرِ کد را از مهلتِ ارسال مجدد می‌ساخت (در نسخه‌ی
+// Express هم عیناً همین کار می‌شد: `codeExpiresAt: Date.now() + wait * 1000`
+// در شاخهٔ ۴۲۹)، پس هشدارِ «کد منقضی شده» سرِ ثانیه‌ی ۳۱ ساخته می‌شد در حالی
+// که کد هنوز نیمه‌ی عمرش را داشت — مشتری کدِ سالم را دور می‌ریخت و پیامکِ
+// تازه می‌خواست. حالا سرور عمرِ واقعی را می‌فرستد (`expiresIn`) و هشدار از
+// همان ساخته می‌شود.
+describe("هشدارِ «کد منقضی شده» از عمرِ واقعیِ کد ساخته می‌شود، نه از مهلتِ ارسال مجدد", () => {
+  const expiryText = () =>
+    container.querySelector("#codeExpiry")?.textContent?.trim() ?? "";
+
+  it("بعد از تمامِ‌شدنِ مهلتِ ارسال مجدد، کد هنوز زنده است و هیچ هشداری نیست", async () => {
+    vi.mocked(requestOtp).mockResolvedValueOnce({
+      ok: true,
+      retryAfter: 5,
+      expiresIn: 120,
+    });
+
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+
+    // سرِ ۵ ثانیه، پنجره‌ی ارسال مجدد تمام می‌شود — ولی کد ۱۱۵ ثانیه دیگر زنده است
+    await advance(5_000);
+    expect(buttonLabels()).toContain("ارسال مجدد کد");
+    expect(expiryText()).toBe("");
+
+    // و سرِ همان ۱۲۰ ثانیه‌ی *خودِ کد* هشدار می‌دهد
+    await advance(115_000);
+    expect(expiryText()).toBe("کد منقضی شده — دوباره ارسال کنید");
+
+    localStorage.clear();
+  });
+
+  it("۴۲۹ عمرِ کد را در بدنه می‌آورد؛ هشدار از `retryAfter` ساخته نمی‌شود", async () => {
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm(); // پشتیبانِ ۳۰ ثانیه و ۱۲۰ ثانیه‌ی کد
+    // دکمه تا تمامِ‌شدنِ پنجره‌ی فعلی قفل است (و کلیکِ روی دکمه‌ی قفل‌شده هیچ
+    // کاری نمی‌کند)، پس اول پنجره را تمام می‌کنیم.
+    await advance(30_000);
+
+    const stale = new ApiError(429, "کد قبلاً ارسال شده؛ ۷ ثانیه دیگر دوباره تلاش کنید");
+    stale.retryAfter = 7;
+    stale.expiresIn = 90; // عمرِ واقعیِ کد — جدا از پنجره‌ی ارسال مجدد
+    vi.mocked(requestOtp).mockRejectedValueOnce(stale);
+    await click(buttonOf("ارسال مجدد کد"));
+
+    // سرِ ۷ ثانیه دکمه باز است و کد هنوز ۸۳ ثانیه زنده است — هشدارِ انقضا نه
+    await advance(7_000);
+    expect(buttonLabels()).toContain("ارسال مجدد کد");
+    expect(expiryText()).toBe("");
+
+    await advance(83_000);
+    expect(expiryText()).toBe("کد منقضی شده — دوباره ارسال کنید");
+
+    localStorage.clear();
+  });
+
+  it("سرور گفت کد مرده (`codeValid: false`)؟ همان لحظه هشدار می‌دهد، بدونِ صبر", async () => {
+    await mount();
+    await typeIntoPhone("09120000042");
+    await submitForm();
+
+    await advance(30_000);
+    const dead = new ApiError(429, "کد قبلاً ارسال شده؛ ۴ ثانیه دیگر دوباره تلاش کنید");
+    dead.retryAfter = 4;
+    dead.expiresIn = 0;
+    dead.codeValid = false;
+    vi.mocked(requestOtp).mockRejectedValueOnce(dead);
+    await click(buttonOf("ارسال مجدد کد"));
+
+    expect(expiryText()).toBe("کد منقضی شده — دوباره ارسال کنید");
+    // و دکمه‌ی ارسال مجدد همان ۴ ثانیه‌ی سرور را می‌شمارد (دو عدد از هم جدا)
+    expect(buttonLabels()).toContain("ارسال مجدد کد (4 ثانیه)");
+
+    localStorage.clear();
+  });
+
+  it("بعد از رفرش، عمرِ کد از حافظه برمی‌گردد (حتی اگر پنجره‌ی ارسال مجدد تمام شده باشد)", async () => {
+    // تنها مهلتِ ارسال مجدد ذخیره شده بود، پس رفرش عمرِ کد را پاک می‌کرد و
+    // مشتریِ برگشته هیچ‌وقت نمی‌فهمید کدش مرده است.
+    localStorage.setItem(
+      "pg_otp_resend",
+      JSON.stringify({
+        phone: "09120000042",
+        until: Date.now() - 1_000,          // پنجره‌ی ارسال مجدد تمام شده
+        codeUntil: Date.now() + 60_000,     // کد هنوز زنده
+      }),
+    );
+
+    await mount();
+    expect(expiryText()).toBe("");
+    await advance(60_000);
+    expect(expiryText()).toBe("کد منقضی شده — دوباره ارسال کنید");
+
+    localStorage.clear();
+  });
+});
+
 describe("بعد از ورود، ناوبری هیچ‌وقت معلّق نمی‌ماند", () => {
   it("اگر انتقال شروع نشود، همان آدرس با ناوبریِ کاملِ مرورگر باز می‌شود", async () => {
     await mount();
