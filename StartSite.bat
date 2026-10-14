@@ -31,6 +31,162 @@ echo    Closing it stops BOTH servers.
 echo ==================================================
 echo.
 
+rem ---------- 0) --check: diagnose only, change nothing, then exit ----------
+rem Why this mode exists: when the site does not come up, the launcher used to
+rem give one generic answer - "npm install failed" or a blank window - and the
+rem actual cause was somewhere else entirely (a port still held by an earlier
+rem run, an .env whose SITE_URL pointed at another origin, a Node too old for
+rem node:sqlite). This branch answers exactly one question: "what is wrong?"
+rem It installs nothing, starts nothing, and never edits .env.
+rem   StartSite.bat --check      diagnose and exit (0 = clean, 1 = problems)
+if /i "%~1"=="--check" goto :diagnose
+if /i "%~1"=="-check" goto :diagnose
+if /i "%~1"=="--diag" goto :diagnose
+if /i "%~1"=="-d" goto :diagnose
+goto :start_site
+
+:diagnose
+echo.
+echo ==================================================
+echo    DIAGNOSTICS  -  nothing is installed, started or changed
+echo ==================================================
+set "PROBLEMS=0"
+set "BE_PORT=3000"
+set "NEXT_PORT=3001"
+
+rem --- 1) Node: present, and new enough for node:sqlite ---------------------
+rem Version parsing lives in a subroutine on purpose: `set` and `%VAR%` inside
+rem the SAME parenthesised block would read the empty pre-block value (cmd
+rem expands a whole block before running it), so the comparison would silently
+rem pass on every version.
+call :nodecheck
+
+where npm >nul 2>&1
+if errorlevel 1 (
+    echo [FAIL] npm is not on PATH - the launcher cannot install or build anything.
+    set "PROBLEMS=1"
+) else (
+    echo [ OK ] npm found
+)
+
+rem --- 2) .env files: present or missing -----------------------------------
+rem Missing is not a failure: the launcher creates both from .env.example. But
+rem an .env that EXISTS with a wrong origin is a failure - that is the case
+rem nobody notices until the payment returns to the wrong server.
+if exist "%HERE%backend\.env" (
+    echo [ OK ] backend\.env exists
+) else (
+    echo [INFO] backend\.env is missing - the launcher will create it with local values
+)
+if exist "%HERE%next-frontend\.env" (
+    echo [ OK ] next-frontend\.env exists
+) else (
+    echo [INFO] next-frontend\.env is missing - the launcher will copy .env.example
+)
+
+rem --- 3) SITE_URL vs NEXT_PUBLIC_SITE_URL ---------------------------------
+rem Both name the same thing - the public origin - and both build URLs a
+rem customer is sent to: canonical tags and the payment return address on the
+rem Express side, and canonical/JSON-LD/sitemap on the Next side. If they
+rem disagree, the shop advertises two different origins for the same page.
+set "BE_SITE="
+set "NEXT_SITE="
+set "NEXT_API="
+if exist "%HERE%backend\.env" for /f "usebackq tokens=1,* delims==" %%a in ("%HERE%backend\.env") do if /i "%%a"=="SITE_URL" set "BE_SITE=%%b"
+if exist "%HERE%next-frontend\.env" for /f "usebackq tokens=1,* delims==" %%a in ("%HERE%next-frontend\.env") do (
+    if /i "%%a"=="NEXT_PUBLIC_SITE_URL" set "NEXT_SITE=%%b"
+    if /i "%%a"=="API_ORIGIN" set "NEXT_API=%%b"
+)
+set "BE_SITE=%BE_SITE: =%"
+set "NEXT_SITE=%NEXT_SITE: =%"
+set "NEXT_API=%NEXT_API: =%"
+if not defined BE_SITE (
+    echo [INFO] SITE_URL is not set in backend\.env - the storefront origin cannot be compared
+) else if not defined NEXT_SITE (
+    echo [INFO] NEXT_PUBLIC_SITE_URL is not set in next-frontend\.env - nothing to compare with SITE_URL=%BE_SITE%
+) else if /i "%BE_SITE%"=="%NEXT_SITE%" (
+    echo [ OK ] SITE_URL and NEXT_PUBLIC_SITE_URL agree: %BE_SITE%
+) else (
+    echo [FAIL] SITE_URL and NEXT_PUBLIC_SITE_URL disagree:
+    echo          backend\.env            SITE_URL=%BE_SITE%
+    echo          next-frontend\.env      NEXT_PUBLIC_SITE_URL=%NEXT_SITE%
+    echo        Set both to the origin customers actually use - the payment return
+    echo        address and the canonical tags are built from each one.
+    set "PROBLEMS=1"
+)
+if defined BE_SITE if defined NEXT_API if /i "%NEXT_API%"=="%BE_SITE%" (
+    echo [FAIL] next-frontend\.env API_ORIGIN=%NEXT_API% is the same origin as the site itself.
+    echo        Express is a different server here ^(backend on :3000^); pointing the
+    echo        storefront at its own origin turns every server-side fetch into a loop.
+    set "PROBLEMS=1"
+)
+
+rem --- 4) Ports: who is holding them, by name ------------------------------
+call :portcheck %BE_PORT% backend
+call :portcheck %NEXT_PORT% storefront
+
+echo.
+if "%PROBLEMS%"=="0" (
+    echo [OK] Nothing is blocking the launcher - run StartSite.bat to start the site.
+    echo.
+    pause
+    exit /b 0
+)
+echo [FAIL] %PROBLEMS% problem^(s^) found - see the [FAIL] lines above.
+echo.
+pause
+exit /b 1
+
+:nodecheck
+set "NODE_RAW="
+for /f "delims=" %%v in ('node -v 2^>nul') do set "NODE_RAW=%%v"
+if not defined NODE_RAW (
+    echo [FAIL] Node.js is not on PATH - "node -v" answered nothing.
+    echo        Install Node 22.5 or newer and reopen this window.
+    set "PROBLEMS=1"
+    goto :eof
+)
+set "NODE_VER=%NODE_RAW:v=%"
+set "NODE_MAJ=0"
+set "NODE_MIN=0"
+for /f "tokens=1,2 delims=." %%a in ("%NODE_VER%") do set "NODE_MAJ=%%a"
+for /f "tokens=1,2 delims=." %%a in ("%NODE_VER%") do set "NODE_MIN=%%b"
+if "%NODE_MAJ%"=="" set "NODE_MAJ=0"
+if "%NODE_MIN%"=="" set "NODE_MIN=0"
+if %NODE_MAJ% LSS 22 goto :node_old
+if %NODE_MAJ% EQU 22 if %NODE_MIN% LSS 5 goto :node_old
+echo [ OK ] Node %NODE_VER% ^(^>=22.5, which backend\package.json requires^)
+goto :eof
+
+:node_old
+echo [FAIL] Node %NODE_VER% is too old - the backend needs ^>=22.5 ^(node:sqlite^).
+echo        Install a newer Node and reopen this window.
+set "PROBLEMS=1"
+goto :eof
+
+:portcheck
+rem %1 = port, %2 = what usually listens there
+set "OWNER="
+rem netstat, not PowerShell, on purpose: `powershell -Command "(…)"` with the
+rem quotes in place evaluates the text as a *string* and prints it back, so the
+rem capture came out empty - and a silently empty result reports a busy port as
+rem free, which is worse than saying nothing. `netstat -ano` is pure cmd, and
+rem the fifth column of a LISTENING row is the owning PID.
+set "OWNER_PID="
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":%1 .*LISTENING"') do if not defined OWNER_PID set "OWNER_PID=%%p"
+set "OWNER_PORT=%1"
+if defined OWNER_PID (
+    echo [FAIL] Port %OWNER_PORT% is already in use by PID %OWNER_PID% - the %2 server cannot bind it.
+    echo        An earlier StartSite window is the usual cause: close it, or stop that
+    echo        PID ^("taskkill /PID %OWNER_PID%"^), then run this check again.
+    set "PROBLEMS=1"
+) else (
+    echo [ OK ] Port %OWNER_PORT% is free ^(%2 server^)
+)
+goto :eof
+
+:start_site
+
 rem ---------- 1) First run only: dependencies ----------
 rem Sentinel for the backend is the main runtime dep (express). The old check
 rem looked for node_modules\better-sqlite3, a leftover from a previous stack that

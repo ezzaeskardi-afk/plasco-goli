@@ -52,7 +52,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { LEGACY_PAGE_ALIASES, legacyRedirect } from "../src/lib/legacyUrls.ts";
+import { LEGACY_PAGE_ALIASES, legacyRedirect } from "../src/lib/legacyUrls.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NEXT_DIR = path.resolve(HERE, "..");

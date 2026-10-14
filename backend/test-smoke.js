@@ -2324,7 +2324,7 @@ function shutdown(code) {
       // (`"/product.html"`). بدونِ آن، الگو فقط کلیدهای جدول را می‌گرفت و همان
       // یک مورد را جا می‌گذاشت. نام‌های `LEGACY_NO_ALIAS` هم به‌همین شکل می‌آیند
       // و عمداً بخشی از دامنه‌ی «نام‌های دنیای Express»اند.
-      const legacyUrlsSrc = fs.readFileSync(path.join(REPO_ROOT, 'next-frontend', 'src', 'lib', 'legacyUrls.ts'), 'utf8');
+      const legacyUrlsSrc = fs.readFileSync(path.join(REPO_ROOT, 'next-frontend', 'src', 'lib', 'legacyUrls.js'), 'utf8');
       const legacyPageFiles = new Set(
         [...legacyUrlsSrc.matchAll(/["']\/?([a-z0-9-]+\.html)["']/g)].map((m) => m[1]),
       );
@@ -3709,7 +3709,7 @@ function shutdown(code) {
       check('V37 بازنشسته: product.html شناسه را به مسیرِ تمیز می‌برد',
         prodQ.status === 301 && prodQ.headers.get('location') === '/product/1',
         `${prodQ.status} → ${prodQ.headers.get('location')}`);
-      // ترتیبِ پارامترها تصادفی نیست: هر دو پیاده‌سازی (`legacyUrls.ts` در Next و
+      // ترتیبِ پارامترها تصادفی نیست: هر دو پیاده‌سازی (`legacyUrls.js` در Next و
       // `lib/legacy-redirects.js` اینجا) `next` را از جای خودش حذف و `redirect`
       // را به ته اضافه می‌کنند — `URLSearchParams` ترتیبِ درج را نگه می‌دارد.
       // پس `redirect` *بعد* از `x` می‌آید. آن‌چه مهم است هم‌گراییِ دو دنیاست، نه

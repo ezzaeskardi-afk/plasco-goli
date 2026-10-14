@@ -54,6 +54,44 @@ export const NAV_FALLBACK_MS = 4000;
 export const FALLBACK_RESEND_SECONDS = 30;
 
 /**
+ * عمرِ پشتیبانِ کد (دو دقیقه) — وقتی سرور عددی ندهد.
+ *
+ * چرا جدا از `FALLBACK_RESEND_SECONDS`: این دو **یک چیز نیستند**. کد دو دقیقه
+ * زنده است و مهلتِ ارسال مجدد سی ثانیه؛ اگر عمرِ کد از مهلتِ ارسال مجدد ساخته
+ * شود، هشدارِ «کد منقضی شده» در ثانیه‌ی ۳۱ ظاهر می‌شود در حالی که کد هنوز
+ * نیمه‌ی عمرش را دارد — مشتری کدِ سالم را دور می‌ریزد و پیامکِ تازه می‌خواهد.
+ * همتای `const ttl = Number(res.expiresIn) || 120;` در
+ * `frontend/js/login.js` و نگهبانش `tests/otp-resend-window.js`.
+ */
+export const FALLBACK_CODE_TTL_SECONDS = 120;
+
+/**
+ * عمرِ واقعیِ کد از پاسخِ سرور (`expiresIn`، به ثانیه) یا `null`.
+ *
+ * `null` یعنی «سرور نگفت» — و پاسخِ درست آن هم «هیچ هشداری نشان نده» است،
+ * نه اینکه از مهلتِ ارسال مجدد یک عددِ ساختگی بسازیم. `0` هم عددی معنادار است:
+ * «کد همین حالا منقضی شده».
+ */
+function serverCodeSeconds(res: { expiresIn?: number }): number | null {
+  const seconds = Number(res?.expiresIn);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds;
+  return null;
+}
+
+/**
+ * عمرِ کد از یک خطاى ۴۲۹.
+ *
+ * `codeValid === false` یعنی سرور خودش گفته کد مرده — حتماً `0`، حتی اگر
+ * `expiresIn` نرسیده باشد. وگرنه همان عددِ سرور، و اگر هیچ‌کدام نبود `null`
+ * («نگفت») تا عددِ پشتیبان جایش را بگیرد.
+ */
+function codeSecondsFromError(err: unknown): number | null {
+  if (!(err instanceof ApiError)) return null;
+  if (err.codeValid === false) return 0;
+  return serverCodeSeconds(err);
+}
+
+/**
  * مهلتِ واقعیِ ارسال مجدد از پاسخِ سرور (`retryAfter`، به ثانیه).
  *
  * چرا در یک تابع: عددِ مهلت قبلاً در دو نقطه `startCooldown(30)` نوشته شده بود
@@ -95,6 +133,10 @@ export function LoginForm() {
   // مهلت به‌صورت «لحظه‌ی پایان» هم نگه داشته می‌شود چون منبعِ حقیقتِ شمارش همین
   // است، نه عددی که هر ثانیه یکی کم می‌شود (پایین توضیح داده شده).
   const [cooldownUntil, setCooldownUntil] = useState(0);
+  // عمرِ *خودِ کد* — جدا از مهلتِ ارسال مجدد. هشدارِ «کد منقضی شده» فقط از
+  // این عدد ساخته می‌شود، نه از پنجره‌ی ارسال مجدد.
+  const [codeUntil, setCodeUntil] = useState(0);
+  const [codeExpired, setCodeExpired] = useState(false);
   const [otpDigits, setOtpDigits] = useState(["", "", "", "", ""]);
   const [otpError, setOtpError] = useState("");
   // کدِ عاملِ دوم ۶ رقمی است (نه ۵)، پس حالتِ جداگانه لازم دارد.
@@ -159,15 +201,23 @@ export function LoginForm() {
   // «رفرش‌ناپذیر» عملاً مرده بود.
   const RESEND_KEY = "pg_otp_resend";
 
-  function startCooldown(seconds: number) {
+  //
+  // `codeSeconds` عمرِ خودِ کد است و **جدا** ذخیره می‌شود: مهلتِ ارسال مجدد
+  // (۳۰ ثانیه) و عمرِ کد (۱۲۰ ثانیه) دو عددند و قاطی‌کردنشان یعنی هشدارِ انقضا
+  // سرِ ۳۰ ثانیه ظاهر شود. `null` = «سرور نگفت».
+  function startCooldown(seconds: number, codeSeconds: number | null = null) {
+    const codeLeft = codeSeconds === null ? FALLBACK_CODE_TTL_SECONDS : codeSeconds;
     const until = Date.now() + seconds * 1000;
+    const codeUntilAbs = Date.now() + codeLeft * 1000;
     try {
-      localStorage.setItem(RESEND_KEY, JSON.stringify({ phone, until }));
+      localStorage.setItem(RESEND_KEY, JSON.stringify({ phone, until, codeUntil: codeUntilAbs }));
     } catch {
       // حالت ناشناس — شمارش فقط در حافظه می‌ماند
     }
     setCooldownUntil(until);
     setCooldown(seconds);
+    setCodeUntil(codeUntilAbs);
+    setCodeExpired(codeUntilAbs > 0 && Date.now() >= codeUntilAbs);
   }
 
   function clearCooldown() {
@@ -176,7 +226,10 @@ export function LoginForm() {
     } catch {
       // بی‌اهمیت
     }
+    setCodeUntil(0);
+    setCodeExpired(false);
   }
+
 
   // بازگشت به مرحله‌ی کد بعد از رفرش — همان کاری که فروشگاهِ Express می‌کند:
   // کاربر به همان‌جایی برمی‌گردد که بود و شمارش از وسطِ راه ادامه پیدا می‌کند.
@@ -187,10 +240,25 @@ export function LoginForm() {
       const stored = JSON.parse(localStorage.getItem(RESEND_KEY) || "null");
       const until = Number(stored?.until);
       const remain = Math.ceil((until - Date.now()) / 1000);
-      if (!stored?.phone || !Number.isFinite(remain) || remain <= 0) return;
+      // عمرِ کد مستقل از مهلتِ ارسال مجدد زنده می‌ماند: ممکن است پنجره‌ی ارسال
+      // مجدد تمام شده باشد ولی خودِ کد چند دقیقه‌ی دیگر معتبر باشد (و برعکس).
+      // پس هر دو بازگردانی می‌شوند — وگرنه بعد از رفرش، هشدارِ انقضا محو می‌شود.
+      const storedCodeUntil = Number(stored?.codeUntil) || 0;
+      if (!stored?.phone || !Number.isFinite(remain) || remain <= 0) {
+        // «ارسال مجدد» تمام شده، ولی کد هنوز می‌تواند زنده باشد: کاربر را به
+        // همان مرحله‌ی کد برمی‌گردانیم، بدونِ شمارشِ قفل.
+        if (stored?.phone && storedCodeUntil > Date.now()) {
+          setPhone(stored.phone);
+          setCodeUntil(storedCodeUntil);
+          setStep("otp");
+        }
+        return;
+      }
       setPhone(stored.phone);
       setCooldownUntil(until);
       setCooldown(remain);
+      setCodeUntil(storedCodeUntil);
+      setCodeExpired(storedCodeUntil > 0 && Date.now() >= storedCodeUntil);
       setStep("otp");
     } catch {
       // بی‌اهمیت
@@ -206,19 +274,40 @@ export function LoginForm() {
   // دکمه دیرتر از سرور باز می‌شود (سرور همان کد را معتبر می‌داند، پس دکمه‌ی
   // قفل‌شده هیچ کاری هم نمی‌کند). با مهلتِ مطلق، تیکِ بعدی خودش را با ساعتِ
   // واقعی هم‌گام می‌کند.
+  //
+  // و همان تیک، هشدارِ انقضایِ *کد* را هم می‌چرخاند — چون این دو **یک عدد
+  // نیستند**: مهلتِ ارسال مجدد ۳۰ ثانیه است و عمرِ کد ۱۲۰ ثانیه. اگر هشدارِ
+  // انقضا از مهلتِ ارسال مجدد ساخته شود (کاری که تا امروز می‌شد)، سرِ ثانیه‌ی
+  // ۳۱ به مشتری گفته می‌شود کدش مرده، در حالی که کد نیمه‌ی عمرش را دارد.
+  //
+  // چرا یک تایمر و نه دو تا: نگهبانِ همین فایل (`LoginForm.test.tsx`) بعد از
+  // تمامِ‌شدنِ پنجره‌ها `getTimerCount() === 0` می‌خواهد — «هیچ تیکِ
+  // سرگردانی جا نمی‌ماند». یک اینتروال که *هر دو* مهلت را می‌پاید و با
+  // تمامِ‌شدنِ دومی خودش را می‌بندد، هم همان انتظار را برمی‌آورد و هم تیکِ
+  // اضافه ندارد.
   useEffect(() => {
-    if (cooldownUntil <= 0) return;
+    if (cooldownUntil <= 0 && codeUntil <= 0) return;
     const tick = () => {
-      const left = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
-      setCooldown(left);
-      // با تمامِ‌شدنِ مهلت، خودِ همین مقدار وابستگیِ effect را عوض می‌کند
-      // و تایمر پاک می‌شود — وگرنه تا ابد هر ثانیه یک تیکِ بی‌فایده می‌خورد.
-      if (left <= 0) setCooldownUntil(0);
+      const nowMs = Date.now();
+      if (cooldownUntil > 0) {
+        const left = Math.max(0, Math.ceil((cooldownUntil - nowMs) / 1000));
+        setCooldown(left);
+        // با تمامِ‌شدنِ مهلت، خودِ همین مقدار وابستگیِ effect را عوض می‌کند
+        // و تایمر پاک می‌شود — وگرنه تا ابد هر ثانیه یک تیکِ بی‌فایده می‌خورد.
+        if (left <= 0) setCooldownUntil(0);
+      }
+      // عمرِ کد هم با همان مهلتِ *مطلق* سنجیده می‌شود، پس خوابِ تب یا رفرش
+      // هیچ عددی را عقب نمی‌اندازد: لحظه‌ی بعدی خودش را با ساعتِ واقعی هم‌گام
+      // می‌کند. بعد از انقضا، مهلت صفر می‌شود تا تیک بسته شود؛ خودِ هشدار می‌ماند.
+      if (codeUntil > 0 && nowMs >= codeUntil) {
+        setCodeExpired(true);
+        setCodeUntil(0);
+      }
     };
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [cooldownUntil]);
+  }, [cooldownUntil, codeUntil]);
 
   // ========== مرحله ۱: شماره موبایل ==========
   const handlePhoneSubmit = async (e: React.FormEvent) => {
@@ -241,8 +330,8 @@ export function LoginForm() {
       setStep("otp");
       setOtpDigits(["", "", "", "", ""]);
       setOtpError("");
-      // مهلت از خودِ سرور، نه ۳۰ ثانیه‌ی حدسی
-      startCooldown(serverResendSeconds(res));
+      // مهلت از خودِ سرور، نه ۳۰ ثانیه‌ی حدسی — و عمرِ کد جدا از آن
+      startCooldown(serverResendSeconds(res), serverCodeSeconds(res));
       // فوکوس اولین باکس
       setTimeout(() => otpRefs.current[0]?.focus(), 100);
     } catch (err) {
@@ -254,7 +343,9 @@ export function LoginForm() {
       if (Number.isFinite(wait) && wait > 0) {
         setStep("otp");
         setOtpDigits(["", "", "", "", ""]);
-        startCooldown(wait);
+        // عمرِ کد از `expiresIn` می‌آید، نه از `wait` (و اگر سرور گفته باشد
+        // کد مرده است، همان لحظه هشدار داده می‌شود).
+        startCooldown(wait, codeSecondsFromError(err));
         setOtpError("کد قبلی هنوز معتبر است؛ همان را وارد کنید");
         setTimeout(() => otpRefs.current[0]?.focus(), 100);
       } else {
@@ -272,7 +363,7 @@ export function LoginForm() {
     try {
       const ch = await getChallenge();
       const res = await requestOtp(phone.trim(), ch.token);
-      startCooldown(serverResendSeconds(res));
+      startCooldown(serverResendSeconds(res), serverCodeSeconds(res));
       setOtpError("");
     } catch (err) {
       // ۴۲۹ = کدِ قبلی هنوز معتبر است. پیامِ سرور همین را می‌گوید و مهلتِ
@@ -282,7 +373,9 @@ export function LoginForm() {
       // می‌شود، نه دیرتر.
       const wait = err instanceof ApiError ? Number(err.retryAfter) : NaN;
       if (Number.isFinite(wait) && wait > 0) {
-        startCooldown(wait);
+        // همین‌جا هم عمرِ کد جدا رد می‌شود: این دکمه بیشترین احتمال را دارد که
+        // سرِ ۳۰ ثانیه زده شود، یعنی وقتی کد هنوز زنده است.
+        startCooldown(wait, codeSecondsFromError(err));
       } else if (!(err instanceof ApiError && err.status === 429)) {
         // خطای واقعی (نه «هنوز معتبر است»): پنجره بسته نمی‌ماند، وگرنه مشتری
         // بی‌دلیل پشتِ دکمه‌ی قفل گیر می‌کند. کلیدِ درست پاک می‌شود؛ قبلاً
@@ -707,6 +800,9 @@ export function LoginForm() {
                   }`,
                 }}
                 autoComplete="one-time-code"
+                // همان `aria-describedby`ِ نسخهٔ Express: صفحه‌خوان باید وقتی
+                // کد منقضی می‌شود، همان جمله را بخواند.
+                aria-describedby="codeExpiry"
               />
             ))}
           </div>
@@ -716,6 +812,24 @@ export function LoginForm() {
               {otpError}
             </p>
           )}
+
+          {/*
+            هشدارِ انقضایِ کد — همتای `<p id="codeExpiry">` در `login.html`ِ
+            Express. تا امروز این عنصر در Next نبود و در نتیجه عمرِ کد هیچ‌جا
+            نشان داده نمی‌شد؛ و آن‌جا هم که هشدار ساخته می‌شد، از مهلتِ ارسال
+            مجدد ساخته می‌شد (۳۰ ثانیه) نه از عمرِ کد (۱۲۰ ثانیه).
+
+            خالی می‌ماند تا وقتی کد واقعاً منقضی شود — «همیشه یک هشدار» یعنی
+            هشداری که دیده نمی‌شود.
+          */}
+          <p
+            id="codeExpiry"
+            aria-live="polite"
+            className="text-xs text-center mb-3"
+            style={{ color: codeExpired ? "var(--color-gold)" : "transparent" }}
+          >
+            {codeExpired ? "کد منقضی شده — دوباره ارسال کنید" : "\u00a0"}
+          </p>
 
           {loading && (
             <div className="flex justify-center mb-3">

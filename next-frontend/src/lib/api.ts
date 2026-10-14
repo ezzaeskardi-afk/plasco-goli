@@ -48,6 +48,17 @@ export class ApiError extends Error {
    * نگه می‌داشت — دکمه‌ای که هم می‌توانست بی‌دلیل قفل بماند و هم زودتر باز شود.
    */
   retryAfter?: number;
+  /**
+   * عمرِ **واقعیِ باقی‌مانده‌ی خودِ کد**، به ثانیه — عددی جدا از `retryAfter`.
+   *
+   * چرا جدا: کد ۱۲۰ ثانیه زنده است ولی مهلتِ ارسال مجدد ۳۰ ثانیه. اگر فقط
+   * `retryAfter` باشد، فرانت چاره‌ای ندارد جز اینکه هشدارِ «کد منقضی شده» را
+   * از همان پنجره بسازد — یعنی به مشتری بگوید کدش مرده، در حالی که کد سالم
+   * است و فقط دکمه‌ی ارسال مجدد قفل است.
+   */
+  expiresIn?: number;
+  /** پرچمِ ماشین‌خوانِ سرور: آیا همان کد هنوز قابلِ استفاده است؟ */
+  codeValid?: boolean;
 }
 
 // سقفِ انتظار برای پاسخ سرور — هم‌عدلِ `NET_TIMEOUT` در common.js نسخه‌ی
@@ -129,6 +140,8 @@ async function fetcher<T>(
         ref?: string;
         reason?: string;
         retryAfter?: number;
+        expiresIn?: number;
+        codeValid?: boolean;
       };
       const err = new ApiError(
         res.status,
@@ -139,6 +152,12 @@ async function fetcher<T>(
       // شمارشش را کوک می‌کند، وگرنه ناچار است «۳۰ ثانیه» را حدس بزند.
       const wait = Number(data.retryAfter);
       if (Number.isFinite(wait) && wait > 0) err.retryAfter = wait;
+      // عمرِ کد هم رد می‌شود: هشدارِ انقضا باید از *این* عدد ساخته شود، نه از
+      // مهلتِ ارسال مجدد (`Number.isFinite` روی `0` هم درست است — «همین حالا
+      // منقضی شد» یک عددِ معنادار است، نه «نگفته»).
+      const codeLeft = Number(data.expiresIn);
+      if (Number.isFinite(codeLeft) && codeLeft >= 0) err.expiresIn = codeLeft;
+      if (typeof data.codeValid === "boolean") err.codeValid = data.codeValid;
       // خطای واقعیِ سرور (نه ایرادِ ورودیِ کاربر) کدِ پیگیری دارد.
       if (res.status >= 500 && data.ref) {
         err.ref = data.ref;

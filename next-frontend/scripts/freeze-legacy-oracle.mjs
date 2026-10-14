@@ -43,7 +43,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import { PARITY_PAGES } from "../src/lib/parityManifest.ts";
-import { legacyRedirect } from "../src/lib/legacyUrls.ts";
+import { legacyRedirect } from "../src/lib/legacyUrls.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NEXT_DIR = path.resolve(HERE, "..");

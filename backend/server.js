@@ -46,7 +46,11 @@ const addressesRoute = require('./routes/addresses');
 const ordersRoute = require('./routes/orders');
 const wishlistRoute = require('./routes/wishlist');
 const adminRoute = require('./routes/admin');
-const { legacyRedirect, isLegacyPath } = require('./lib/legacy-redirects');
+// `isLegacyHtmlPath` نامِ تازه‌ی همان نگهبان است: پیش‌تر هر دو طرف نامِ خودش را
+// داشت (`isLegacyPath` اینجا، `isLegacyHtmlPath` در Next) و همین دو نامِ متفاوت
+// یعنی دو جای تصمیم. الان یک تابعِ مشترک است و این‌جا فقط با نامِ محلیِ
+// کوتاه‌تر صدا زده می‌شود تا خطِ زیرش خوانا بماند.
+const { legacyRedirect, isLegacyHtmlPath: isLegacyPath } = require('./lib/legacy-redirects');
 const { decideErrorHandoff } = require('./lib/error-handoff');
 const shopRoute = require('./routes/shop');
 const wholesaleRoute = require('./routes/wholesale');
