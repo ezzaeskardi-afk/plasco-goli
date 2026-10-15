@@ -118,6 +118,13 @@ const STEPS = [
     args: ['tests/guard-mutations.js', '--scope=frontend'],
   },
   {
+    label: 'جهش‌های مجموعه‌های رفتاری (روی سندباکس)',
+    why:
+      'دود/امنیت/تخفیف — هر کدام خودش سندباکس و سرورِ خودش را می‌سازد؛ اندازه‌گیری: ۴۲ ثانیه برای یک دورِ کامل',
+    cwd: join(ROOT, 'backend'),
+    args: ['tests/guard-mutations.js', '--scope=behavior'],
+  },
+  {
     label: 'جهش‌های سناریوهای مرورگر',
     why: 'یک ادعای پول‌محور زیرِ Playwrightِ واقعی — هارنس خودش سندباکس، بیلد و دو سرور را می‌سازد (آرام و سنگین)',
     cwd: join(ROOT, 'backend'),
