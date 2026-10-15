@@ -30,6 +30,15 @@
 // می‌گیرد. این مجموعه خودش یک جفتِ تصادم‌دارِ ۳۲ بیتی می‌سازد و نشان می‌دهد
 // بدنه‌ی سروشده از **محتوا** پیروی می‌کند، نه از آن هشِ کم‌عرض.
 //
+// ---------- لبه‌ی سوم: کشِ JSON (که کلیدش ETagِ روت بود) ----------
+// همان جنس خطا، این‌بار در `compressJson`: کلید `${etag}|${encoding}` بود، یعنی
+// درستیِ بدنه‌ی سروشده به یک هدرِ *بیرونی* گره خورده بود که خودِ روت می‌سازد.
+// اگر دو پاسخِ متفاوت روزی یک ETag بگیرند (تصادمِ امضا، یا روتِ تازه‌ای که
+// هندرش را دستی ست می‌کند) کش بدنه‌ی اولی را برای دومی می‌فرستد — ۲۰۰ با
+// Content-Length درست ولی بایت‌های پاسخِ دیگر. حالا کلید هشِ خودِ محتواست و
+// این بخش دو بدنهٔ متفاوت با ETagِ **یکسان** را می‌زند و می‌سنجد هر کدام بدنهٔ
+// خودش را می‌گیرد (و کش هنوز کار می‌کند).
+//
 // ---------- چرا اجرا و نه الگو ----------
 // «هش در فایل هست» چیزِ کمی را ثابت می‌کند. این‌جا خودِ میان‌افزار با
 // req/res جعلی و یک پوشهٔ موقتِ واقعی **اجرا** می‌شود و خروجیِ فشرده با
@@ -44,7 +53,7 @@ const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
 
-const { staticCompress, sendHtml, fileCacheStats, htmlCacheStats } = require('../lib/static-compress');
+const { staticCompress, compressJson, sendHtml, jsonCacheStats, fileCacheStats, htmlCacheStats } = require('../lib/static-compress');
 
 let pass = 0, fail = 0;
 function check(label, condition, detail = '') {
@@ -341,6 +350,75 @@ console.log('\n=== Static compress cache guard (content-addressed, not mtime) ==
   check('بدونِ Accept-Encoding: HTMLِ خام فرستاده می‌شود',
     Buffer.from(htmlRaw.body).toString('utf8') === docFa
       && htmlRaw.header('content-encoding') === undefined);
+
+  // ---------- ۸) کشِ JSON: هویتِ محتوا، نه ETag ----------
+  //
+  // سومین کشِ این فایل است (فایل‌های استاتیک، HTML، و پاسخ‌های JSON) و تا
+  // دیروز کلیدش `${etag}|${encoding}` بود. این بخش همان خرابیِ کشِ HTML را
+  // برای JSON بازسازی می‌کند: دو بدنهٔ **متفاوت** با ETagِ **یکسان**.
+  const jsonBody = (tag) => ({
+    items: Array.from({ length: 60 }, (_, i) => `${FILLER}${tag}-${i}`),
+  });
+  const bodyOne = jsonBody('ONE');
+  const bodyTwo = jsonBody('TWO');
+  const textOf = (b) => JSON.stringify(b);
+  const dupEtag = 'W/"same-etag-two-bodies"';
+
+  // پیش از رسیدن به `res.json`، روت همین دو هدر را ست کرده است (etagJson).
+  const sendJson = (body, { etag, cacheControl = 'public, max-age=30', encoding = 'br' } = {}) => {
+    const req = { method: 'GET', headers: {} };
+    if (encoding) req.headers['accept-encoding'] = encoding;
+    const res = fakeRes();
+    // Express در `res.json` همین بدنه را می‌فرستد؛ این‌جا فقط ثبتش می‌کنیم.
+    res.json = (b) => { res.jsonBody = b; return res.end(Buffer.from(textOf(b))); };
+    if (etag) res.setHeader('ETag', etag);
+    if (cacheControl) res.setHeader('Cache-Control', cacheControl);
+    compressJson(req, res, () => {});
+    res.json(body);
+    return res;
+  };
+
+  const j0 = jsonCacheStats();
+  check('آماده‌سازی: پاسخِ JSON از کفِ فشرده‌سازیِ ۱KB بزرگ‌تر است',
+    Buffer.byteLength(textOf(bodyOne)) > 1024, `${Buffer.byteLength(textOf(bodyOne))}B`);
+  check('آماده‌سازی: دو بدنهٔ JSON واقعاً متفاوت‌اند ولی ETagِشان یکی است',
+    textOf(bodyOne) !== textOf(bodyTwo));
+
+  const firstJson = sendJson(bodyOne, { etag: dupEtag });
+  check('JSON: بدنهٔ br پس از بازکردن دقیقاً همان JSONِ ورودی است',
+    decodeBody(firstJson, 'br') === textOf(bodyOne));
+  check('JSON: یک بار فشرده‌سازی ثبت شد (miss)',
+    jsonCacheStats().misses === j0.misses + 1, JSON.stringify(jsonCacheStats()));
+
+  // اینجا بدنهٔ دوم با **همان** ETag می‌آید. با کلیدِ قدیمی این درخواست همان
+  // ورودیِ کش را می‌گرفت و بایت‌های پاسخِ اول را تحویل می‌داد.
+  const secondJson = sendJson(bodyTwo, { etag: dupEtag });
+  check('ETagِ تکراری: بدنهٔ خودش سرو می‌شود، نه پاسخِ کهنه',
+    decodeBody(secondJson, 'br') === textOf(bodyTwo),
+    decodeBody(secondJson, 'br') === textOf(bodyOne) ? 'بدنه = پاسخِ قبلی (کهنه سرو شد)' : 'بدنه نامنتظر');
+  check('ETagِ تکراری: واقعاً دوباره فشرده شد (کش دو پاسخ را قاطی نکرد)',
+    jsonCacheStats().misses === j0.misses + 2 && jsonCacheStats().entries === j0.entries + 2,
+    JSON.stringify(jsonCacheStats()));
+
+  const againOne = sendJson(bodyOne, { etag: dupEtag });
+  check('همان محتوا، بارِ دوم: از کش می‌آید و فشرده‌سازی تکرار نمی‌شود (hit)',
+    decodeBody(againOne, 'br') === textOf(bodyOne) && jsonCacheStats().hits === j0.hits + 1,
+    JSON.stringify(jsonCacheStats()));
+
+  // جهتِ برعکس: همان محتوا با ETagِ *تازه*. با کلیدِ ETagمحور این یک missِ تازه
+  // بود (و اگر روت ETagی تکرارشدنی می‌داد، هر بار فشرده‌سازی از نو).
+  const newEtagSameBody = sendJson(bodyOne, { etag: 'W/"etag-changed-body-identical"' });
+  check('همان محتوا با ETagِ تازه: بدنهٔ درست است و از کش می‌آید (کلید به ETag گره ندارد)',
+    decodeBody(newEtagSameBody, 'br') === textOf(bodyOne) && jsonCacheStats().hits === j0.hits + 2,
+    JSON.stringify(jsonCacheStats()));
+
+  // و دروازهٔ امنیتی دست‌نخورده: `no-store` هرگز واردِ کش نمی‌شود.
+  const noStore = sendJson(bodyOne, { etag: dupEtag, cacheControl: 'no-store' });
+  check('پاسخِ no-store با همان محتوا: کش نمی‌شود (ورودیِ تازه‌ای اضافه نشد)',
+    decodeBody(noStore, 'br') === textOf(bodyOne)
+      && jsonCacheStats().entries === j0.entries + 2
+      && jsonCacheStats().hits === j0.hits + 2,
+    JSON.stringify(jsonCacheStats()));
 
   // ---------- پاک‌سازی و گزارش ----------
   try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) { /* پوشهٔ موقت */ }

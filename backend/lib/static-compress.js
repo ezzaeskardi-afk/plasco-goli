@@ -249,16 +249,32 @@ function sendHtml(req, res, html) {
 // اندازه‌گیری: stringify ۰٫۰۸ms + brotli q6 ۰٫۶۱ms روی ۵۰ کیلوبایت.
 // با ۵۰۰ محصول می‌شود ~۳ms و با ۱۰۰۰ محصول ~۶٫۵ms در هر درخواست.
 //
-// کلیدِ کش عمداً **ETag** است، نه آدرس. دلیلش این است که ETag را خودِ روت از
-// امضای کاتالوگ می‌سازد؛ پس تا لحظه‌ای که کاتالوگ عوض نشده، این بایت‌ها معتبرند
-// و لحظه‌ای که عوض شد، کلید خودبه‌خود عوض می‌شود. هیچ باطل‌سازیِ دستی لازم نیست.
+// کلیدِ کش **هشِ محتوای واقعیِ پاسخ** است (`contentHash` — همان ۶۴ بیتِ اولِ
+// sha1 که برای فایل‌های استاتیک هم همین‌جاست)، نه ETag و نه آدرس.
 //
-// این حرف تا وقتی درست است که امضا **واقعاً** با هر تغییر عوض شود. سرِ همین کش
-// فهمیدم که نمی‌شد: امضا از MAX(updated_at) می‌آمد و دقتش یک ثانیه بود، پس دو
-// ویرایش در یک ثانیه یک امضا می‌دادند و ویرایشِ دوم گم می‌شد. آن باگ از قبل
-// وجود داشت و روی کشِ لیست و ETagِ مرورگر هم اثر داشت؛ با شمارنده‌ی catalog_rev
-// در db.js بسته شد. اگر روزی این کش داده‌ی کهنه داد، اول همان شمارنده را
-// نگاه کن — کش خودش حافظه‌ی مستقلی از امضا ندارد.
+// چرا نه آدرس: یک مسیر می‌تواند با پارامترهای مختلف (مرتب‌سازی، فیلتر، صفحه)
+// بدنه‌های متفاوت بدهد؛ پس آدرس هویتِ کافی نیست.
+//
+// چرا نه ETag: ETag را خودِ *روت* می‌سازد و این کش فقط آن را می‌خواند. تا
+// دیروز کلید `${etag}|${encoding}` بود و استدلالش این بود که «تا وقتی امضا عوض
+// نشده، بایت‌ها معتبرند». استدلال درست بود ولی **کافی** نبود: اگر دو بدنهٔ
+// متفاوت روزی یک ETag بگیرند (تصادمِ امضا، روتِ تازه‌ای که هندرش را دستی ست
+// می‌کند، یا باگِ ثانیه‌ای که یک‌بار همین‌جا خوردیم)، کش پاسخِ *اولی* را برای
+// دومی می‌فرستد — ۲۰۰، Content-Length درست، ولی بایت‌های پاسخِ دیگری. یعنی
+// درستیِ این کش به درستیِ یک چیزِ *بیرونی* گره خورده بود.
+// همین درس را یک لبه‌ی دیگر هم داشتیم: کشِ HTML با هشِ ۳۲ بیتیِ FNV همین
+// «سندِ جابه‌جا سرو می‌شود» را می‌ساخت. آن‌جا هش ۳۲ → ۶۴ بیت شد و این‌جا هویتِ
+// ورودی از محتوا می‌آید. حالا هیچ‌کس نمی‌تواند با ETagِ تکراری پاسخِ کهنه بگیرد.
+//
+// ETag نقشی هم دارد — ولی فقط *دروازه*ی کش‌شدن (شرطِ ۱ پایین) و ۳۰۴ دادن به
+// مرورگر. داخلِ محاسبه‌ی کلید نیست.
+//
+// هزینه‌اش: یک sha1 روی متنِ پاسخ (برای فهرستِ ۵۰KB حدود ۰٫۰۳ms) که در برابر
+// brotli q6 (۰٫۶۱ms) ناچیز است — همان چیزی که این کش برای حذفش ساخته شده.
+//
+// و آن باگِ امضای ثانیه‌ای هم هنوز یادآور است: امضا از MAX(updated_at) می‌آمد
+// و دو ویرایش در یک ثانیه یک امضا می‌دادند. آن‌جا با شمارندهٔ catalog_rev در
+// db.js بسته شد؛ آن شکاف روی ETagِ مرورگر اثر داشت، نه روی این کلید.
 //
 // ---------- دو شرطِ کش‌شدن (هر دو باید برقرار باشند) ----------
 //
@@ -287,7 +303,7 @@ function sendHtml(req, res, html) {
 // (خودشان با etagJson ETag دارند) و برای no-store هم ETag به‌کار نمی‌آید. رفتارِ
 // قبلیِ همین فایل است و تغییرش ندادم؛ فقط اگر روزی کسی دنبالِ ETagِ گم‌شده گشت،
 // جوابش اینجاست.
-const jsonCache = new Map(); // `${etag}|${encoding}` → Buffer
+const jsonCache = new Map(); // `${هشِ محتوا}|${encoding}` → Buffer
 let jsonCacheBytes = 0;
 
 // سقف بر مبنای *بایت* است نه تعداد، چون حجمِ هر پاسخ با رشدِ کاتالوگ بالا می‌رود:
@@ -302,10 +318,17 @@ function cacheableJson(res) {
   return cc.includes('public') && !/no-store|private/.test(cc);
 }
 
+// شمارنده‌های تستِ این کش — مثلِ کشِ فایل‌های استاتیک: تنها راهِ ثابت‌کردنِ
+// این‌که بارِ دومِ همان محتوا واقعاً از کش آمده و تغییرِ محتوا واقعاً یک بارِ
+// فشرده‌سازیِ تازه هزینه داده است.
+let jsonHits = 0;
+let jsonMisses = 0;
+
 function cachedCompress(cacheKey, text, encoding) {
   if (!cacheKey) return compressBuffer(Buffer.from(text), encoding);
   const hit = jsonCache.get(cacheKey);
-  if (hit) return hit;
+  if (hit) { jsonHits++; return hit; }
+  jsonMisses++;
   const buf = compressBuffer(Buffer.from(text), encoding);
   // قدیمی‌ترین‌ها می‌روند تا زیر سقف برگردیم. Map ترتیبِ درج را نگه می‌دارد.
   jsonCache.set(cacheKey, buf);
@@ -319,7 +342,9 @@ function cachedCompress(cacheKey, text, encoding) {
 }
 
 // برای تست: می‌خواهیم بشود ثابت کرد که بارِ دوم واقعاً از کش آمده.
-const jsonCacheStats = () => ({ entries: jsonCache.size, bytes: jsonCacheBytes });
+const jsonCacheStats = () => ({
+  entries: jsonCache.size, bytes: jsonCacheBytes, hits: jsonHits, misses: jsonMisses,
+});
 
 // فشرده‌سازی پاسخ‌های JSON (مثل لیست محصولات که با رشد فروشگاه بزرگ می‌شود).
 // روی res.json سوار می‌شود و اگر بدنه به‌قدر کافی بزرگ بود، gzip/br می‌فرستد.
@@ -333,9 +358,10 @@ function compressJson(req, res, next) {
     try { text = JSON.stringify(body); } catch (e) { return originalJson(body); }
     if (!text || Buffer.byteLength(text) < MIN_SIZE) return originalJson(body);
 
-    // ETag و Cache-Control را روت قبل از res.json ست کرده (etagJson).
-    const etag = res.getHeader('ETag');
-    const cacheKey = cacheableJson(res) ? `${etag}|${encoding}` : '';
+    // Cache-Control و ETag را روت قبل از res.json ست کرده (etagJson).
+    // `cacheableJson` دروازه است (ETag دارد؟ public است؟)؛ کلید اما از
+    // **محتوا** می‌آید تا ETagِ تکراری هرگز پاسخِ کهنه سرو نکند.
+    const cacheKey = cacheableJson(res) ? `${contentHash(Buffer.from(text))}|${encoding}` : '';
 
     let buf;
     try { buf = cachedCompress(cacheKey, text, encoding); } catch (e) { return originalJson(body); }
