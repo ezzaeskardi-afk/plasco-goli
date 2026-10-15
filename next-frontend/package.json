@@ -15,7 +15,9 @@
     "legacy-links:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/legacy-links-live.mjs",
     "freeze:oracle": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/freeze-legacy-oracle.mjs",
     "cutover:rehearsal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/cutover-rehearsal.mjs",
-    "static-paths:live": "node scripts/static-paths-live.mjs"
+    "static-paths:live": "node scripts/static-paths-live.mjs",
+    "e2e": "node scripts/e2e.mjs",
+    "e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.1",
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4.1.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

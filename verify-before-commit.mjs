@@ -118,6 +118,13 @@ const STEPS = [
     args: ['tests/guard-mutations.js', '--scope=frontend'],
   },
   {
+    label: 'جهش‌های سناریوهای مرورگر',
+    why: 'یک ادعای پول‌محور زیرِ Playwrightِ واقعی — هارنس خودش سندباکس، بیلد و دو سرور را می‌سازد (آرام و سنگین)',
+    cwd: join(ROOT, 'backend'),
+    args: ['tests/guard-mutations.js', '--scope=e2e'],
+    live: true,
+  },
+  {
     label: 'جهش‌های نگهبان‌های زنده',
     why: 'برابریِ فروشگاه و مقصدِ نشانی‌های قدیمی — هر دو سرور لازم است (Express روی ۳۰۰۰ و Next روی ۳۰۰۱)',
     cwd: join(ROOT, 'backend'),
