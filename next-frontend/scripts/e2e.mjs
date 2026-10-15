@@ -37,7 +37,7 @@
 //
 // ---------- چرا خودش بیلد می‌کند (و این یک باگِ واقعی بود) ----------
 // `rewrites()`ِ `next.config.ts` مقصدش را از `API_ORIGIN` می‌سازد، ولی Next آن
-// را **در زمانِ بیلد** داخلِ `.next/routes-manifest.json` می‌پخت:
+// را **در زمانِ بیلد** داخلِ `<distDir>/routes-manifest.json` می‌پخت:
 //
 //     "destination": "http://localhost:3000/api/:path*"   ← یخ‌زده روی دیسک
 //
@@ -244,13 +244,21 @@ log(`بک‌اندِ سندباکس روی ${BACKEND} بالا آمد (داده:
 
 /* ---------- ۲) بیلدِ Next، از درختِ همین لحظه ----------
  * چرا پیش‌فرض «همیشه بیلد» است و نه «اگر بیلد نبود»: مقصدِ rewrite در زمانِ
- * بیلد پخته می‌شود، پس یک `.next`ِ کهنه دو جور آزمونِ سبزِ دروغ می‌سازد —
+ * بیلد پخته می‌شود، پس یک بیلدِ کهنه دو جور آزمونِ سبزِ دروغ می‌سازد —
  * هم می‌تواند به بک‌اندِ اشتباهی وصل شود، هم صفحه‌های *قبل از* آخرین ویرایش
  * را نشان دهد. با `PG_E2E_REUSE_BUILD=1` می‌شود از بیلد صرف‌نظر کرد، ولی
  * آن‌وقت هم اثرِ انگشتِ درخت (HEAD + تغییراتِ نسخه‌بندی‌شده) باید عیناً همان
  * چیزی باشد که بیلد با آن ساخته شده؛ وگرنه باز بیلد می‌شود. یعنی «سریع»
  * هرگز به «کهنه» تبدیل نمی‌شود. */
-const BUILD_MARKER = path.join(NEXT_DIR, ".next", ".e2e-build.json");
+// پوشهٔ خروجیِ همین هارنس — **جدا** از `.next`ِ سایت. دلیلش یک حادثهٔ واقعی است:
+// مقصدِ rewrite در زمانِ بیلد داخلِ پوشهٔ خروجی پخته می‌شود، پس بیلدِ سندباکس
+// روی `.next` یعنی بیلدِ productionِ کاربر تا اولین بیلدِ بعدی به پورتِ
+// سندباکس اشاره می‌کند. آن‌وقت `next start` بالا می‌آید، صفحه‌ها می‌آیند، ولی
+// `/api` و `/picture` به یک پورتِ مرده می‌روند: لوگو نمی‌آید و دسته‌بندی‌ها
+// خالی می‌شود، بی‌هیچ خطایی. `next.config.ts` همین متغیر را می‌خواند.
+const DIST_DIR_NAME = ".next-e2e";
+const DIST_DIR = path.join(NEXT_DIR, DIST_DIR_NAME);
+const BUILD_MARKER = path.join(DIST_DIR, ".e2e-build.json");
 
 function treeFingerprint() {
   const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: NEXT_DIR, encoding: "utf8" });
@@ -273,7 +281,7 @@ function writeBuildMarker(apiOrigin, tree) {
 function bakedApiOrigin() {
   try {
     const manifest = JSON.parse(
-      fs.readFileSync(path.join(NEXT_DIR, ".next", "routes-manifest.json"), "utf8")
+      fs.readFileSync(path.join(DIST_DIR, "routes-manifest.json"), "utf8")
     );
     const all = [
       ...(manifest.rewrites?.beforeFiles ?? []),
@@ -293,6 +301,9 @@ const buildEnv = {
   NODE_ENV: "production",
   API_ORIGIN: BACKEND,
   NEXT_PUBLIC_SITE_URL: WEB,
+  // بیلد **و** `next start` همین متغیر را می‌خوانند (next.config.ts → distDir)،
+  // پس هارنس و سایتِ کاربر هیچ‌وقت روی یک پوشه نمی‌نویسند.
+  PG_NEXT_DIST_DIR: DIST_DIR_NAME,
 };
 
 const baked = bakedApiOrigin();
@@ -341,7 +352,7 @@ if (effective !== BACKEND) {
 // «بیلدِ سبزِ توخالی» که stepِ CI هم صریحاً می‌گیرد. این‌جا هم لازم است:
 // سناریوی پرداخت از `/products` شروع می‌کند و با صفر صفحهٔ محصول، Playwright
 // روی یک صفحهٔ خالی می‌افتد و خطا را به شکلِ «دکمهٔی نیست» گزارش می‌کند.
-function countPrerenderedProducts(dir = path.join(NEXT_DIR, ".next", "server", "app", "product")) {
+function countPrerenderedProducts(dir = path.join(DIST_DIR, "server", "app", "product")) {
   let total = 0;
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return 0; }
@@ -363,7 +374,7 @@ log(`${prerendered} صفحهٔ محصول پیش‌رندر شد`);
 
 /* ---------- ۳) سرورِ Next (production) ----------
  * نکته‌ای که یک بار هزینه‌اش را داد: `API_ORIGIN`ِ همین لحظه، مقصدِ پروکسی را
- * عوض نمی‌کند — آن مقصد داخلِ `.next` پخته شده. `API_ORIGIN` این‌جا برای سرورِ
+ * عوض نمی‌کند — آن مقصد داخلِ پوشهٔ خروجیِ بیلد پخته شده. `API_ORIGIN` این‌جا برای سرورِ
  * *زنده* است: `lib/site.ts` (fetchهای سمتِ سرور) و `next/image` از همین
  * می‌خوانند. پس هر دو باید یکی باشند، و همان `buildEnv` به هر دو داده می‌شود. */
 const nextBin = require.resolve("next/dist/bin/next");
