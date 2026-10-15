@@ -17,6 +17,7 @@ import {
   logMark,
   loginWithOtp,
   readOtpFromLog,
+  requestOtpCode,
 } from "./helpers";
 
 test("ورودِ مشتریِ تازه: شماره → کد → نام → حساب", async ({ page }) => {
@@ -144,6 +145,115 @@ test("درخواستِ دوباره پیش از مصرفِ کد: کدِ اول �
   // ---------- ۳) و کدِ اول واقعاً کار می‌کند ----------
   // اگر سرور کدی را «معتبر» بخواند ولی بعد قبول نکند، آن پیامِ سرور دروغ بوده.
   await fillOtp(page, firstCode!);
+  await page.getByPlaceholder("نام و نام خانوادگی").fill(CUSTOMER_NAME);
+  await page.getByRole("button", { name: "ورود به فروشگاه" }).click();
+  expect((await currentUser(page))?.phone).toBe(phone);
+});
+
+// ============================================================
+// سناریو ۱.۷ — خودِ خانه‌های کد، از چشمِ مرورگر
+// ============================================================
+// تا امروز این مجموعه «کد را می‌ریخت و می‌دید آیا فرم جلو می‌رود یا نه»؛ ولی
+// *وضعیتِ خودِ خانه‌ها* هیچ‌جا سنجیده نمی‌شد. سه چیز این‌جا فقط در مرورگرِ
+// واقعی معنا دارند و هیچ آزمونِ jsdom نمی‌بیندشان:
+//
+//   ۱. هر رقم در **همان** خانه‌ای می‌نشیند که تایپ شده و فوکوس به خانهٔ بعد می‌پرد
+//      (زنجیرهٔ واقعیِ تایپِ کد؛ در jsdom فوکوسِ مرورگر وجود ندارد)؛
+//   ۲. رنگِ خانهٔ پرشده از خانهٔ خالی جدا می‌شود — و این رنگ از یک متغیرِ CSS
+//      **حل‌شده** می‌آید، نه از یک کلاس در سورس؛ پس این سنجش فقط با یک
+//      stylesheetِ واقعی معنا دارد؛
+//   ۳. رقمِ پنجم فرم را **خودش** می‌فرستد (بدونِ هیچ کلیکی) و همان پنج رقمی را
+//      می‌فرستد که در خانه‌ها نشسته — نه یک شمارندهٔ داخلی.
+//
+// سنجش از راهِ بدنه‌ی همان درخواستی است که مرورگر می‌فرستد: تنها جایی که
+// «آن‌چه تایپ شد» به «آن‌چه سرور دید» وصل می‌شود.
+test("مرحلهٔ کد: هر رقم در خانهٔ خودش، فوکوس جلو می‌پرد و پنجمی خودش می‌فرستد", async ({ page }) => {
+  const phone = freshPhone();
+  await page.goto("/login?redirect=%2Faccount");
+  await page.getByPlaceholder("۰۹۱۲۳۴۵۶۷۸۹").fill(phone);
+  const code = await requestOtpCode(page, phone);
+
+  const boxes = page.locator('input[autocomplete="one-time-code"]');
+  await expect(boxes).toHaveCount(5);
+  await expect(boxes.nth(0)).toBeFocused();
+
+  const borderOf = (i: number) =>
+    boxes.nth(i).evaluate((el) => getComputedStyle(el).borderColor);
+  const emptyBorder = await borderOf(4);
+
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.type(code[i]);
+    await expect(boxes.nth(i), `خانهٔ ${i} باید رقمِ خودش را نگه دارد`).toHaveValue(code[i]);
+    await expect(boxes.nth(i + 1), "فوکوس باید به خانهٔ بعد بپرد").toBeFocused();
+  }
+
+  // رنگِ خانه‌ها: دو نکته که هر دو خودش را در اجرای واقعی نشان داد.
+  //
+  // ۱) خانه‌ها `transition-colors` دارند، پس یک snapshotِ ساده وسطِ انیمیشن
+  //    می‌نشیند: اولین اجرای همین سنجش، خانهٔ ۰ را در «۴۳,۲۱۵,۱۷۸ با شفافیتِ ۰٫۹۵»
+  //    دید و خانهٔ ۲ را در «۵۱,۲۱۶,۱۸۰ با شفافیتِ ۰٫۸۹۸» — یعنی دو لحظهٔ متفاوت
+  //    از یک انیمیشن، نه دو حالتِ متفاوت. پس تا **حالتِ آرام** صبر می‌کنیم:
+  //    تا وقتی که چهار خانه در رنگِ یکی شوند.
+  // ۲) stylesheet ممکن است چند میلی‌ثانیه دیرتر برسد؛ سنجشِ صبور هر دو را می‌پوشاند.
+  await expect
+    .poll(async () => new Set(await Promise.all([0, 1, 2, 3].map(borderOf))).size, {
+      message: "خانه‌های پرشده باید در حالتِ آرام یک رنگ باشند",
+    })
+    .toBe(1);
+  const filledBorder = await borderOf(0);
+  expect(filledBorder, "رنگِ خانهٔ پرشده باید از خانهٔ خالی جدا باشد").not.toBe(emptyBorder);
+  await expect(boxes.nth(4), "خانهٔ پنجم هنوز دست‌نخورده است").toHaveValue("");
+  expect(await borderOf(4), "خانهٔ خالی رنگِ خانهٔ پرشده را نگیرد").toBe(emptyBorder);
+
+  const verify = page.waitForResponse((r) => r.url().includes("/api/auth/otp/verify"));
+  await page.keyboard.type(code[4]);
+  const sent = JSON.parse((await verify).request().postData() || "{}") as { code?: string };
+  expect(sent.code, "فرم باید همان پنج رقمی را بفرستد که در خانه‌ها نشسته").toBe(code);
+
+  await page.getByPlaceholder("نام و نام خانوادگی").fill(CUSTOMER_NAME);
+  await page.getByRole("button", { name: "ورود به فروشگاه" }).click();
+  expect((await currentUser(page))?.phone).toBe(phone);
+});
+
+// ============================================================
+// سناریو ۱.۸ — چسباندنِ کد از کلیپ‌بورد
+// ============================================================
+// مسیرِ «چسباندن» در `LoginForm` یک شاخهٔ جدا است: پنج رقمِ کلیپ‌بورد یک‌جا در
+// خانه‌ها می‌نشینند و اگر پنجمی هم بیاید، فرم خودش می‌فرستد. تا امروز این شاخه
+// هیچ‌جا آزموده نمی‌شد، در حالی که روی گوشی رایج‌ترین راهِ واردکردنِ کد است
+// (پیامک را کپی می‌کنی و می‌چسبانی). کلیپ‌بورد و رویدادِ paste فقط در مرورگرِ
+// واقعی وجود دارند — jsdom نه کلیپ‌بورد دارد و نه اجازه‌ی خواندنش.
+test("مرحلهٔ کد: چسباندنِ کلیپ‌بورد چند خانه را یک‌جا پر می‌کند", async ({ page, context }) => {
+  const origin = new URL(process.env.PG_E2E_WEB as string).origin;
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+
+  const phone = freshPhone();
+  await page.goto("/login?redirect=%2Faccount");
+  await page.getByPlaceholder("۰۹۱۲۳۴۵۶۷۸۹").fill(phone);
+  const code = await requestOtpCode(page, phone);
+
+  const boxes = page.locator('input[autocomplete="one-time-code"]');
+  await expect(boxes).toHaveCount(5);
+
+  // چهار رقم از پنج رقم را کپی می‌کنیم تا نیمه‌کاره بماند: این‌طور هم «چند خانه
+  // یک‌جا پر شد» سنجیده می‌شود و هم «نیمه‌کاره چیزی نفرستاد».
+  await page.evaluate((text) => navigator.clipboard.writeText(text), code.slice(0, 4));
+  await boxes.nth(0).focus();
+  await page.keyboard.press("Control+v");
+
+  for (let i = 0; i < 4; i++) {
+    await expect(boxes.nth(i), `چسباندن باید خانهٔ ${i} را پر کند`).toHaveValue(code[i]);
+  }
+  await expect(page.getByPlaceholder("نام و نام خانوادگی"), "کدِ نیمه‌کاره نباید فرم را بفرستد")
+    .toHaveCount(0);
+
+  const verify = page.waitForResponse((r) => r.url().includes("/api/auth/otp/verify"));
+  await boxes.nth(4).focus();
+  await page.keyboard.type(code[4]);
+  const sent = JSON.parse((await verify).request().postData() || "{}") as { code?: string };
+  expect(sent.code, "کدِ چسبانده‌شده + رقمِ آخر باید همان کدی باشد که سرور فرستاده")
+    .toBe(code);
+
   await page.getByPlaceholder("نام و نام خانوادگی").fill(CUSTOMER_NAME);
   await page.getByRole("button", { name: "ورود به فروشگاه" }).click();
   expect((await currentUser(page))?.phone).toBe(phone);
