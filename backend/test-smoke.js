@@ -3355,7 +3355,17 @@ function shutdown(code) {
         rPub2._ended === rPub1._ended && jsonCacheStats().entries === n0 + 1);
       const rPub3 = fakeRes({ ...hdrPub, ETag: 'W/"pub-v32-b"' });
       drive(rPub3, bigBody('public-list-2'));
-      check('V32 کش: ETagِ تازه ورودیِ تازه می‌سازد', jsonCacheStats().entries === n0 + 2);
+      check('V32 کش: محتوای تازه ورودیِ تازه می‌سازد', jsonCacheStats().entries === n0 + 2);
+      /* و جهتِ برعکسِ همان درس: کلید از **محتوا** می‌آید، نه از ETag.
+         تا پیش از این کلید `${etag}|${encoding}` بود و یک ETagِ تازه — حتی با
+         بدنهی *یکسان* — یک ورودیِ تازه و یک فشرده‌سازیِ تازه می‌ساخت؛ و اگر دو
+         بدنهٔ متفاوت روزی یک ETag می‌گرفتند، پاسخِ *کهنه* سرو می‌شد (۲۰۰ با
+         Content-Length درست ولی بایت‌های پاسخِ دیگر). حالا هدرِ روت فقط
+         *دروازه*ی کش‌شدن است و هویتِ ورودی از خودِ بایت‌ها می‌آید. */
+      const rPub4 = fakeRes({ ...hdrPub, ETag: 'W/"pub-v32-c"' });
+      drive(rPub4, bigBody('public-list'));
+      check('V32 کش: ETagِ تازه با همان محتوا ورودیِ تازه نمی‌سازد (کلید از محتوا می‌آید)',
+        jsonCacheStats().entries === n0 + 2 && rPub4._ended === rPub1._ended);
       check('V32 کش: بایتِ فشرده واقعاً از بدنه کوچک‌تر است',
         Buffer.isBuffer(rPub1._ended) && rPub1._ended.length < 3000, `${rPub1._ended?.length} B`);
     }
