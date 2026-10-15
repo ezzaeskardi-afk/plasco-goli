@@ -1,0 +1,166 @@
+// ============================================================
+// سناریو ۱ — ورود با کد پیامکی، از چشمِ مرورگرِ واقعی
+// ============================================================
+// این چیزی است که ۳۶۲ آزمونِ jsdom نمی‌توانستند ببینند: پرشِ فوکوس بین پنج
+// باکسِ کد، فرستادنِ خودکار وقتی رقمِ پنجم می‌آید، و — مهم‌تر از همه — این‌که
+// کوکیِ نشست واقعاً در مرورگر می‌نشیند و `/api/auth/me` همان کاربر را می‌دهد.
+//
+// دقیقاً همین زنجیره بود که یک باگِ واقعی را پنهان کرد: فرم نام را از سطحِ
+// بالای پاسخ می‌خواند، هر دو `undefined` می‌شدند، و مرحلهٔ «نام» برای هر ورودِ
+// موفق باز می‌ماند («هر بار دوباره نامم را می‌پرسد»).
+import { test, expect } from "@playwright/test";
+import {
+  CUSTOMER_NAME,
+  currentUser,
+  fillOtp,
+  freshPhone,
+  logMark,
+  loginWithOtp,
+  readOtpFromLog,
+} from "./helpers";
+
+test("ورودِ مشتریِ تازه: شماره → کد → نام → حساب", async ({ page }) => {
+  const phone = freshPhone();
+
+  const outcome = await loginWithOtp(page, phone, { redirect: "/account" });
+  expect(outcome, "برای شمارهٔ تازه باید مرحلهٔ نام بیاید و در همان‌جا تمام شود").toBe("customer");
+
+  // مسیرِ بازگشت (`?redirect=`) باید رعایت شده باشد، نه «خانه».
+  await expect(page).toHaveURL(/\/account/);
+
+  // سنجش از چشمِ خودِ مرورگر: کوکیِ نشست در همان context است و API همان
+  // کاربر را برمی‌گرداند.
+  const me = await currentUser(page);
+  expect(me?.phone).toBe(phone);
+  expect(me?.fullName).toBe(CUSTOMER_NAME);
+
+  // و صفحهٔ حساب همان را نشان می‌دهد — نه یک صفحهٔ خالیِ بدونِ ورود.
+  await expect(page.getByText(CUSTOMER_NAME).first()).toBeVisible();
+});
+
+// ============================================================
+// سناریو ۱.۵ — درخواستِ دوباره پیش از مصرفِ کد (همان پاسخِ ۴۲۹)
+// ============================================================
+// چرا این یک آزمونِ جدا لازم داشت: سرور برای هر شماره یک مهلتِ ارسال مجدد
+// دارد (۳۰ ثانیه) و در آن بازه **پیامکِ تازه نمی‌فرستد** — با ۴۲۹ جواب می‌دهد
+// و دو عددِ متفاوت را هم می‌فرستد: `retryAfter` (مهلتِ ارسال مجدد، سی ثانیه)
+// و `expiresIn` (عمرِ واقعیِ باقی‌ماندهٔ *خودِ کد*، تا دو دقیقه).
+//
+// این دو عدد تا چندی پیش یکی فرض می‌شدند و نتیجه‌اش یک دروغِ واقعی بود: سرِ
+// ثانیه‌ی ۳۱، وقتی پنجرهٔ ارسال مجدد تمام می‌شد، به مشتری گفته می‌شد «کد
+// منقضی شده» در حالی که کد نیمه‌ی عمرش را داشت — و مشتری کدِ سالم را دور
+// می‌ریخت. حالا هر چهار ادعا این‌جا با مرورگرِ واقعی سنجیده می‌شوند:
+//   ۱. ۴۲۹ با `codeValid: true` و `expiresIn` بسیار بزرگ‌تر از `retryAfter`؛
+//   ۲. هیچ پیامکِ تازه‌ای (هیچ خطِ تازه‌ای در لاگِ بک‌اند) نمی‌آید؛
+//   ۳. عددی که روی صفحه شمرده می‌شود همان `retryAfter`ِ سرور است؛
+//   ۴. هشدارِ «منقضی» دیده نمی‌شود و کدِ اول هنوز *کار می‌کند*.
+//
+test("درخواستِ دوباره پیش از مصرفِ کد: کدِ اول معتبر می‌ماند و «منقضی» گفته نمی‌شود", async ({ page, browser }) => {
+  const phone = freshPhone();
+
+  // ---------- ۱) کد درخواست می‌شود ولی مصرف *نمی‌شود* ----------
+  // (تا پنجرهٔ ارسال مجدد باز بماند — با یک ورودِ کامل، سرور ردیفِ کد را
+  // پاک می‌کند و مهلتی هم نمی‌ماند؛ همان چیزی که سناریوی بعدی را سریع کرد.)
+  await page.goto("/login");
+  await page.getByPlaceholder("۰۹۱۲۳۴۵۶۷۸۹").fill(phone);
+  const firstMark = logMark();
+  await page.getByRole("button", { name: "دریافت کد ورود" }).click();
+  const firstCode = await readOtpFromLog(phone, { afterByte: firstMark });
+  expect(firstCode, "حالتِ آزمایشی باید کد را در لاگِ بک‌اند چاپ کند").toBeTruthy();
+
+  // ---------- ۲) همان شماره از مرورگرِ تازه ----------
+  // (تبِ بسته‌شده و بازشده، یا گوشیِ دوم — همان کاربر، بدونِ کوکی و حافظهٔ محلی.)
+  const ctx = await browser.newContext();
+  try {
+    const second = await ctx.newPage();
+    await second.goto("/login");
+    await second.getByPlaceholder("۰۹۱۲۳۴۵۶۷۸۹").fill(phone);
+    const secondMark = logMark();
+    const replied = second.waitForResponse((r) => r.url().includes("/api/auth/otp/request"));
+    await second.getByRole("button", { name: "دریافت کد ورود" }).click();
+    const res = await replied;
+    const body = (await res.json()) as {
+      retryAfter?: number;
+      expiresIn?: number;
+      codeValid?: boolean;
+    };
+
+    // ۱) پاسخ همان ۴۲۹ است و دو عدد از هم جدا هستند.
+    expect(res.status()).toBe(429);
+    expect(body.codeValid, "کدِ قبلی باید هنوز معتبر باشد").toBe(true);
+    const retryAfter = Number(body.retryAfter);
+    const expiresIn = Number(body.expiresIn);
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(expiresIn, "عمرِ کد نباید از مهلتِ ارسال مجدد ساخته شده باشد")
+      .toBeGreaterThan(retryAfter);
+
+    // ۲) عددِ روی صفحه همان عددِ سرور است، نه ۳۰ ثانیهٔ حدسی و نه صفر.
+    //
+    // و چرا *خواندنِ* عدد و نه تطبیقِ متنِ ثابت: این ثانیه‌شمار واقعاً کار
+    // می‌کند. آزمونِ اولِ همین سنجش با `name: /… (30|29) ثانیه/` نوشته شده بود
+    // و افتاد، چون عدد روی صفحه (به‌درستی) از ۳۰ به ۲۳ رسیده بود تا وقتی که
+    // تطبیقِ متنِ Playwright تسلیم شد — یعنی همان چیزی که می‌خواستیم ثابت شود
+    // (شمارش از عددِ سرور) باعثِ شکستِ سنجش شده بود. پس فاصله مجاز است.
+    const resendButton = second.getByRole("button", { name: /ارسال مجدد کد/ });
+    await expect(resendButton).toBeVisible();
+    const shown = /\((\d+) ثانیه\)/.exec((await resendButton.textContent()) || "");
+    const shownSeconds = Number(shown?.[1]);
+    expect(Number.isFinite(shownSeconds), "دکمهٔ ارسال مجدد باید ثانیه‌شمار را نشان دهد").toBe(true);
+    expect(shownSeconds, "عددِ روی صفحه نباید از عددِ سرور بیشتر باشد").toBeLessThanOrEqual(retryAfter);
+    expect(retryAfter - shownSeconds, "عددِ روی صفحه از عددِ سرور عقب نباشد").toBeLessThanOrEqual(3);
+
+    // ۳) هیچ پیامکِ تازه‌ای نرفته — این همان سدِ هزینه‌ی پنل پیامک است.
+    expect(
+      await readOtpFromLog(phone, { afterByte: secondMark, timeoutMs: 3000 }),
+      "در مهلتِ ارسال مجدد نباید پیامکِ تازه فرستاده شود"
+    ).toBeNull();
+
+    // ۴) هشدارِ انقضای *کد* دیده نمی‌شود، در حالی که «کد قبلی معتبر است» گفته می‌شود.
+    await expect(second.getByText("کد قبلی هنوز معتبر است؛ همان را وارد کنید")).toBeVisible();
+    await expect(second.locator("#codeExpiry")).not.toContainText("منقضی");
+
+    // ۵) و سنجشِ واقعیِ «دو عدد جدا هستند» — نه یک نگاهِ لحظه‌ای که بتواند
+    //    از قلم بیفتد. خودِ هشدار سرِ ثانیه‌ی ۳۱ ظاهر می‌شود، پس در یک آزمونِ
+    //    چندثانیه‌ای دیده‌ِ‌شدنش قابلِ سنجش نیست؛ ولی *چیزی که آن هشدار از آن
+    //    ساخته می‌شود* همین‌جا در `localStorage` نشسته و سنجیده می‌شود:
+    //    `until` باید از `retryAfter` بیاید و `codeUntil` از `expiresIn`.
+    //    اگر کسی دوباره عمرِ کد را از مهلتِ ارسال مجدد بسازد (خودِ باگِ
+    //    قدیمی)، همین دو خط قرمز می‌شود — بدونِ سی ثانیه انتظار.
+    const stored = (await second.evaluate(() =>
+      JSON.parse(localStorage.getItem("pg_otp_resend") || "null")
+    )) as { phone?: string; until?: number; codeUntil?: number } | null;
+    expect(stored?.phone, "مهلتِ ذخیره‌شده باید به همین شماره گره خورده باشد").toBe(phone);
+    const untilLeft = Math.round(((stored?.until ?? 0) - Date.now()) / 1000);
+    const codeLeft = Math.round(((stored?.codeUntil ?? 0) - Date.now()) / 1000);
+    expect(untilLeft, "مهلتِ ارسال مجدد باید همان `retryAfter`ِ سرور باشد")
+      .toBeLessThanOrEqual(retryAfter);
+    expect(codeLeft, "عمرِ کد باید از `expiresIn` بیاید، نه از پنجرهٔ ارسال مجدد")
+      .toBeGreaterThan(retryAfter);
+    expect(codeLeft).toBeLessThanOrEqual(expiresIn);
+  } finally {
+    await ctx.close();
+  }
+
+  // ---------- ۳) و کدِ اول واقعاً کار می‌کند ----------
+  // اگر سرور کدی را «معتبر» بخواند ولی بعد قبول نکند، آن پیامِ سرور دروغ بوده.
+  await fillOtp(page, firstCode!);
+  await page.getByPlaceholder("نام و نام خانوادگی").fill(CUSTOMER_NAME);
+  await page.getByRole("button", { name: "ورود به فروشگاه" }).click();
+  expect((await currentUser(page))?.phone).toBe(phone);
+});
+
+test("ورودِ دوم با همان شماره: نام دیگر پرسیده نمی‌شود", async ({ page }) => {
+  const phone = freshPhone();
+
+  await loginWithOtp(page, phone, { redirect: "/account" });
+  expect((await currentUser(page))?.phone).toBe(phone);
+
+  // همان کاربر دوباره وارد می‌شود؛ این بار مرحلهٔ نام نباید بیاید.
+  await page.context().clearCookies();
+  const again = await loginWithOtp(page, phone, { redirect: "/account" });
+  expect(again, "مشتریِ قدیمی نباید دوباره نامش را بگوید").toBe("customer");
+
+  const me = await currentUser(page);
+  expect(me?.phone).toBe(phone);
+  expect(me?.fullName).toBe(CUSTOMER_NAME);
+});
