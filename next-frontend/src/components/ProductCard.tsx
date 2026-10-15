@@ -70,7 +70,28 @@ export function ProductCard({ product }: { product: Product }) {
         boxShadow: "var(--shadow)",
       }}
     >
-      <Link href={`/product/${product.id}`} className="block">
+      {/* `prefetch={false}` — عمداً، و با اندازه‌گیری نه سلیقه.
+
+          پیش‌فرضِ `next/link` این است: هر لینکی که به دید بیاید، RSCِ مقصدش
+          را واکشی کند. روی یک **فهرست** این یعنی به‌ازای هر کارتِ روی صفحه یک
+          رندرِ کاملِ سمتِ سرورِ صفحهٔ محصول + سه فراخوانیِ API. سنجشِ خطِ پایه
+          (production build، کشِ مرورگر خاموش، مسیرِ `/products`):
+
+              ۱۰ درخواستِ `/product/NNN?_rsc=…` ≈ ۷۴٫۴KB
+
+          یعنی ۲۱٪ از وزنِ ۳۴۸KBی همان صفحه، صرفِ صفحاتی می‌شد که کاربر
+          ممکن است هیچ‌وقت باز نکند — و همان‌ها کندترین منابعِ صفحه هم بودند.
+          هرچه فهرست بلندتر شود این عدد خطی بالا می‌رود؛ پس مکانیزمی است که
+          دقیقاً در جهتِ اشتباه بزرگ می‌شود.
+
+          چرا این ضررِ محض نیست: `next/link` مستقل از این پرچم، روی
+          `mouseenter` و `touchstart` هم پیش‌واکشی می‌کند (در `next/dist/client
+          /link.js` هر دو با `bypassPrefetchedCheck: true`). یعنی کارتی که
+          کاربر واقعاً رویش می‌رود، پیش از کلیک شروع به آمدن می‌کند و ناوبری
+          همان‌قدر سریع می‌ماند؛ فقط «همه‌ی کارت‌های دیده‌شده» از پیش نمی‌آیند.
+          تنها حالتِ ازدست‌رفته کاربرِ کیبورد است (Tab و Enter، بدون هاور) که
+          در آن `loading.tsx` کوتاه دیده می‌شود. */}
+      <Link href={`/product/${product.id}`} prefetch={false} className="block">
         {/* تصویر — next/image با fill و sizes ریسپانسیو */}
         <div className="relative aspect-square overflow-hidden">
           {product.image ? (

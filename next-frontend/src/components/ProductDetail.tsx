@@ -9,6 +9,7 @@ import { useShopInfo, lowStockThreshold } from "@/lib/useShopInfo";
 import { pushRecent } from "@/lib/recent";
 import { StarRow } from "@/components/StarRow";
 import { NotifyMeButton } from "@/components/NotifyMeButton";
+import { Icon } from "@/components/Icon";
 
 function toFa(n: number): string {
   return new Intl.NumberFormat("fa-IR").format(n);
@@ -427,31 +428,42 @@ export function ProductDetail({ product }: { product: Product }) {
           </div>
         )}
 
-        {/* مزایا — عیناً همان پنج قلمِ `ul.pd-perks` در product.html:169-175
+        {/* مزایا — عیناً همان پنج قلمِ `ul.pd-perks` در product.html:167-174
             (متنِ ارسالِ رایگان را `js/product.js:48-56` با `PG.freeShipNote()`
             می‌سازد: «خرید بالای N تومان، ارسال رایگان» — و فقط وقتی هم آستانه
-            و هم هزینهٔ ارسال تعیین شده باشد). */}
-        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs" style={{ color: "var(--color-ink-soft)" }}>
+            و هم هزینهٔ ارسال تعیین شده باشد).
+
+            ---------- چرا آیکون و نه «✓» ----------
+            این پنج قلم در Express هر کدام یک آیکونِ خودشان را داشتند
+            (`i-truck`، `i-tag`، `i-lock`، `i-check-circle`، `i-shield`). نسخه‌ی
+            نخستِ Next همه را با یک تیکِ متنی نشان می‌داد — یعنی ردیفِ اعتماد
+            *متنش* یکی بود و *شکلش* نه، و هیچ نگهبانی این را نمی‌گرفت چون فقط
+            متن سنجیده می‌شد. حالا نقشه‌ی آیکون‌به‌قلم از خودِ اوراکل خوانده
+            می‌شود (`productSeo.test.ts`): ترتیب، متن و آیکون — هر سه. */}
+        {/* `pd-perks` عمداً در className مانده: همان قلابِ خودِ اوراکل
+            (`ul.pd-perks`) است که نگهبانِ برابری و سناریوی زندهٔ سئو از آن
+            می‌خوانند — مثل `aa-points`/`aa-note` در `AuthShell`. */}
+        <ul className="pd-perks grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs" style={{ color: "var(--color-ink-soft)" }}>
           <li className="flex items-center gap-2">
-            <span className="text-teal">✓</span>
+            <Icon name="truck" size={16} className="shrink-0 text-teal" />
             ارسال سریع؛ داخل شهر همان روز
           </li>
           {shop && shop.freeShippingOver > 0 && shop.shippingCost > 0 && (
             <li className="flex items-center gap-2">
-              <span className="text-teal">✓</span>
+              <Icon name="tag" size={16} className="shrink-0 text-teal" />
               خرید بالای {toToman(shop.freeShippingOver)} تومان، ارسال رایگان
             </li>
           )}
           <li className="flex items-center gap-2">
-            <span className="text-teal">✓</span>
+            <Icon name="lock" size={16} className="shrink-0 text-teal" />
             پرداخت امن زرین‌پال
           </li>
           <li className="flex items-center gap-2">
-            <span className="text-teal">✓</span>
+            <Icon name="checkCircle" size={16} className="shrink-0 text-teal" />
             ۷ روز مهلت مرجوعی
           </li>
           <li className="flex items-center gap-2">
-            <span className="text-teal">✓</span>
+            <Icon name="shield" size={16} className="shrink-0 text-teal" />
             ضمانت اصالت کالا
           </li>
         </ul>

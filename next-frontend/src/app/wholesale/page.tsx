@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { WholesaleForm } from "@/components/WholesaleForm";
 import { WebPageJsonLd } from "@/components/JsonLd";
 import { ContactFab } from "@/components/ContactFab";
+import { Icon, type IconName } from "@/components/Icon";
 import { pageSocial } from "@/lib/social";
 
 // معادلِ frontend/wholesale.html — متن و فیلدها از همان صفحه برداشته شده‌اند.
@@ -24,11 +25,15 @@ export const metadata: Metadata = {
   }),
 };
 
-const POINTS = [
-  "قیمت پلکانی: هرچه تعداد بیشتر، قیمت واحد کمتر",
-  "ارسال بار به سراسر کشور",
-  "ضمانت اصالت جنس و بازگشت کالا",
-  "مشاوره‌ی صادقانه قبل از خرید",
+// چهار قلمِ `ul.ws-points` در `wholesale.html:91-96` — با آیکونِ خودِ هر قلم
+// (`i-tag`، `i-truck`، `i-shield`، `i-phone`). پیش از این هر چهار قلم یک
+// تیکِ عمومیِ یکسان داشتند: متن یکی بود و شکل نه — و چون فقط متن سنجیده
+// می‌شد، هیچ نگهبانی نمی‌گرفت (`oracleLists.test.ts`).
+const POINTS: { icon: IconName; text: string }[] = [
+  { icon: "tag", text: "قیمت پلکانی: هرچه تعداد بیشتر، قیمت واحد کمتر" },
+  { icon: "truck", text: "ارسال بار به سراسر کشور" },
+  { icon: "shield", text: "ضمانت اصالت جنس و بازگشت کالا" },
+  { icon: "phone", text: "مشاوره‌ی صادقانه قبل از خرید" },
 ];
 
 export default function WholesalePage() {
@@ -76,27 +81,18 @@ export default function WholesalePage() {
               تماس می‌گیرد و قیمت عمده را اعلام می‌کند.
             </p>
 
-            <ul className="flex flex-col gap-3">
+            <ul className="ws-points flex flex-col gap-3">
               {POINTS.map((p) => (
                 <li
-                  key={p}
+                  key={p.text}
                   className="flex items-start gap-2.5 text-sm text-ink-soft"
                 >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="var(--color-teal)"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="shrink-0 mt-1"
-                    aria-hidden="true"
-                  >
-                    <path d="M20 6 9 17l-5-5" />
-                  </svg>
-                  <span>{p}</span>
+                  <Icon
+                    name={p.icon}
+                    size={18}
+                    className="shrink-0 mt-1 text-teal"
+                  />
+                  <span>{p.text}</span>
                 </li>
               ))}
             </ul>

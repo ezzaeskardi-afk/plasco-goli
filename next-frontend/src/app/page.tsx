@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { getProducts, getCategories, getShopInfo, getRecentReviews } from "@/lib/api";
 import { ProductCardGrid } from "@/components/ProductCard";
 import { StarRow } from "@/components/StarRow";
@@ -406,14 +407,27 @@ function AboutSection() {
           className="overflow-hidden rounded-[26px]"
           style={{ border: "1px solid var(--color-line)" }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element -- همتای همان تصویرِ Express؛ next/image اینجا فقط ریسکِ مسیرِ درصدی‌کد‌شده با نامِ فارسی می‌آورد */}
-          <img
+          {/* چرا اینجا هم <Image> و نه <img>ِ خام — با اندازه‌گیری، نه سلیقه.
+
+              تا پیش از این یک <img> خام بود با این دلیل که «next/image با نامِ
+              فارسیِ درصدی‌کد‌شده ریسک دارد». آن دلیل با خودِ همین درخت نقض
+              می‌شود: `ProductCard` همان مسیرهای `/picture/products/…` با نامِ
+              فارسی را از `next/image` رد می‌کند و کار می‌کند. هزینه‌اش اندازه‌
+              گرفته شد: روی `/` — پرترافیک‌ترین صفحهٔ سایت — بزرگ‌ترین عکس
+              ۵۳.۷KB می‌آمد (فایلِ کاملِ ۹۲۱px برای یک قابِ تزئینی) و کلِ
+              عکس‌های صفحه ۹۵.۹KB می‌شد؛ حالا همان عکس از بهینه‌سازِ Next
+              با عرضِ مناسبِ قاب می‌آید.
+
+              `sizes` عمداً هست: بدونِ آن بهینه‌ساز عرضِ ۹۲۱px را می‌گیرد و
+              همان ۵۳KBِ قبلی را دوباره می‌سازد. قاب در موبایل تمامِ عرض است و
+              از `md` به بالا نصفِ یک ستونِ ۱۱۸۰px. */}
+          <Image
             src="/picture/products/ست ادویه گردان 8 عددی چوبی.jpg"
             alt=""
             width={921}
             height={682}
+            sizes="(max-width: 767px) 100vw, (max-width: 1180px) 50vw, 560px"
             loading="lazy"
-            decoding="async"
             className="h-full w-full object-cover"
           />
         </div>

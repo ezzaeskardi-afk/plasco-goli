@@ -401,6 +401,65 @@ const GUARDS = [
         replace: 'checkTimeMs(checks) - elapsed()',
         expect: /loop wiring/,
       },
+      /* ---------- نقطهٔ کورِ «معنا» — با آزمایشِ واقعی پیدا شد ----------
+         هر پنج سنجهٔ قبلیِ این نگهبان از همان ثابت‌های خودِ فرمول حساب
+         می‌شدند؛ پس با هم می‌خواندند و یک تغییرِ معنایی را **نمی‌دیدند**.
+         شاهدش این آزمایش بود: POLL_MS_SLOW از ۶۰ به ۶۵ ثانیه رفت → پنجره‌ی
+         وعده‌داده‌شده («≈۴۱ دقیقه») بی‌صدا شد ۴۴٫۳ دقیقه و نگهبان ۲۱/۲۱ سبز
+         ماند؛ فقط آزمونِ رفتاری گرفت. این دو جهش همان حفره را می‌بندند. */
+      {
+        // عمداً داخلِ باندِ گشادِ [۴۰، ۵۰] دقیقه می‌افتد، پس سنجه‌های قبلی همه
+        // سبز می‌مانند و فقط قیدِ «بیشتر از یک پله اضافه نه» می‌گیرد.
+        label: 'پله‌ی آرام بلندتر شود (پنجره ۴۱ → ۴۴٫۳ دقیقه، بی‌صدا)',
+        file: 'next-frontend/src/components/OrderSuccessContent.tsx',
+        find: 'const POLL_MS_SLOW = 60_000;',
+        replace: 'const POLL_MS_SLOW = 65_000;',
+        expect: /window overshoot/,
+      },
+      {
+        // لغزشِ *رابطه*: مرزِ شاخهٔ سریع یک پله جابه‌جا. `checksDue` سرِ ۲٫۳
+        // دقیقه ۹ بررسی می‌شمارد در حالی که موعدِ نهم دقیقهٔ ۳ است — یعنی
+        // پرسیدنِ زودتر از موعد. همهٔ سنجه‌های قبلی سبز می‌مانند (مرزِ ۸ پله‌ای،
+        // سقف، صعودی، پنجره) و فقط قیدِ جفت‌بودنِ دو تابع می‌گیرد.
+        label: 'مرزِ شاخهٔ سریعِ checksDue یک پله جابه‌جا شود (لغزشِ دو تابع)',
+        file: 'next-frontend/src/components/OrderSuccessContent.tsx',
+        find: '  if (elapsedMs <= POLL_CHECKS_FAST * POLL_MS_FAST) {\n    return Math.floor(elapsedMs / POLL_MS_FAST);',
+        replace: '  if (elapsedMs <= (POLL_CHECKS_FAST + 1) * POLL_MS_FAST) {\n    return Math.floor(elapsedMs / POLL_MS_FAST);',
+        expect: /schedule pair drift/,
+      },
+    ],
+  },
+  {
+    name: 'oracle-ledger',
+    scope: 'backend',
+    title: 'کارنامهٔ SHA-256 اوراکلِ برابری — مرجع بی‌اجازه عوض نمی‌شود',
+    // سه جنسی که باید قرمز شوند: (۱) محتوای مرجع عوض شده ولی کارنامه نه،
+    // (۲) فایلِ تازه‌ای کنارِ مرجع هست که هشی ندارد، (۳) قفلِ خودِ ابزارِ
+    // انجماد برداشته شده — یعنی بازتولیدِ بی‌اجازه دوباره ممکن می‌شود.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/oracle-ledger.js'] },
+    mutations: [
+      {
+        label: 'هشِ کارنامهٔ terms.html دست‌کاری شود (مرجع عوض شده، کارنامه نه)',
+        file: 'next-frontend/tests/fixtures/legacy-oracle/provenance.json',
+        find: '"52dd68bb71b51ce45015107f72c784b0b1249fe820d7db5819a3063efdd06d06"',
+        replace: '"0000000000000000000000000000000000000000000000000000000000000000"',
+        expect: /هشِ «terms» با کارنامه نمی‌خواند/,
+      },
+      {
+        // فایلِ تازه در همان پوشه: از سمتِ کارنامه دیده نمی‌شود، ولی نگهبانِ
+        // برابری ممکن است روزی همان را به‌عنوان مرجع بخواند.
+        label: 'فایلِ اوراکلِ بی‌کارنامه به پوشه اضافه شود',
+        file: 'next-frontend/tests/fixtures/legacy-oracle/cart-extra.html',
+        create: '<html><body>مرجعِ تازه، بدونِ کارنامه</body></html>',
+        expect: /بی‌کارنامه/,
+      },
+      {
+        label: 'قفلِ دلیلِ ابزارِ انجماد برداشته شود (بازتولیدِ بی‌اجازه)',
+        file: 'next-frontend/scripts/freeze-legacy-oracle.mjs',
+        find: '  if (REASON.length < 10) {',
+        replace: '  if (false) {',
+        expect: /قفل ندارد/,
+      },
     ],
   },
   {
@@ -1949,6 +2008,120 @@ const GUARDS = [
   },
 
   {
+    name: 'productSeo',
+    scope: 'frontend',
+    title: 'سئوی صفحهٔ محصول: canonical، og:type=product و ردیفِ اعتمادِ یکی‌شده با Express',
+    // چرا لنگر می‌خواهد: هر سه ادعای این نگهبان از آن جنس‌اند که *اگر بروند
+    // هیچ خطایی نمی‌دهند* — صفحه بالا می‌آید و فقط رفتار گوگل و پیام‌رسان‌ها
+    // عوض می‌شود. و هر سه یک بار واقعاً افتاده بودند: نگهبانِ کنارش
+    // (`socialParity`) فقط og:typeِ خودِ تابعِ مشترک را می‌پایید، نه تگِ
+    // صفحهٔ محصول؛ و ردیفِ اعتماد *متنش* یکی بود ولی آیکونش نه. پس سه جهش
+    // روی سه لایهٔ متفاوت: یک تگ، یک قلمِ متادیتا، و یک آیکون.
+    runner: { kind: 'vitest', test: 'src/app/productSeo.test.ts' },
+    mutations: [
+      {
+        label: 'canonical از صفحهٔ محصول برداشته شود',
+        file: 'next-frontend/src/app/product/[id]/page.tsx',
+        find: '    alternates: { canonical: `/product/${product.id}` },\n',
+        replace: '',
+        failedTest: 'canonical',
+        // پیامِ شکست باید *همان* آزمونِ درست را نشان دهد، نه یک سنجشِ دیگرِ
+        // همین فایل — وگرنه «قرمز شد» ملاک است نه «چرا».
+      },
+      {
+        label: 'og:typeِ محصول به کارتِ عمومیِ سایت برگردد',
+        file: 'next-frontend/src/app/product/[id]/page.tsx',
+        find: '<meta property="og:type" content="product" />',
+        replace: '<meta property="og:type" content="website" />',
+        failedTest: 'og:type',
+      },
+      {
+        // ادعای «در HTMLِ سروشده هست» به یک قراردادِ ساختاری گره خورده: صفحهٔ
+        // محصول باید محصول را از سرور به `ProductDetail` بدهد. این جهش همان
+        // قرارداد را می‌شکند (مثلِ وقتی کسی پراپی اضافه/عوض می‌کند) و انتظار
+        // هست *همان* آزمون قرمز شود، نه آزمونِ دیگری.
+        label: 'صفحهٔ محصول پراپ را جورِ دیگری به ProductDetail بدهد',
+        file: 'next-frontend/src/app/product/[id]/page.tsx',
+        find: '<ProductDetail product={product} />',
+        replace: '<ProductDetail product={product} key={product.id} />',
+        failedTest: 'محصول را از سرور',
+      },
+    ],
+  },
+
+  {
+    name: 'oracleLists',
+    scope: 'frontend',
+    title: 'هر فهرستِ آیکون‌دارِ اوراکل: ترتیب، متن و آیکونِ هر قلم',
+    // چرا لنگر می‌خواهد: این نگهبان از یک واگراییِ واقعی زاده شد — در **دو**
+    // فهرست، متن‌ها یکی شدند و آیکون‌ها به یک تیکِ عمومی تبدیل شدند
+    // (`ul.summary-trust`ِ سبد و `ul.ws-points`ِ خرید عمده). هیچ نگهبانی
+    // نمی‌گرفت، چون همه فقط *متن* را می‌سنجیدند. چهار جهش روی چهار لایهٔ
+    // متفاوت: آیکونِ یک قلم، آیکونِ قلمی در یک آرایهٔ داده، ترتیب، و خودِ
+    // کاشفِ فهرست‌های تازه.
+    runner: { kind: 'vitest', test: 'src/app/oracleLists.test.ts' },
+    mutations: [
+      {
+        // جهش روی *آیکون* و نه متن: همان واگراییِ واقعیی که این نگهبان پیدا
+        // کرد — متن یکی بود و آیکون نه.
+        label: 'آیکونِ قلمِ سبد به یک آیکونِ دیگر عوض شود',
+        file: 'next-frontend/src/components/CartContent.tsx',
+        find: '<Icon name="checkCircle" size={14} className="shrink-0" />',
+        replace: '<Icon name="check" size={14} className="shrink-0" />',
+        failedTest: 'فهرستِ اطمینانِ سبد',
+      },
+      {
+        label: 'آیکونِ یکی از مزایای خریدِ عمده عوض شود',
+        file: 'next-frontend/src/app/wholesale/page.tsx',
+        find: '{ icon: "shield", text: "ضمانت اصالت جنس و بازگشت کالا" }',
+        replace: '{ icon: "check", text: "ضمانت اصالت جنس و بازگشت کالا" }',
+        failedTest: 'مزایای خریدِ عمده',
+      },
+      {
+        // شرطِ قلمِ مشروطِ «ارسال رایگان» — همان قراردادی که
+        // `PG.freeShipNote()` داشت: «نه آستانهٔ صفر و نه هزینهٔ ارسالِ صفر».
+        // این ادعا با فهرستِ محصول به `oracleLists` منتقل شد.
+        label: 'شرطِ وعدهٔ ارسالِ رایگان از حالتِ Express جدا شود',
+        file: 'next-frontend/src/components/ProductDetail.tsx',
+        find: '{shop && shop.freeShippingOver > 0 && shop.shippingCost > 0 && (',
+        replace: '{shop && shop.freeShippingOver > 0 && (',
+        failedTest: 'مزایای محصول',
+      },
+      {
+        label: 'دو قلمِ فهرستِ اعتمادِ ورود جابه‌جا شوند',
+        file: 'next-frontend/src/components/AuthShell.tsx',
+        find:
+          '              <span>\n'
+          + '                <Icon name="shield" /> پرداخت امن زرین‌پال\n'
+          + '              </span>\n'
+          + '              <span>\n'
+          + '                <Icon name="truck" /> ارسال به سراسر کشور\n'
+          + '              </span>',
+        replace:
+          '              <span>\n'
+          + '                <Icon name="truck" /> ارسال به سراسر کشور\n'
+          + '              </span>\n'
+          + '              <span>\n'
+          + '                <Icon name="shield" /> پرداخت امن زرین‌پال\n'
+          + '              </span>',
+        failedTest: 'ترتیب',
+      },
+      {
+        // و لنگرِ خودِ کاشف: یک فهرستِ آیکون‌دار به یک صفحهٔ اوراکل *اضافه*
+        // می‌شود. اگر نگهبان جدول‌محور بماند و این را نبیند، فهرستِ تازه‌ی
+        // فردا هم بی‌پوشش می‌ماند — همان حفره‌ای که `guard-anchors` برای
+        // نگهبان‌ها بست.
+        label: 'فهرستِ آیکون‌دارِ تازه به اوراکل اضافه شود',
+        file: 'next-frontend/tests/fixtures/legacy-src/terms.html',
+        append:
+          '\n<ul class="gg-points"><li><svg><use href="#i-tag"/></svg> الف</li>'
+          + '<li><svg><use href="#i-lock"/></svg> ب</li></ul>\n',
+        failedTest: 'تازه',
+      },
+    ],
+  },
+
+  {
     name: 'contrastTokens',
     scope: 'frontend',
     title: 'پالتِ تم کفِ کنتراستِ WCAG AA را رد نمی‌کند (وارثِ contrast-audit.js)',
@@ -2229,13 +2402,19 @@ const GUARDS = [
   {
     name: 'browserScenarios',
     scope: 'e2e',
-    title: 'سناریوهای واقعیِ مرورگر (Playwright) — ورود، کدِ پیامکی، عمرِ کد',
-    // چرا تنها یک فایلِ آزمون و نه كلِ مجموعه: هر جهش یک **بیلدِ تازه** و بالا
+    title: 'سناریوهای واقعیِ مرورگر (Playwright) — ورود، کدِ پیامکی، بودجهٔ کارایی',
+    // و یک درسِ واقعیِ همین دور درباره‌ی **ترتیبِ ادعاها**: جهشِ پیش‌واکشی
+    // اول «گرفته نشد» ثبت شد، نه چون نگهبان کار نمی‌کرد بلکه چون ادعای عمومیِ
+    // وزن (`/products` = ۳۴۸KB) پیش از ادعای دقیق می‌افتاد و پلی‌رایت از همان
+    // جا می‌ایستاد. حالا ادعای پیش‌واکشی در حلقه اول می‌آید — لنگر همین را
+    // می‌پاید.
+    // چرا چند فایلِ آزمون و نه كلِ مجموعه: هر جهش یک **بیلدِ تازه** و بالا
     // آوردنِ دو سرور می‌خواهد (~۱ دقیقه)، چون خودِ هارنس عمداً بیلدِ کهنه را
-    // قبول نمی‌کند. یک فایلِ آزمون همان ادعا را با کمترین هزینه می‌سنجد؛
-    // فایل‌های دیگر در همین مجموعه اجرا می‌شوند (stepِ CI) ولی لنگرِ جهش
-    // این‌جا روی گران‌ترین ادعاست — نه روی هر چهارده آزمون.
-    runner: { kind: 'node', args: ['scripts/e2e.mjs', '01-login-otp'], cwd: NEXT },
+    // قبول نمی‌کند. پس فقط همان فایل‌هایی اجرا می‌شوند که ادعای جهش‌شده در
+    // آن‌هاست؛ باقی مجموعه در stepِ CI می‌رود. (`04-performance-budget`
+    // این‌جا اضافه شد چون هر جهش را باید *همان* آزمونی بسنجد که ادعا در آن
+    // نشسته — وگرنه لنگرِ بی‌اثر می‌شود.)
+    runner: { kind: 'node', args: ['scripts/e2e.mjs', '01-login-otp', '04-performance-budget', '05-product-seo'], cwd: NEXT },
     mutations: [
       {
         // خودِ باگِ قدیمی، عیناً برگردانده می‌شود: عمرِ کد از مهلتِ ارسال
@@ -2249,6 +2428,64 @@ const GUARDS = [
         find: 'startCooldown(wait, codeSecondsFromError(err));\n        setOtpError("کد قبلی هنوز معتبر است؛ همان را وارد کنید");',
         replace: 'startCooldown(wait, wait);\n        setOtpError("کد قبلی هنوز معتبر است؛ همان را وارد کنید");',
         expect: /عمرِ کد باید از/,
+      },
+      {
+        // برگرداندنِ رفتارِ پیش‌فرضِ `next/link`: پیش‌واکشیِ هر کارتِ دیده‌شده.
+        // اندازه‌گیریِ پیش از رفع: ۱۰ درخواست / ۷۴٫۴KB و ۱۰ رندرِ سمتِ سرور
+        // روی `/products`. نگهبان باید همان‌جا با پیامِ «دوباره صفحهٔ هر کارت
+        // را پیش‌واکشی می‌کند» قرمز شود.
+        label: 'پیش‌واکشیِ پیش‌فرضِ next/link روی کارتِ محصول برگردد',
+        file: 'next-frontend/src/components/ProductCard.tsx',
+        find: '<Link href={`/product/${product.id}`} prefetch={false} className="block">',
+        replace: '<Link href={`/product/${product.id}`} className="block">',
+        expect: /پیش‌واکشیِ صفحهٔ محصول در \/products/,
+      },
+      {
+        // عکسِ تزئینیِ صفحهٔ خانه به <img>ِ خام برگردد — همان چیزی که ۵۳٫۷KB
+        // (اندازهٔ کاملِ ۹۲۱px) می‌آورد در برابر ۱۶٫۵KB پس از `next/image`.
+        // نگهبانِ مربوطه `imageRequest` است: هیچ عکسِ تکی نباید از ۴۰KB بگذرد.
+        label: 'عکسِ صفحهٔ خانه به <img>ِ خامِ ۵۳KB برگردد',
+        file: 'next-frontend/src/app/page.tsx',
+        find: '<Image\n            src="/picture/products/ست ادویه گردان 8 عددی چوبی.jpg"',
+        replace: '<img\n            src="/picture/products/ست ادویه گردان 8 عددی چوبی.jpg"',
+        expect: /بسیار سنگین است/,
+      },
+      {
+        // سئوی صفحهٔ محصول، *زنده*: نگهبانِ آفلاینِ همین ادعا
+        // (`src/app/productSeo.test.ts`) فقط می‌تواند بگوید «تگ در سورس هست».
+        // این جهش ثابت می‌کند همان تگ در **HTMLِ سروشده** هم دیده می‌شود —
+        // یک `<meta>` می‌تواند در سورس باشد و در رندر نیفتد.
+        label: 'canonicalِ صفحهٔ محصول برداشته شود (سنجشِ زنده)',
+        file: 'next-frontend/src/app/product/[id]/page.tsx',
+        find: '    alternates: { canonical: `/product/${product.id}` },\n',
+        replace: '',
+        expect: /canonical/,
+      },
+      {
+        // و دومین قلمِ *زنده*: حضورِ ردیفِ اعتماد در HTMLِ **سروشده**. این
+        // با ادعای آفلاین (که وجودِ متن در سورس را می‌سنجد) یکی نیست: اگر
+        // روزی `ProductDetail` محصول را سمتِ کلاینت واکشی کند، متن در سورس
+        // می‌ماند و ردیف از HTMLِ اولیه می‌افتد — همان چیزی که خزنده
+        // نمی‌بیند. پس جهش، یک قلم را از ردیف حذف می‌کند و انتظار هست که
+        // *همان* آزمونِ زنده بگوید «در HTMLِ سروشده نیست».
+        label: 'قلمِ «ضمانت اصالت کالا» از ردیفِ اعتماد حذف شود (سنجشِ زنده)',
+        file: 'next-frontend/src/components/ProductDetail.tsx',
+        find:
+          '          <li className="flex items-center gap-2">\n'
+          + '            <Icon name="shield" size={16} className="shrink-0 text-teal" />\n'
+          + '            ضمانت اصالت کالا\n'
+          + '          </li>\n',
+        replace: '',
+        expect: /HTMLِ سروشده/,
+        // هیچ ادعایی نمی‌گرفت که `/_next/image` واقعاً ۲۰۰ می‌دهد یا نه —
+        // بدنهٔ خطا هم چند بایت است و از هیچ بودجه‌ی بایتی رد نمی‌شود، ولی
+        // تصویرِ شکسته روی صفحه می‌ماند. این جهش فایلِ مبدأ را ناپدید می‌کند:
+        // بهینه‌ساز باید ۴xx بدهد و همان‌جا گرفته شود.
+        label: 'فایلِ مبدأِ عکسِ صفحهٔ خانه ناپدید شود (بهینه‌سازِ عکس خطا می‌دهد)',
+        file: 'next-frontend/src/app/page.tsx',
+        find: 'src="/picture/products/ست ادویه گردان 8 عددی چوبی.jpg"',
+        replace: 'src="/picture/products/ست ادویه گردان 8 عددی چوبی-404.jpg"',
+        expect: /بهینه‌سازِ عکسِ Next در/,
       },
     ],
   },

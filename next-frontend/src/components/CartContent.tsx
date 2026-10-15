@@ -13,6 +13,7 @@ import {
   removeCoupon,
 } from "@/lib/api";
 import { ApiError } from "@/lib/api";
+import { Icon } from "@/components/Icon";
 import { useToast } from "@/components/Toast";
 import { useShopInfo, lowStockThreshold } from "@/lib/useShopInfo";
 import type { CartResponse } from "@/lib/types";
@@ -600,14 +601,29 @@ export function CartContent() {
           >
             تکمیل خرید
           </Link>
-          {/* فهرستِ اطمینان — عیناً همان سه قلمِ frontend/cart.html */}
+          {/* فهرستِ اطمینان — عیناً همان سه قلمِ `ul.summary-trust` در
+              `cart.html:165-169`.
+
+              آیکون‌ها هم قلم به قلم از همان اوراکل می‌آیند (`i-lock`،
+              `i-truck`، `i-check-circle`). تا پیش از این هر سه یک متنِ ساده
+              بودند و هیچ نگهبانی نمی‌گرفت — چون فقط متن سنجیده می‌شد، نه
+              «هر قلم با آیکونِ خودش» (`oracleLists.test.ts`). */}
           <ul
-            className="mt-4 space-y-1.5 text-[11px]"
+            className="summary-trust mt-4 space-y-1.5 text-[11px]"
             style={{ color: "var(--color-ink-dim)" }}
           >
-            <li>پرداخت امن با درگاه زرین‌پال</li>
-            <li>ارسال داخل شهر همان روز</li>
-            <li>۷ روز مهلت مرجوعی</li>
+            <li className="flex items-center gap-1.5">
+              <Icon name="lock" size={14} className="shrink-0" />
+              پرداخت امن با درگاه زرین‌پال
+            </li>
+            <li className="flex items-center gap-1.5">
+              <Icon name="truck" size={14} className="shrink-0" />
+              ارسال داخل شهر همان روز
+            </li>
+            <li className="flex items-center gap-1.5">
+              <Icon name="checkCircle" size={14} className="shrink-0" />
+              ۷ روز مهلت مرجوعی
+            </li>
           </ul>
         </div>
       </div>
