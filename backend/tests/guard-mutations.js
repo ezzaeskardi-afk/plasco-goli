@@ -54,6 +54,7 @@
      node tests/guard-mutations.js --scope=static     # فقط سنجشِ زنده‌ی دارایی‌ها (Next بالا، بک‌اند خواب)
      node tests/guard-mutations.js --scope=encoder    # فقط نیمه‌ی «با انکودرِ عکس» (انکودر لازم است)
      node tests/guard-mutations.js --scope=e2e        # فقط سناریوهای مرورگر (خودش بیلد و سرور می‌سازد)
+     node tests/guard-mutations.js --scope=behavior   # فقط مجموعه‌های زنده‌ی رفتاری روی سندباکس (دود/امنیت/تخفیف)
      node tests/guard-mutations.js --scope=all        # همه‌ی دامنه‌های سازگار
      node tests/guard-mutations.js --only=panel       # فقط نگهبان‌هایی که نامشان این را دارد
      node tests/guard-mutations.js --list             # فهرستِ نگهبان‌ها و جهش‌ها بدونِ اجرا
@@ -75,6 +76,11 @@
    `live` هر دو سرور را می‌خواهد: Express روی ۳۰۰۰ و Next روی ۳۰۰۱. اگر بالا
    نباشند، با پیامِ روشن رد می‌شود — نه اینکه بی‌صدا رد شود.
 
+   `behavior` (مجموعه‌های زنده‌ی رفتاری) هم دامنه‌ی جداست: هر مجموعه سرورِ
+   سندباکسِ *خودش* را می‌سازد، پس با `live` — که دو سرورِ بالای کاربر را
+   می‌خواهد — جمع نمی‌شود، و در `all` هم نیست تا هر اجرای معمولیِ دروازه کند
+   نشود (خودش یک گام و یک stepِ جدا دارد).
+
    `static` عمداً دامنه‌ی جدا است، چون محیطش با `live` **در تضاد** است: خودِ
    نگهبانِ `static-paths-live` رد می‌کند اگر بک‌اند بالا باشد (چون آن‌وقت
    مسیرها می‌توانند از پروکسی سیر شوند و سنجش همان چیزی را که ادعا می‌کند
@@ -91,6 +97,7 @@
 'use strict';
 
 const fs = require('fs');
+const net = require('net');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
@@ -126,6 +133,11 @@ const SCOPES = {
   // دامنه‌ی دیگری جمع نمی‌شود (پورت‌های ۳۱۰۰/۳۱۰۱ را برای خودش می‌خواهد و
   // عمداً روی سرورِ در حالِ اجرا نمی‌نشیند).
   e2e: ['e2e'],
+  // مجموعه‌های زنده‌ی رفتاری (دود/امنیت/تخفیف) روی دیتابیسِ sandbox. مثلِ e2e
+  // سرورِ خودش را می‌سازد، پس با `live` (که دو سرورِ *بالا* می‌خواهد) جمع
+  // نمی‌شود؛ ولی برخلافِ e2e در `all` هم نیست تا هر اجرای معمولیِ دروازه یک
+  // دقیقه کندتر نشود — خودش در دروازه یک گامِ جدا و در CI یک stepِ جدا دارد.
+  behavior: ['behavior'],
   offline: ['backend', 'frontend'],
   // `static` عمداً اینجا نیست: `live` بک‌اندِ بالا می‌خواهد و `static` بک‌اندِ
   // خواب — جمع‌کردنشان یعنی یک محیطِ غیرِقابلِ‌برآورده و یک شکستِ ساختگی.
@@ -734,6 +746,17 @@ const GUARDS = [
         replace: 'const key = `${encoding}|${buf0.length}|${(function(s){let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193);}return (h>>>0).toString(36);})(html)}`;',
         expect: /جابه/,
       },
+      {
+        // همان جنس خطا، لبهٔ سوم: کلیدِ کشِ JSON دوباره به هدرِ *بیرونی* گره
+        // بخورد. نتیجه‌اش دقیقاً همان چیزی است که این نگهبان باید بگیرد: دو
+        // بدنهٔ متفاوت با یک ETag → پاسخِ اولی برای دومی سرو می‌شود (“۲۰۰”
+        // با Content-Length درست ولی بایت‌های پاسخِ دیگر).
+        label: 'کلیدِ کشِ JSON دوباره ETag شود (پاسخِ کهنه برای ETagِ تکراری)',
+        file: 'backend/lib/static-compress.js',
+        find: 'const cacheKey = cacheableJson(res) ? `${contentHash(Buffer.from(text))}|${encoding}` : \'\';',
+        replace: 'const cacheKey = cacheableJson(res) ? `${res.getHeader(\'ETag\')}|${encoding}` : \'\';',
+        expect: /تکراری/,
+      },
     ],
   },
   {
@@ -1156,6 +1179,13 @@ const GUARDS = [
     // دقیق» تولید می‌کند) و اگر روزی یکی از بررسی‌ها بی‌اثر شود — یعنی وقتی
     // همه‌چیز خراب است «سبز» بدهد — هیچ آزمونِ دیگری نمی‌گیردش. هر سه جهش
     // عمداً «سبزِ قلابی» می‌سازند، نه خطای واضح.
+    //
+    // و چرا `expect`ها دو سیستم‌عاملی‌اند: هر سه جهش روی ویندوز از *بخشِ
+    // اجرایی* گرفته می‌شوند (پورتِ اشغال، ناهم‌خوانیِ واقعیِ دو فایل، Nodeِ
+    // تقلبی) ولی CI روی ubuntu-latest است و آن بخش آن‌جا عمداً اجرا نمی‌شود.
+    // نتیجه‌اش یک قرمزِ واقعیِ CI بود: «جهش ۰/۳» بدونِ اینکه کد خراب باشد.
+    // حالا نگهبان همان سه چیز را روی متن هم می‌سنجد و برچسب‌هایش نامِ همان
+    // خرابیِ رفتاری را دارند — پس `expect` روی هر دو سیستم‌عامل می‌نشیند.
     runner: { kind: 'node', cwd: BACKEND, args: ['tests/startsite-diagnostics.js'] },
     mutations: [
       {
@@ -1164,7 +1194,7 @@ const GUARDS = [
         file: 'StartSite.bat',
         find: "for /f \"tokens=5\" %%p in ('netstat -ano ^| findstr /r /c:\":%1 .*LISTENING\"') do if not defined OWNER_PID set \"OWNER_PID=%%p\"",
         replace: 'rem mutation: port check disabled',
-        expect: /پورتِ اشغال/, // نگهبان همان سناریو را می‌زند و می‌گوید پورتِ اشغال گرفته نشد
+        expect: /اشغال/, // ویندوز: سناریوی پورتِ اشغال گرفته نشد | لینوکس: قفلِ «صاحبِ پورت از netstat»
       },
       {
         // مقایسهٔ دو مبدأ به خودش مقایسه شود: همیشه «موافق» می‌دهد.
@@ -1180,7 +1210,8 @@ const GUARDS = [
         file: 'StartSite.bat',
         find: 'if %NODE_MAJ% LSS 22 goto :node_old',
         replace: 'if %NODE_MAJ% LSS 5 goto :node_old',
-        expect: /20\.11\.0/, // Nodeِ ۲۰ حالا «تازه» شمرده می‌شود — نگهبان همان نسخه را نام می‌برد
+        // ویندوز: Nodeِ تقلبیِ ۲۰ «تازه» شمرده می‌شود | لینوکس: کفِ آستانه
+        expect: /node:sqlite/,
       },
     ],
   },
@@ -2399,6 +2430,95 @@ const GUARDS = [
       },
     ],
   },
+  // ============================================================
+  // دامنه‌ی `behavior` — مجموعه‌های زنده‌ی رفتاری، روی دیتابیسِ sandbox
+  // ============================================================
+  // چرا این دامنه اضافه شد: سه مجموعه‌ی بزرگِ رفتاریِ پروژه (دودِ ۶۸۲ بررسی،
+  // امنیتِ ۴۵ بررسی، تخفیفِ ۳۱ بررسی) در CI اجرا می‌شدند و «سبز» بودند، ولی
+  // هیچ جهشی روی‌شان نبود — یعنی هیچ‌کس ثابت نکرده بود که *همین* بررسی‌ها یک
+  // خرابیِ واقعیِ منطق را می‌گیرند، یا فقط سبزِ خالی‌اند. `guard-anchors.js`
+  // دقیقاً همین را ثبت کرده بود: سه معافیتِ `integration` با `needs` («جهش روی
+  // فلان منطق و انتظارِ همان بررسی در خروجیِ زنده»). این دامنه همان `needs`ها
+  // را برآورده می‌کند و همان سه معافیت هم برداشته می‌شوند.
+  //
+  // هر مجموعه خودش سندباکس می‌سازد (کپیِ دیتابیس + پوشه‌ی عکسِ خودش) و روی
+  // پورتِ خودش بالا می‌آید، پس نه بک‌اندِ ۳۰۰۰ لازم است و نه Nextِ ۳۰۰۱ — و
+  // هیچ‌کدام به دیتابیسِ واقعیِ مغازه دست نمی‌زنند.
+  //
+  // اندازه‌گیریِ همین ماشین: دود ۱۱s، امنیت ۳s، تخفیف ۲s. یعنی یک دورِ کاملِ
+  // این دامنه (یک اجرای پاک + پنج جهش) زیرِ یک دقیقه است — همان چیزی که
+  // اجازه می‌دهد در دروازه‌ی پیش از کامیت هم بماند، برخلافِ `e2e` که هر جهشش
+  // یک بیلدِ تازه می‌خواهد.
+  {
+    name: 'smoke-behavior',
+    scope: 'behavior',
+    title: 'دود روی سندباکس: خرابیِ منطقِ سبد واقعاً در خروجیِ دود دیده شود',
+    // چه چیزی این نگهبان را از «سبزبودن» جدا می‌کند: خودِ دود ۶۸۲ بررسی دارد
+    // و سبزی‌اش در CI دیده می‌شود؛ سؤالِ این‌جا این است که آیا آن بررسی‌ها روی
+    // *منطقِ واقعی* نشسته‌اند. هر جهش یک خطِ محاسبه‌ی سمتِ سرور را خراب می‌کند
+    // و انتظار داریم همان بخشان از خروجی (نه فقط کدِ خروج) قرمز شود.
+    runner: { kind: 'node', cwd: BACKEND, args: ['test-smoke.js'] },
+    mutations: [
+      {
+        // درصد تخفیفِ سبد صفر شود: کارتِ محصول و سبد دو عدد متفاوت نشان
+        // می‌دهند. بررسیِ `V9 cart` هم عیناً همین را می‌خواهد.
+        label: 'درصدِ تخفیفِ سبد همیشه صفر شود (سبد و کارت دو عدد)',
+        file: 'backend/routes/cart.js',
+        find: 'discountPercent: oldPrice ? Math.round(((oldPrice - product.price) / oldPrice) * 100) : 0,',
+        replace: 'discountPercent: 0,',
+        expect: /V9 cart/, // نه فقط «کدِ خروج ناموفق» — همان بخشِ شمرده‌شده
+      },
+      {
+        // هزینه‌ی ارسال همیشه صفر: مشتری مبلغی را می‌بیند که در سفارش
+        // پرداخت‌شده نیست. بررسیِ `V7 shipping` همان دو عدد را کنار هم می‌گذارد.
+        label: 'هزینه‌ی ارسال همیشه صفر شود (سبد و سفارش دو مبلغ)',
+        file: 'backend/lib/db.js',
+        find: 'shippingFee: free ? 0 : cost,',
+        replace: 'shippingFee: 0,',
+        expect: /V7 shipping/,
+      },
+    ],
+  },
+  {
+    name: 'security-behavior',
+    scope: 'behavior',
+    title: 'امنیت روی سندباکس: بازشدنِ سدِ مبدأ باید بررسیِ ۴۰۳ را قرمز کند',
+    // بزرگ‌ترین سنجشِ این مجموعه یک سنجشِ *رفتاری* است: درخواستِ نوشتن از یک
+    // مبدأِ بیگانه باید ۴۰۳ بگیرد. تا امروز هیچ جهشی ثابت نکرده بود که همین
+    // بررسی می‌گیرد؛ اگر کسی شرط را بردارد، مجموعه باید بترکد — نه اینکه بی‌صدا
+    // سبز بماند.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/security.js'] },
+    mutations: [
+      {
+        // خودِ سدِ دومِ CSRF از کار بیفتد: هر Originی پذیرفته شود.
+        label: 'سدِ مبدأ از کار بیفتد (Originِ بیگانه هم ۲۰۰ بگیرد)',
+        file: 'backend/server.js',
+        find: '  if (!ok.has(host)) {',
+        replace: '  if (false) {',
+        expect: /Origin/, // «POST با Origin بیگانه رد می‌شود (۴۰۳)»
+      },
+    ],
+  },
+  {
+    name: 'discount-behavior',
+    scope: 'behavior',
+    title: 'تخفیف روی سندباکس: «قیمتِ قبلی» شبیه‌سازی‌شده باید در خروجیِ زنده گرفته شود',
+    // «تخفیف گروهی» دو بار اجرا شدن را درست پوشش می‌دهد و همان‌جا یک تله دارد:
+    // old_price فقط وقتی جایگزین می‌شود که خودش صفر باشد. اگر این شرط برداشته
+    // شود، بارِ دوم قیمتِ «قبلی» همان قیمتِ تخفیف‌خوردهٔ مرحلهٔ قبل می‌شود و
+    // درصد دروغ در‌می‌آید. بررسیِ زندهٔ همین مجموعه همان را می‌سنجد (درصدِ ۳۶ و
+    // قیمتِ ۱۰۰٬۰۰۰)، پس جهش باید آنجا گرفته شود.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/discount.js'] },
+    mutations: [
+      {
+        label: 'قیمتِ قبلیِ تخفیفِ دوباره بازنویسی شود (درصد دروغ)',
+        file: 'backend/lib/db.js',
+        find: '  old_price = COALESCE(NULLIF(old_price, 0), price),',
+        replace: '  old_price = price,',
+        expect: /قبلی/,
+      },
+    ],
+  },
   {
     name: 'browserScenarios',
     scope: 'e2e',
@@ -2817,6 +2937,41 @@ async function reachable(url) {
   }
 }
 
+/**
+ * پیش‌شرطِ دامنه‌ی `behavior` — پورت‌های همین سه مجموعه باید آزاد باشند.
+ *
+ * چرا با **اتصال** و نه با `bind`: همان درسی که هارنسِ مرورگر با آن خورد —
+ * روی ویندوز یک گوش‌دهنده روی `0.0.0.0:3999` جلوی `bind`ِ `127.0.0.1:3999`
+ * را نمی‌گیرد. آن‌وقت «آزاد است» گفته می‌شود، مجموعه با `EADDRINUSE` می‌میرد،
+ * و شکست جای *دیگری* گزارش می‌شود («چرا فایلِ جهش‌دیده برنگشت؟»). این‌جا اگر
+ * پورتی جواب بدهد، پیش از هر جهشی با پیامِ روشن رد می‌شویم.
+ */
+function portBusy(port) {
+  return new Promise((resolve) => {
+    const sock = net.connect({ port, host: '127.0.0.1' });
+    const done = (v) => { sock.destroy(); resolve(v); };
+    sock.setTimeout(1500);
+    sock.once('connect', () => done(true));
+    sock.once('timeout', () => done(false));
+    sock.once('error', () => done(false));
+  });
+}
+
+async function preflightBehavior() {
+  // پورت‌های خودِ این سه مجموعه، از سورس‌هایشان: دود ۳۹۹۹، تخفیف ۳۹۹۷،
+  // امنیت ۳۹۹۶ (و ۳۹۹۵ برای سرورِ سقفِ نرخ).
+  const ports = [3995, 3996, 3997, 3999];
+  const busy = [];
+  for (const p of ports) if (await portBusy(p)) busy.push(p);
+  if (!busy.length) return true;
+  console.error(
+    `\n❌ دامنه‌ی behavior پورت‌های خالی می‌خواهد (مجموعه‌ها سرورِ سندباکسِ خودشان را بالا می‌آورند).\n` +
+    `   اشغال: ${busy.join('، ')}\n` +
+    '   معمولاً یک اجرای قبلیِ همین مجموعه‌ها یا سرورِ سایت است؛ آن پروسه را ببند',
+  );
+  return false;
+}
+
 async function preflightLive() {
   const [express, next] = await Promise.all([
     reachable(`${EXPRESS_ORIGIN}/api/health`),
@@ -2937,6 +3092,7 @@ async function main() {
   }
 
   if (ACTIVE_SCOPES.has('live') && !(await preflightLive())) process.exit(2);
+  if (ACTIVE_SCOPES.has('behavior') && !(await preflightBehavior())) process.exit(2);
   if (ACTIVE_SCOPES.has('static') && !(await preflightStatic())) process.exit(2);
   if (ACTIVE_SCOPES.has('encoder') && !preflightEncoder()) process.exit(2);
 

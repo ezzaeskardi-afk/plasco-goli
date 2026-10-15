@@ -249,6 +249,16 @@ jobs:
       - name: Guard mutation harness (backend guards)
         run: node tests/guard-mutations.js --scope=backend
 
+      # ---------- مجموعه‌های زنده‌ی رفتاری، زیرِ جهش ----------
+      # دودِ ۶۸۲ بررسی، امنیت و تخفیف در stepهای بالا اجرا می‌شوند و سبزبودن‌شان
+      # دیده می‌شود؛ سؤالِ این step چیزِ دیگری است: «آیا همان بررسی‌ها خرابیِ
+      # واقعیِ منطق را می‌گیرند؟» تا پیش از این هر سه با یک معافیتِ `needs` در
+      # `tests/guard-anchors.js` کنار گذاشته شده بودند («جهش لازم دارد، ولی
+      # ندارد»). حالا هر کدام سرورِ سندباکسِ خودش را می‌سازد (نه بک‌اندِ ۳۰۰۰،
+      # نه دیتابیسِ واقعی) و روی منطقِ واقعی جهش می‌خورد. اندازه‌گیری: ~۴۲ ثانیه.
+      - name: Guard mutation harness (behavioral suites on a sandbox database)
+        run: node tests/guard-mutations.js --scope=behavior
+
       # ---------- دارایی‌های ثابتِ فروشگاه ----------
       # این step بازنشسته شد: `static-paths-live.mjs` بک‌اند همه‌ی فایل‌های
       # `frontend/` را روی سرورِ واقعی می‌سنجید و آن پوشه حذف شده است. دو
