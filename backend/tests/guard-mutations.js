@@ -1666,6 +1666,17 @@ const GUARDS = [
         failedTest: 'terms.html',
       },
       {
+        // صفحه‌ی آفلاین فقط وقتی اینترنت قطع است دیده می‌شود و نسخه‌ی بدونِ
+        // JS/PWA آن برای خزنده معنی ندارد؛ تنها سدِ ایندکس‌شدنش همین disallow
+        // است (خودِ فایل noindex ندارد، چون سرویس‌ورکر آن را مستقیم جایگزین
+        // صفحه‌ی قبلی می‌کند). برداشتنِ خط باید همان سنجش را قرمز کند.
+        label: 'صفحهٔ آفلاین از فهرستِ disallow برداشته شود',
+        file: 'next-frontend/src/app/robots.ts',
+        find: '          "/offline.html",\n',
+        replace: '',
+        failedTest: 'آفلاین',
+      },
+      {
         // صفحه‌ی ۵۰۰ِ لبه‌ی دامنه (`public/error-500.html`) سه نسخه‌ی هم‌متنِ
         // لازم دارد: خودش، `error.tsx` و `global-error.tsx`. جهش روی متنِ خودِ
         // فایل نشان می‌دهد نگهبان واقعاً *همین* فایل را می‌خواند.
@@ -1826,6 +1837,84 @@ const GUARDS = [
         find: 'return /^\\/[^/]+\\.html$/.test(pathname);',
         replace: 'return /^\\/.*\\.html$/.test(pathname);',
         failedTest: 'عمقِ بیشتر',
+      },
+    ],
+  },
+  {
+    name: 'orderIdempotency',
+    scope: 'frontend',
+    title: 'کلید یکتای سفارش از امضا می‌آید و با تغییر مشتری می‌چرخد',
+    // بک‌اند با Idempotency-Key از سفارشِ دوباره جلوگیری می‌کند، ولی صفحه‌ی
+    // پرداخت در هر تلاش کلید تازه می‌ساخت — یعنی پاسخِ گم‌شده (timeout/قطعی)
+    // و تلاشِ بعدی = سفارش دوم. این نگهبان هم رفتارِ استور را قفل می‌کند و هم
+    // سیم‌کشیِ CheckoutContent را؛ جهش‌ها هر دو سرِ قرارداد را برمی‌گردانند.
+    runner: { kind: 'vitest', test: 'src/lib/orderKey.test.ts' },
+    mutations: [
+      {
+        label: 'کلید با تغییرِ امضا نچرخد (تغییرِ آدرس/کالا/تخفیف نادیده بماند)',
+        file: 'next-frontend/src/lib/orderKey.ts',
+        find: '      if (!current || current.signature !== signature) {\n        current = { signature, key: makeKey() };\n      }',
+        replace: '      if (!current) {\n        current = { signature, key: makeKey() };\n      }',
+        failedTest: 'تغییر آدرس کلید را',
+      },
+      {
+        label: 'صفحه‌ی پرداخت دوباره در هر تلاش کلیدِ تازه بسازد',
+        file: 'next-frontend/src/components/CheckoutContent.tsx',
+        find: 'idempotencyKey: orderKeys.keyFor(signature),',
+        replace: 'idempotencyKey: newIdempotencyKey(),',
+        failedTest: 'نه از یک کلید',
+      },
+    ],
+  },
+  {
+    name: 'otpInput',
+    scope: 'frontend',
+    title: 'کدِ یک‌بارمصرف: paste و autofill در هر دو ورودی (پیامکی و Authenticator)',
+    // نسخه‌ی قبلی paste را فقط با Ctrl+V می‌شناخت: Cmd+V روی مک، راست‌کلیک →
+    // Paste، و autofillِ کدِ پیامکی که کلِ کد را در onChange می‌ریزد رد
+    // می‌شدند. حالا توزیع در تابعِ خالصِ مشترک است و هر دو ورودی onPaste
+    // دارند؛ جهش‌ها هر دو را برمی‌گردانند.
+    runner: { kind: 'vitest', test: 'src/lib/otpInput.test.ts' },
+    mutations: [
+      {
+        label: 'paste فقط رقمِ اول را بنشاند (بقیه دور ریخته شوند)',
+        file: 'next-frontend/src/lib/otpInput.ts',
+        find: '  digits.forEach((d, i) => {\n    const at = start + i;\n    if (at < out.length) out[at] = d;\n  });',
+        replace: '  if (start < out.length) out[start] = digits[0];',
+        failedTest: 'همه را پر',
+      },
+      {
+        label: 'onPaste از ورودیِ کدِ پیامکی برداشته شود (بازگشت به فقط Ctrl+V)',
+        file: 'next-frontend/src/components/LoginForm.tsx',
+        find: 'onPaste={(e) => handleOtpPaste(i, e)}\n',
+        replace: '',
+        failedTest: 'onPaste دارند',
+      },
+      {
+        label: 'خنثی‌کردنِ تایمرِ فوکوسِ تأخیری برداشته شود (تایمرِ کهنه بعد از paste فوکوس را می‌دزدد)',
+        file: 'next-frontend/src/components/LoginForm.tsx',
+        find: '    cancelOtpFocus();\n    const fill = applyOtpText(otpDigits, index, text);',
+        replace: '    const fill = applyOtpText(otpDigits, index, text);',
+        failedTest: 'خنثی',
+      },
+    ],
+  },
+  {
+    name: 'securityHeaders',
+    scope: 'frontend',
+    title: 'HSTS مبدأ Next همان قراردادِ Express را دارد (فقط روی HTTPS)',
+    // next.config.ts هدر HSTS را بی‌قید می‌فرستاد، در حالی که Express همان
+    // هدر را داخلِ `if (HTTPS_MODE)` می‌گذارد و تستِ امنیتی هم برای Express
+    // تضمین می‌کند روی HTTP نیاید. یعنی دو مبدأِ یک سایت دو قراردادِ متفاوت
+    // داشتند و روی اجرای HTTPِ لوکال، مرورگر دستورِ «همیشه HTTPS» می‌گرفت.
+    runner: { kind: 'vitest', test: 'src/lib/securityHeaders.test.ts' },
+    mutations: [
+      {
+        label: 'هدر HSTS مبدأ Next بی‌قید شود (روی HTTP هم فرستاده شود)',
+        file: 'next-frontend/next.config.ts',
+        find: '          ...(HTTPS_MODE\n            ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" }]\n            : []),',
+        replace: '          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },',
+        failedTest: 'داخل شرط',
       },
     ],
   },
@@ -2433,7 +2522,7 @@ const GUARDS = [
   // ============================================================
   // دامنه‌ی `behavior` — مجموعه‌های زنده‌ی رفتاری، روی دیتابیسِ sandbox
   // ============================================================
-  // چرا این دامنه اضافه شد: سه مجموعه‌ی بزرگِ رفتاریِ پروژه (دودِ ۶۸۲ بررسی،
+  // چرا این دامنه اضافه شد: سه مجموعه‌ی بزرگِ رفتاریِ پروژه (دودِ ۶۹۲ بررسی،
   // امنیتِ ۴۵ بررسی، تخفیفِ ۳۱ بررسی) در CI اجرا می‌شدند و «سبز» بودند، ولی
   // هیچ جهشی روی‌شان نبود — یعنی هیچ‌کس ثابت نکرده بود که *همین* بررسی‌ها یک
   // خرابیِ واقعیِ منطق را می‌گیرند، یا فقط سبزِ خالی‌اند. `guard-anchors.js`
@@ -2445,15 +2534,15 @@ const GUARDS = [
   // پورتِ خودش بالا می‌آید، پس نه بک‌اندِ ۳۰۰۰ لازم است و نه Nextِ ۳۰۰۱ — و
   // هیچ‌کدام به دیتابیسِ واقعیِ مغازه دست نمی‌زنند.
   //
-  // اندازه‌گیریِ همین ماشین: دود ۱۱s، امنیت ۳s، تخفیف ۲s. یعنی یک دورِ کاملِ
-  // این دامنه (یک اجرای پاک + پنج جهش) زیرِ یک دقیقه است — همان چیزی که
-  // اجازه می‌دهد در دروازه‌ی پیش از کامیت هم بماند، برخلافِ `e2e` که هر جهشش
-  // یک بیلدِ تازه می‌خواهد.
+  // اندازه‌گیریِ همین ماشین: دود ۱۱s، امنیت ۳s، تخفیف ۲s، چرخهٔ cluster ۹s،
+  // سقفِ نرخ ۲s، سقفِ پیامک ۳s. یعنی یک دورِ کاملِ این دامنه (شش اجرای پاک +
+  // سیزده جهش) زیرِ دو دقیقه است — همان چیزی که اجازه می‌دهد در دروازه‌ی پیش
+  // از کامیت هم بماند، برخلافِ `e2e` که هر جهشش یک بیلدِ تازه می‌خواهد.
   {
     name: 'smoke-behavior',
     scope: 'behavior',
     title: 'دود روی سندباکس: خرابیِ منطقِ سبد واقعاً در خروجیِ دود دیده شود',
-    // چه چیزی این نگهبان را از «سبزبودن» جدا می‌کند: خودِ دود ۶۸۲ بررسی دارد
+    // چه چیزی این نگهبان را از «سبزبودن» جدا می‌کند: خودِ دود ۶۹۲ بررسی دارد
     // و سبزی‌اش در CI دیده می‌شود؛ سؤالِ این‌جا این است که آیا آن بررسی‌ها روی
     // *منطقِ واقعی* نشسته‌اند. هر جهش یک خطِ محاسبه‌ی سمتِ سرور را خراب می‌کند
     // و انتظار داریم همان بخشان از خروجی (نه فقط کدِ خروج) قرمز شود.
@@ -2476,6 +2565,26 @@ const GUARDS = [
         find: 'shippingFee: free ? 0 : cost,',
         replace: 'shippingFee: 0,',
         expect: /V7 shipping/,
+      },
+      {
+        // اعتبارسنجیِ `/wishlist/remove` برداشته شود: شناسهٔ نامعتبر (رشته/صفر/
+        // منفی) دوباره بی‌صدا به کوئری برود و پاسخِ ۲۰۰ دروغ بدهد. بخشِ
+        // `Wishlist remove rejects` عیناً همین را می‌خواهد.
+        label: 'اعتبارسنجیِ حذفِ علاقه‌مندی برداشته شود (شناسهٔ نامعتبر ۴۰۰ نگیرد)',
+        file: 'backend/routes/wishlist.js',
+        find: '  const id = Number(productId);\n  if (!Number.isInteger(id) || id <= 0) {\n    return res.status(400).json({ error: \'شناسهٔ محصول نامعتبر است\' });\n  }',
+        replace: '  const id = Number(productId);',
+        expect: /Wishlist remove rejects/,
+      },
+      {
+        // ضدتزریقِ فرمولِ صادراتِ CRM برداشته شود: نامِ «=1+1» خام در فایلِ
+        // اکسلِ مدیر برود. بخشِ `V38 CSV` هم «خنثی شده» را می‌خواهد و هم
+        // «هیچ سلولی با = شروع نشود».
+        label: 'ضدتزریقِ فرمول از صادراتِ CRM برداشته شود (نامِ فرمولی خام)',
+        file: 'backend/routes/admin.js',
+        find: "  sendCsv(res, 'customers', csvBody(['ID', 'Phone', 'Name', 'Orders', 'Spent', 'LastOrder', 'Tags'], rows));",
+        replace: "  res.setHeader('Content-Type', 'text/csv; charset=utf-8');\n  res.setHeader('Cache-Control', 'no-store');\n  return res.send('\\ufeff' + ['ID,Phone,Name,Orders,Spent,LastOrder,Tags',\n    ...rows.map(r => r.map(v => `\"${String(v ?? '')}\"`).join(','))].join('\\r\\n'));",
+        expect: /V38 CSV/,
       },
     ],
   },
@@ -2516,6 +2625,92 @@ const GUARDS = [
         find: '  old_price = COALESCE(NULLIF(old_price, 0), price),',
         replace: '  old_price = price,',
         expect: /قبلی/,
+      },
+    ],
+  },
+  {
+    name: 'clusterRestart',
+    scope: 'behavior',
+    title: 'چرخهٔ عمرِ worker در cluster: ری‌استارتِ کرشِ جوان و خاموشیِ تمیز',
+    // سه ادعای این نگهبان تا امروز هیچ جهشی نداشتند و هر سه در production
+    // معنیِ واقعی دارند: workerی که هنگامِ بالا آمدن می‌میرد باید ری‌استارت
+    // شود (وگرنه سایت روی ظرفیتِ کم می‌ماند)، فقط اگر *همه* پشتِ سرِ هم
+    // بمیرند باید master با پیامِ روشن تسلیم شود (نه حلقهٔ fork)، و در حینِ
+    // خاموشیِ عمدی هیچ workerی نباید دوباره بالا بیاید. جهش‌ها هر سه را
+    // برمی‌گردانند و انتظار داریم همان بررسیِ نام‌برده‌شده از خروجی قرمز شود.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/cluster-restart.js'] },
+    mutations: [
+      {
+        label: 'کرشِ جوان ری‌استارت نشود (شاخهٔ تعللِ پله‌ای حذف شود)',
+        file: 'backend/lib/cluster.js',
+        find: '    crashingWorkers++;\n    if (crashingWorkers >= WORKERS) {\n      console.error(`[CLUSTER] ${crashingWorkers} workers crashed within ${Math.round(YOUNG_CRASH_MS / 1000)}s of start — aborting cluster mode`);\n      process.exit(1);\n    }\n    const delay = Math.min(1000 * crashingWorkers, 5000);\n    console.warn(`[CLUSTER] Worker ${worker.id} died young (${reason}, ${uptime}s) — restart #${crashingWorkers} in ${delay}ms`);\n    setTimeout(() => { if (!shuttingDown) forkWorker(); }, delay).unref();',
+        replace: '    crashingWorkers++;\n    if (crashingWorkers >= WORKERS) {\n      console.error(`[CLUSTER] ${crashingWorkers} workers crashed within ${Math.round(YOUNG_CRASH_MS / 1000)}s of start — aborting cluster mode`);\n      process.exit(1);\n    }',
+        expect: /پیش از تسلیم/,
+      },
+      {
+        label: 'گاردِ خاموشی برداشته شود (حینِ shutdown ری‌استارت کند)',
+        file: 'backend/lib/cluster.js',
+        find: '    if (shuttingDown) return; // خاموشیِ عمدی — ری‌استارت ممنوع',
+        replace: '    if (false) return; // خاموشیِ عمدی — ری‌استارت ممنوع',
+        expect: /دو تولد/,
+      },
+      {
+        label: 'گاردِ دوباره‌فراخوانیِ خاموشی حذف شود (دو بار shutting down)',
+        file: 'backend/lib/cluster.js',
+        find: '    if (shuttingDown) return; // دوبار SIGINT/SIGTERM = یک خاموشی، نه دو تا',
+        replace: '    if (false) return; // دوبار SIGINT/SIGTERM = یک خاموشی، نه دو تا',
+        expect: /یک بار/,
+      },
+    ],
+  },
+  {
+    name: 'rateLimitDegrade',
+    scope: 'behavior',
+    title: 'سقفِ نرخِ مشترک: خرابیِ SQLite سقف را بی‌صدا نکند و fail-open بماند',
+    // مسیرِ خطای limiter قبلاً `next()` بی‌صدا بود؛ حالا fail-open می‌ماند
+    // (سایت نباید قفل شود) ولی شمرده و لاگ می‌شود. دو جهش، دو لبهٔ این تصمیم
+    // را برمی‌گردانند: قفل‌کردنِ سایت هنگامِ خطا، و بی‌صدا کردنِ خرابی.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/rate-limit-degrade.js'] },
+    mutations: [
+      {
+        label: 'در خطای limiter سایت قفل شود (fail-closed به‌جای عبور)',
+        file: 'backend/lib/rate-limit-sqlite.js',
+        find: '      degraded++;\n      const now = Date.now();',
+        replace: "      return res.status(503).json({ error: 'rate limiter down' });\n      const now = Date.now();",
+        expect: /fail-open/,
+      },
+      {
+        label: 'شمارندهٔ خرابیِ limiter حذف شود (خرابی بی‌صدا بماند)',
+        file: 'backend/lib/rate-limit-sqlite.js',
+        find: '      degraded++;\n',
+        replace: '',
+        expect: /degraded بالا رفت/,
+      },
+    ],
+  },
+  {
+    name: 'smsDailyCap',
+    scope: 'behavior',
+    title: 'سقفِ روزانهٔ پیامکِ ورود: اتمیک زیرِ چند پروسه و بدونِ سوختنِ ظرفیت',
+    // سدِ هزینه‌ی پیامک: نسخهٔ قبلی «بخوان، بعد بنویس» بود و در cluster هیچ
+    // سدی نبود؛ و قراردادِ دوم این است که پیامکِ ناموفق ظرفیت را نسوزاند.
+    // جهش اول همان نسخهٔ قدیمی را برمی‌گرداند (چهار پروسه باید overshoot را
+    // بگیرند) و جهش دوم release را برمی‌دارد.
+    runner: { kind: 'node', cwd: BACKEND, args: ['tests/sms-daily-cap.js'] },
+    mutations: [
+      {
+        label: 'رزروِ سقفِ پیامک دوباره غیرِاتمیک شود (بخوان، بعد بنویس)',
+        file: 'backend/lib/db.js',
+        find: 'function reserveSmsSlot(cap) {\n  const row = stmtSmsReserve.get(Number(cap));\n  return { ok: Boolean(row), count: row ? row.n : null };\n}',
+        replace: 'function reserveSmsSlot(cap) {\n  const n = getSmsCount();\n  if (n >= Number(cap)) return { ok: false, count: n };\n  const c = bumpSmsCounter();\n  return { ok: true, count: c };\n}',
+        expect: /اتمیک/,
+      },
+      {
+        label: 'پیامکِ ناموفق ظرفیت را بسوزاند (release حذف شود)',
+        file: 'backend/lib/sms.js',
+        find: '  } catch (err) {\n    releaseSmsSlot();',
+        replace: '  } catch (err) {',
+        expect: /ارسالِ ناموفق/,
       },
     ],
   },

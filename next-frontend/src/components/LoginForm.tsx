@@ -13,6 +13,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { safeRedirectPath } from "@/lib/redirect";
 import { hardNavigate } from "@/lib/navigation";
+import { applyOtpText } from "@/lib/otpInput";
 
 /**
  * `totp` مرحلهٔ چهارم در ظاهر نیست، ولی در عمل یک پلهٔ *منطقی* جدا است:
@@ -159,6 +160,10 @@ export function LoginForm() {
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const totpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  // تایمرِ «فوکوسِ اولین باکس» وقتی خطِ کد تازه باز می‌شود — نگه می‌داریم تا
+  // اگر کاربر پیش از شلیکش شروع به تایپ/چسباندن کرد، خنثی شود (پایین‌تر).
+  const otpFocusTimer = useRef<number | null>(null);
+  const totpFocusTimer = useRef<number | null>(null);
 
   // ============================================================
   // رفتن به مقصدِ بازگشت — با سقفِ زمانی
@@ -332,8 +337,8 @@ export function LoginForm() {
       setOtpError("");
       // مهلت از خودِ سرور، نه ۳۰ ثانیه‌ی حدسی — و عمرِ کد جدا از آن
       startCooldown(serverResendSeconds(res), serverCodeSeconds(res));
-      // فوکوس اولین باکس
-      setTimeout(() => otpRefs.current[0]?.focus(), 100);
+      // فوکوس اولین باکس (خنثی‌شدنی — بالای `applyOtpFill` توضیح داده شده)
+      otpFocusTimer.current = window.setTimeout(() => otpRefs.current[0]?.focus(), 100);
     } catch (err) {
       // ۴۲۹ یعنی کدِ قبلی هنوز معتبر است و سرور مهلتِ باقی‌مانده را هم گفته؛
       // عیناً همان کاری که فروشگاهِ Express می‌کند: به همان مرحله‌ی کد می‌رویم
@@ -347,7 +352,7 @@ export function LoginForm() {
         // کد مرده است، همان لحظه هشدار داده می‌شود).
         startCooldown(wait, codeSecondsFromError(err));
         setOtpError("کد قبلی هنوز معتبر است؛ همان را وارد کنید");
-        setTimeout(() => otpRefs.current[0]?.focus(), 100);
+        otpFocusTimer.current = window.setTimeout(() => otpRefs.current[0]?.focus(), 100);
       } else {
         setError(err instanceof ApiError ? err.message : "خطا در ارسال کد");
       }
@@ -392,43 +397,53 @@ export function LoginForm() {
   };
 
   // ========== مرحله ۲: کد OTP ==========
+  //
+  // ورودیِ چندرقمی از سه مسیر می‌آید و هر سه باید یکی رفتار کنند:
+  //   • paste با Ctrl+V یا Cmd+V (رویدادِ onPaste هر دو را می‌گیرد)
+  //   • paste از منوی راست‌کلیک و نگه‌داشتن روی موبایل
+  //   • autofillِ کدِ پیامکی (iOS/اندروید کلِ کد را یک‌جا در onChange می‌ریزد)
+  // برای همین منطقِ توزیع در lib/otpInput.ts نشسته و هر دو مسیر به آن می‌دهند.
+  // نسخهٔ قبلی فقط `e.key === "v" && e.ctrlKey` را می‌شناخت؛ Cmd+V روی مک و
+  // autofill هیچ کاری نمی‌کردند.
+  //
+  // ⚠️ یک مسابقهٔ واقعی که آزمونِ مرورگر گرفت: خطِ کد که باز می‌شود، یک تایمرِ
+  // ۱۰۰ میلی‌ثانیه‌ای فوکوس را به باکسِ اول می‌برد. کاربری که کد را از پیامک
+  // کپی کرده، ممکن است در همان ۱۰۰ میلی‌ثانیه چهار رقم را بچسباند؛ تایمرِ
+  // کهنه بعد از paste شلیک می‌کند، فوکوس را از باکسِ پنجم به باکسِ اول پرت
+  // می‌کند و رقمِ آخر جای اشتباه می‌نشیند (فرم هم هیچ‌وقت نمی‌فرستد). پس
+  // شروعِ پرکردن = پایانِ عمرِ تایمر.
+  const cancelOtpFocus = () => {
+    if (otpFocusTimer.current !== null) {
+      window.clearTimeout(otpFocusTimer.current);
+      otpFocusTimer.current = null;
+    }
+  };
+
+  const applyOtpFill = (index: number, text: string) => {
+    cancelOtpFocus();
+    const fill = applyOtpText(otpDigits, index, text);
+    if (!fill) return false;
+    setOtpDigits(fill.digits);
+    if (fill.code) {
+      submitOtp(phone.trim(), fill.code);
+    } else {
+      otpRefs.current[fill.focus]?.focus();
+    }
+    return true;
+  };
+
   const handleOtpInput = (index: number, value: string) => {
-    if (!/^\d?$/.test(value)) return;
+    applyOtpFill(index, value);
+  };
 
-    const next = [...otpDigits];
-    next[index] = value;
-    setOtpDigits(next);
-
-    // حرکت به باکس بعدی
-    if (value && index < 4) {
-      otpRefs.current[index + 1]?.focus();
-    }
-
-    // اگر ۵ رقم کامل شد auto-submit
-    const code = next.join("");
-    if (code.length === 5 && next.every((d) => d !== "")) {
-      submitOtp(phone.trim(), code);
-    }
+  const handleOtpPaste = (index: number, e: React.ClipboardEvent) => {
+    const text = e.clipboardData?.getData("text") ?? "";
+    if (applyOtpFill(index, text)) e.preventDefault();
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
     if (e.key === "Backspace" && !otpDigits[index] && index > 0) {
       otpRefs.current[index - 1]?.focus();
-    }
-    // چسباندن
-    if (e.key === "v" && e.ctrlKey) {
-      e.preventDefault();
-      navigator.clipboard.readText().then((text) => {
-        const digits = text.replace(/\D/g, "").slice(0, 5).split("");
-        const next = [...otpDigits];
-        digits.forEach((d, i) => {
-          if (i < 5) next[i] = d;
-        });
-        setOtpDigits(next);
-        if (digits.length === 5 && next.every((d) => d !== "")) {
-          submitOtp(phone.trim(), next.join(""));
-        }
-      });
     }
   };
 
@@ -445,7 +460,7 @@ export function LoginForm() {
       if (res.mfaRequired) {
         setStep("totp");
         setLoading(false);
-        setTimeout(() => totpRefs.current[0]?.focus(), 100);
+        totpFocusTimer.current = window.setTimeout(() => totpRefs.current[0]?.focus(), 100);
         return;
       }
       /* مرحلهٔ «نام» فقط برای مشتریِ تازه باز می‌شود.
@@ -520,30 +535,41 @@ export function LoginForm() {
   // نه با یک رفت‌وبرگشت به سرور و پیامِ خطا.
   const recoveryReady = RECOVERY_CODE_RE.test(normalizeRecovery(recoveryCode));
 
+  // چسباندنِ کدِ برنامه از onPaste می‌آید، نه از sniffکردنِ Ctrl+V — چون کاربر
+  // این کد را از اپِ Authenticator کپی می‌کند (یا سیستم autofill می‌ریزد) و
+  // تایپِ ۶ رقم در ۳۰ ثانیه واقعاً تنگ است. منطقِ توزیع همان ماژولِ مشترک است.
+  const cancelTotpFocus = () => {
+    if (totpFocusTimer.current !== null) {
+      window.clearTimeout(totpFocusTimer.current);
+      totpFocusTimer.current = null;
+    }
+  };
+
+  const applyTotpFill = (index: number, text: string) => {
+    cancelTotpFocus();
+    const fill = applyOtpText(totpDigits, index, text);
+    if (!fill) return false;
+    setTotpDigits(fill.digits);
+    if (fill.code) {
+      submitTotp(fill.code);
+    } else {
+      totpRefs.current[fill.focus]?.focus();
+    }
+    return true;
+  };
+
   const handleTotpInput = (index: number, value: string) => {
-    if (!/^\d?$/.test(value)) return;
-    const next = [...totpDigits];
-    next[index] = value;
-    setTotpDigits(next);
-    if (value && index < 5) totpRefs.current[index + 1]?.focus();
-    if (next.every((d) => d !== "")) submitTotp(next.join(""));
+    applyTotpFill(index, value);
+  };
+
+  const handleTotpPaste = (index: number, e: React.ClipboardEvent) => {
+    const text = e.clipboardData?.getData("text") ?? "";
+    if (applyTotpFill(index, text)) e.preventDefault();
   };
 
   const handleTotpKeyDown = (index: number, e: React.KeyboardEvent) => {
     if (e.key === "Backspace" && !totpDigits[index] && index > 0) {
       totpRefs.current[index - 1]?.focus();
-    }
-    // چسباندن — برای کدِ برنامه مهم‌تر از کدِ پیامکی است، چون کاربر آن را
-    // از اپ کپی می‌کند و تایپِ ۶ رقم در ۳۰ ثانیه واقعاً تنگ است.
-    if (e.key === "v" && e.ctrlKey) {
-      e.preventDefault();
-      navigator.clipboard.readText().then((text) => {
-        const digits = text.replace(/\D/g, "").slice(0, 6).split("");
-        const next = [...totpDigits];
-        digits.forEach((d, i) => { if (i < 6) next[i] = d; });
-        setTotpDigits(next);
-        if (digits.length === 6 && next.every((d) => d !== "")) submitTotp(next.join(""));
-      });
     }
   };
 
@@ -559,7 +585,7 @@ export function LoginForm() {
       if (res.mfaRequired) {
         setStep("totp");
         setLoading(false);
-        setTimeout(() => totpRefs.current[0]?.focus(), 100);
+        totpFocusTimer.current = window.setTimeout(() => totpRefs.current[0]?.focus(), 100);
         return;
       }
       // ⚠️ دکمه عمداً در حالتِ «در حال رفتن» می‌ماند و `setLoading(false)`
@@ -790,6 +816,7 @@ export function LoginForm() {
                 maxLength={1}
                 value={d}
                 onChange={(e) => handleOtpInput(i, e.target.value)}
+                onPaste={(e) => handleOtpPaste(i, e)}
                 onKeyDown={(e) => handleOtpKeyDown(i, e)}
                 className="w-12 h-14 text-center text-xl font-bold rounded-xl outline-none transition-colors"
                 style={{
@@ -892,6 +919,7 @@ export function LoginForm() {
                 maxLength={1}
                 value={d}
                 onChange={(e) => handleTotpInput(i, e.target.value)}
+                onPaste={(e) => handleTotpPaste(i, e)}
                 onKeyDown={(e) => handleTotpKeyDown(i, e)}
                 className="w-11 h-14 text-center text-xl font-bold rounded-xl outline-none transition-colors"
                 style={{

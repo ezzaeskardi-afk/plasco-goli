@@ -149,7 +149,15 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "X-DNS-Prefetch-Control", value: "on" },
-          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+          // HSTS فقط وقتی خودِ سایت روی HTTPS است — همان پرچمی که Express
+          // می‌خواند (server.js:152، `HTTPS_MODE` از COOKIE_SECURE). پیش‌تر این
+          // هدر بی‌قید می‌رفت، یعنی مبدأِ Next و Express دو رفتار متفاوت
+          // داشتند و روی اجرای HTTPِ لوکال هم مرورگر دستورِ «همیشه HTTPS»
+          // می‌گرفت؛ به‌علاوه تستِ امنیتی (tests/security.js) برای Express
+          // تضمین می‌کند HSTS روی HTTP نیاید و Next باید همان‌قرارداد را رعایت کند.
+          ...(HTTPS_MODE
+            ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" }]
+            : []),
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           // سه هدرِ زیر روی مبدأِ Express بود و روی مبدأِ Next نبود

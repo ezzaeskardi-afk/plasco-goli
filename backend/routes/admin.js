@@ -377,12 +377,12 @@ router.get('/crm/top', crmRead((req, res) => {
 }));
 router.get('/crm/export', (req, res) => {
   const data = crmExportCustomers({ q: req.query.q, tag: req.query.tag, filter: req.query.filter });
-  const csv = '\uFEFF' + ['ID,Phone,Name,Orders,Spent,LastOrder,Tags'].concat(
-    data.map(c => `${c.id},${c.phone},${c.name},${c.orders},${c.spent},${c.lastOrder},${c.tags}`)
-  ).join('\n');
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="customers.csv"');
-  res.send(csv);
+  // از همان cell/csvBody/sendCsv بقیهٔ صادرات‌ها استفاده می‌شود. پیش‌تر این
+  // تنها مسیری بود که با اتصالِ خامِ رشته‌ها CSV می‌ساخت: نه ضدتزریقِ فرمول
+  // داشت و نه no-store — در حالی که اسمِ مشتری همان جایی است که مهاجم
+  // می‌تواند «=cmd|...» بگذارد و مدیرِ بازکنندهٔ فایل در اکسل اجرایش کند.
+  const rows = data.map(c => [c.id, c.phone, c.name, c.orders, c.spent, c.lastOrder, c.tags]);
+  sendCsv(res, 'customers', csvBody(['ID', 'Phone', 'Name', 'Orders', 'Spent', 'LastOrder', 'Tags'], rows));
 });
 // بازحساب RFM برای یک مشتری
 router.post('/crm/customers/:id/recalc', (req, res) => {

@@ -14,6 +14,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useShopInfo } from "@/lib/useShopInfo";
+import { createOrderKeyStore, orderSignature } from "@/lib/orderKey";
 import type { CartResponse, Address, User } from "@/lib/types";
 
 function toFa(n: number): string {
@@ -35,6 +36,11 @@ export function CheckoutContent() {
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState("");
+
+  // کلیدِ idempotency بین تلاش‌های پیاپی حفظ می‌شود (توضیحش در lib/orderKey.ts):
+  // تلاشِ دوباره‌ی همان سفارش باید با همان کلید برود، وگرنه بک‌اند آن را یک
+  // سفارشِ تازه می‌بیند و موجودی دوباره رزرو می‌شود.
+  const [orderKeys] = useState(() => createOrderKeyStore(newIdempotencyKey));
 
   // فرم آدرس — برای «جدید» و «ویرایش» یکی است؛ editAddrId مشخص می‌کند کدام
   const [showAddrForm, setShowAddrForm] = useState(false);
@@ -130,9 +136,16 @@ export function CheckoutContent() {
     setPlacing(true);
     setError("");
     try {
+      // امضا از همان چیزی ساخته می‌شود که سرور در سفارش می‌بیند: آدرس،
+      // کالاها، و کدِ تخفیفِ سبد. تا وقتی این‌ها همان‌اند، کلید هم همان است.
+      const signature = orderSignature({
+        addressId: selectedAddrId,
+        items: cart ? cart.items.map((i) => ({ productId: i.productId, qty: i.qty })) : [],
+        couponCode: cart?.coupon?.code ?? null,
+      });
       const result = await createOrder({
         addressId: selectedAddrId,
-        idempotencyKey: newIdempotencyKey(),
+        idempotencyKey: orderKeys.keyFor(signature),
       });
 
       // بک‌اند همیشه paymentUrl می‌دهد — حتی در حالت آزمایشی، که آدرسِ

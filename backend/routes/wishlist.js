@@ -36,7 +36,13 @@ router.post('/toggle', requireAuth, (req, res) => {
 
 router.post('/remove', requireAuth, (req, res) => {
   const { productId } = req.body || {};
-  removeFromWishlist(req.session.userId, Number(productId));
+  // ورودیِ نامعتبر قبلاً بی‌صدا به NaN تبدیل و به کوئری پاس می‌شد؛ نتیجه یا
+  // ۵۰۰ بود یا حذفِ بی‌اثر. همان قاعدهٔ toggle: شناسه باید عددِ مثبتِ صحیح باشد.
+  const id = Number(productId);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'شناسهٔ محصول نامعتبر است' });
+  }
+  removeFromWishlist(req.session.userId, id);
   res.json({ ok: true, ids: getWishlistIds(req.session.userId) });
 });
 

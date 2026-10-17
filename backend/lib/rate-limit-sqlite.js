@@ -13,6 +13,7 @@
 
 'use strict';
 
+const log = require('./logger');
 const { db } = require('./db');
 
 // ساخت جدول اگر نباشد
@@ -121,15 +122,31 @@ function rateLimitSqlite({ windowMs, max, message, skipSuccess = false, keyBy = 
 
       next();
     } catch (err) {
-      // اگر SQLite خطا داد (نادر)، اجازه عبور بده — بهتر از قفل‌کردن سایت
+      // اگر SQLite خطا داد (نادر)، اجازه عبور بده — بهتر از قفل‌کردن سایت.
+      //
+      // ولی «عبورِ بی‌صدا» یک حالتِ خطرناک است: از این لحظه هیچ سقفی اعمال
+      // نمی‌شود و هیچ‌کس نمی‌فهمد. پس شمارش و لاگ می‌شود (با throttle تا
+      // خطای هر درخواست، لاگ را سیل نکند) و از `getRateLimitStats` بیرون
+      // می‌زند تا پنل ادمین/سلامت ببیند که limiter در حالِ degrade است.
+      degraded++;
+      const now = Date.now();
+      if (now - lastDegradeWarnAt >= DEGRADE_WARN_INTERVAL_MS) {
+        lastDegradeWarnAt = now;
+        log.warn(`[rate-limit] SQLite limiter degraded (error #${degraded}) — requests pass unthrottled`, err);
+      }
       next();
     }
   };
 }
 
-/** آمار (برای پنل ادمین) */
+// شمارنده‌ی خطاهای SQLite که به «عبورِ بی‌سد» منجر شده‌اند (از آخرین بوت)
+let degraded = 0;
+let lastDegradeWarnAt = 0;
+const DEGRADE_WARN_INTERVAL_MS = 60 * 1000;
+
+/** آمار (برای پنل ادمین و /api/health?full=1) */
 function getRateLimitStats() {
-  try { return stmtCount.get(); } catch (e) { return { n: 0 }; }
+  try { return { n: stmtCount.get().n, degraded }; } catch (e) { return { n: 0, degraded }; }
 }
 
 module.exports = { rateLimitSqlite, getRateLimitStats };

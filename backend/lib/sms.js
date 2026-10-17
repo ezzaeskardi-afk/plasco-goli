@@ -108,11 +108,13 @@ async function sendOtpSms(phone, code) {
     return { ok: true, mode: 'test' };
   }
 
-  // سقف قبل از ارسال خوانده می‌شود و شمارنده فقط بعد از ارسال موفق بالا می‌رود.
-  // اگر سرویس پیامک موقتاً خراب باشد، تلاش‌های ناموفق ظرفیت امروز را نمی‌سوزانند
-  // (وگرنه بعد از رفع خرابی هم تا آخر روز کسی نمی‌توانست وارد شود).
-  const { getSmsCount, bumpSmsCounter } = require('./db');
-  if (getSmsCount() >= SMS_DAILY_CAP) {
+  // سقف روزانه **اتمیک** رزرو می‌شود: جملهٔ SQL خودش شرط را داخلِ نوشتن دارد،
+  // پس چند worker هم‌زمان نمی‌توانند از سقف رد شوند (نسخهٔ قبلی «بخوان، بعد
+  // بنویس» بود و دقیقاً از همین جنسِ پنجره سوءاستفاده می‌شد). اگر ارسال شکست
+  // بخورد، رزرو برمی‌گردد — قرارداد قبلی که «پیامک ناموفق ظرفیت نمی‌سوزاند».
+  const { reserveSmsSlot, releaseSmsSlot } = require('./db');
+  const slot = reserveSmsSlot(SMS_DAILY_CAP);
+  if (!slot.ok) {
     log.warn(`SMS daily cap (${SMS_DAILY_CAP}) reached - OTP for ${phone} not sent`);
     return { ok: false, mode: 'live', error: 'ظرفیت ارسال پیامک امروز پر شده؛ لطفاً کمی بعد دوباره تلاش کنید' };
   }
@@ -120,10 +122,10 @@ async function sendOtpSms(phone, code) {
   try {
     if (provider() === 'ippanel') await ippanelPattern(phone, code);
     else await kavenegarVerify(phone, code);
-    bumpSmsCounter();   // فقط پیامکی که واقعاً رفت، از سقف کم می‌شود
     log.info(`OTP SMS sent to ${phone} via ${provider()}`);
     return { ok: true, mode: 'live' };
   } catch (err) {
+    releaseSmsSlot();
     // شماره‌ی کاربر در لاگ می‌ماند ولی کد هرگز لاگ نمی‌شود
     log.error(`OTP SMS failed for ${phone} via ${provider()}`, err);
     return { ok: false, mode: 'live', error: err.message };

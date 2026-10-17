@@ -526,7 +526,13 @@ app.get('/api/health', (req, res) => {
       rss: Math.round(mem.rss / 1048576),
       heapUsed: Math.round(mem.heapUsed / 1048576)
     },
-    db
+    db,
+    // در حالت cluster، limiterِ SQLite ممکن است به خطا بخورد و بی‌صدا
+    // «باز» شود (fail-open)؛ تعدادِ آن خطاها اینجا دیده می‌شود تا مانیتورینگ
+    // نداشته باشد متنی که فقط وقتی همه‌چیز سبز است، سبز باشد.
+    ...(isClusterEnabled()
+      ? { rateLimit: require('./lib/rate-limit-sqlite').getRateLimitStats() }
+      : {})
   });
 });
 

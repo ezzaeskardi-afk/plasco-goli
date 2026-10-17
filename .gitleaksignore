@@ -36,9 +36,35 @@ a21cca1f4b6454824269a2146b44da3afeac21fd:backend/tests/wstg.js:generic-api-key:5
 a21cca1f4b6454824269a2146b44da3afeac21fd:backend/tests/wstg.js:generic-api-key:595
 
 # ---------------------------------------------------------------
-# فرانتاند: کلیدِ یکتای سفارشِ آزمونِ قراردادِ API
+# فرانت‌اند: کلیدِ یکتای سفارشِ آزمونِ قراردادِ API
 # (next-frontend/src/lib/apiContract.test.ts)
-# بررسی شد: رشتهٔ هگزمانندِ ساختگی که فقط برای اطمینان از «هدر بهجای بدنه»
-# در fetchِ قلابی بود؛ هیچ درگاهی چنین کلیدی نمیپذیرد. مقدارِ آزمون امروز در
-# زمانِ اجرا ساخته میشود تا شکلِ ثابتِ رازنما در سورس نماند.
+# بررسی شد: رشتهٔ هگزمانندِ ساختگی که فقط برای اطمینان از «هدر به‌جای بدنه»
+# در fetchِ قلابی بود؛ هیچ درگاهی چنین کلیدی نمی‌پذیرد. مقدارِ آزمون امروز در
+# زمانِ اجرا ساخته می‌شود تا شکلِ ثابتِ رازنما در سورس نماند.
 acd9ec7dbdcef637809448da4d316a77329422dd:next-frontend/src/lib/apiContract.test.ts:generic-api-key:133
+
+# ---------------------------------------------------------------
+# همان یافته‌های بررسی‌شده — بعد از بازچینیِ تاریخچه (rebase) با اثرِ انگشتِ تازه.
+# تاریخچه بازچینی شد، پس کامیت‌هایی که همین بلاب‌های قدیمیِ wstg.js و
+# apiContract.test.ts را حمل می‌کنند شناسهٔ تازه گرفتند و اثرِ انگشت‌های بالا
+# دیگر به آن‌ها نمی‌خورد. محتوا عیناً همان داده‌ی ساختگیِ آزمون است (بالاتر
+# بررسی و مستند شده)؛ فقط شناسه عوض شده. شاخهٔ پشتیبانِ محلیِ rebase هم این
+# کامیت‌های قدیمی را زنده نگه می‌دارد، پس اسکنِ محلی بدونِ این خط‌ها قرمز می‌شود.
+41d9675da730b7763191d42aba35e6f6fde0d682:backend/tests/wstg.js:generic-api-key:99
+41d9675da730b7763191d42aba35e6f6fde0d682:backend/tests/wstg.js:generic-api-key:100
+41d9675da730b7763191d42aba35e6f6fde0d682:backend/tests/wstg.js:generic-api-key:101
+c6fab610b7fea8b99ed555c3432ec093042048b7:backend/tests/wstg.js:generic-api-key:99
+c6fab610b7fea8b99ed555c3432ec093042048b7:backend/tests/wstg.js:generic-api-key:100
+c6fab610b7fea8b99ed555c3432ec093042048b7:backend/tests/wstg.js:generic-api-key:101
+181c97ab5797e56758036f363067842ae8afa615:backend/tests/wstg.js:generic-api-key:544
+181c97ab5797e56758036f363067842ae8afa615:backend/tests/wstg.js:generic-api-key:547
+181c97ab5797e56758036f363067842ae8afa615:backend/tests/wstg.js:generic-api-key:581
+181c97ab5797e56758036f363067842ae8afa615:backend/tests/wstg.js:generic-api-key:585
+181c97ab5797e56758036f363067842ae8afa615:backend/tests/wstg.js:generic-api-key:595
+e7a52933a7bcad085a39f2ffff7aa16392f61307:backend/tests/wstg.js:generic-api-key:544
+e7a52933a7bcad085a39f2ffff7aa16392f61307:backend/tests/wstg.js:generic-api-key:547
+e7a52933a7bcad085a39f2ffff7aa16392f61307:backend/tests/wstg.js:generic-api-key:581
+e7a52933a7bcad085a39f2ffff7aa16392f61307:backend/tests/wstg.js:generic-api-key:585
+e7a52933a7bcad085a39f2ffff7aa16392f61307:backend/tests/wstg.js:generic-api-key:595
+38a6744ea0d53bdc05d33b4515741c2a015cc86e:next-frontend/src/lib/apiContract.test.ts:generic-api-key:133
+e1e8109693f769876952d5e5935c217684d0242f:next-frontend/src/lib/apiContract.test.ts:generic-api-key:133

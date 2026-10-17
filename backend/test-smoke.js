@@ -347,6 +347,19 @@ function shutdown(code) {
     const badWish = await api('POST', '/wishlist/toggle', { productId: 999999 });
     check('Nonexistent product in wishlist returns 404', badWish.status === 404);
 
+    // `/wishlist/remove` (که فرانت از آن استفاده نمی‌کند ولی APIِ عمومی است) تا
+    // پیش از این هیچ اعتبارسنجی نداشت: `undefined`/رشته/عدد منفی به
+    // `DELETE ... WHERE product_id = ?` می‌رسید. SQLite با نوعِ عجیب خطا
+    // نمی‌داد و پاسخ 200 «حذف شد» برمی‌گشت، یعنی مشتری بابتِ درخواستِ
+    // بی‌معنی تأییدِ موفقیت می‌گرفت. حالا فقط عددِ صحیحِ مثبت قبول است.
+    for (const badId of [undefined, 'abc', 0, -5, 1.5]) {
+      const rm = await api('POST', '/wishlist/remove', { productId: badId });
+      check(`Wishlist remove rejects invalid id (${String(badId)})`,
+        rm.status === 400 && /نامعتبر/.test(rm.data.error || ''));
+    }
+    const rmOk = await api('POST', '/wishlist/remove', { productId: firstId });
+    check('Wishlist remove accepts a valid id (idempotent)', rmOk.status === 200);
+
     // ---------- cart (regression - make sure nothing broke) ----------
     const inStock = list.find(p => p.stock > 0);
     if (inStock) {
@@ -3863,6 +3876,34 @@ function shutdown(code) {
       check('V38 قرارداد: نامِ مشتری با همان کلیدِ رابط برمی‌گردد (نه شماره، نه undefined)',
         namedRow.fullName === CONTRACT_NAME,
         `fullName=${JSON.stringify(namedRow.fullName)} از ${JSON.stringify(Object.keys(namedRow))}`);
+
+      // ---------- خروجیِ CSV: اسمِ مشتری نباید به فرمولِ اکسل تبدیل شود ----------
+      // `cell()` ضدتزریقِ فرمول دارد، ولی صادراتِ CRM تا همین اواخر تنها مسیری
+      // بود که CSV را با چسباندنِ خامِ رشته‌ها می‌ساخت (نه ضدتزریق، نه no-store).
+      // حالا که از `cell`/`csvBody` استفاده می‌کند، این‌جا قفل می‌شود: نامی که
+      // با «=» شروع شود باید با آپستروف خنثی شود، وگرنه فایلِ مدیر در اکسل
+      // فرمول اجرا می‌کند و همان کلاس حمله برمی‌گردد.
+      const FORMULA_NAME = '=1+1';
+      {
+        const d = new DatabaseSync(sqliteFile);
+        try { d.prepare('UPDATE users SET full_name = ? WHERE id = ?').run(FORMULA_NAME, named.id); } finally { d.close(); }
+      }
+      const crmCsvRes = await fetch(`${BASE}/api/admin/crm/export`, { headers: { Cookie: cookieHeader() } });
+      const crmCsvTxt = await crmCsvRes.text();
+      check('V38 CSV: خروجیِ CRM می‌آید',
+        crmCsvRes.status === 200 && /text\/csv/.test(crmCsvRes.headers.get('content-type') || ''),
+        String(crmCsvRes.status));
+      check('V38 CSV: اسمِ فرمولیِ مشتری با آپستروف خنثی شده',
+        crmCsvTxt.includes(`"'${FORMULA_NAME}"`),
+        crmCsvTxt.includes(FORMULA_NAME) ? '' : 'نامِ فرمولی در خروجی نیست');
+      check('V38 CSV: هیچ سلولی با = یا + یا @ شروع نمی‌شود (ضدتزریق)',
+        !/,"[=+@]/.test(crmCsvTxt));
+      check('V38 CSV: هدر no-store دارد (داده‌ی شخصی کش نشود)',
+        crmCsvRes.headers.get('cache-control') === 'no-store');
+      {
+        const d = new DatabaseSync(sqliteFile);
+        try { d.prepare('UPDATE users SET full_name = ? WHERE id = ?').run(CONTRACT_NAME, named.id); } finally { d.close(); }
+      }
 
       // ---------- قراردادِ فیلدها: کارتِ «درآمد ماهانه» ----------
       // دو ایرادِ هم‌جنس: `label` نبود (زیر هر میله جای خالی) و ترتیب نزولی بود

@@ -2369,6 +2369,35 @@ function bumpSmsCounter() {
   return stmtSmsCount.get()?.n || 0;
 }
 
+// ---------- رزروِ اتمیکِ سقف روزانه ----------
+// چرا جدا از getSmsCount/bumpSmsCounter: آن دو «بخوان، بعد بنویس»اند و در
+// حالت cluster بین این دو، چند worker هم‌زمان سقف را رد می‌کنند — هر کدام
+// تعداد را پیش از بالا رفتنِ بقیه می‌خوانند. این‌جا شرط داخلِ خودِ نوشتن
+// است، پس از هر تعداد پروسهٔ هم‌زمان، تعداد رزروها از cap بالاتر نمی‌رود.
+// اگر ارسال شکست خورد، releaseSmsSlot برمی‌گرداند؛ یعنی همان قراردادِ قبلی
+// که «پیامکِ ناموفق ظرفیت امروز را نمی‌سوزاند» سرِ جایش می‌ماند.
+const stmtSmsReserve = db.prepare(`INSERT INTO settings (key, value)
+  VALUES ('sms_counter', json_object('d', date('now','localtime'), 'n', 1))
+  ON CONFLICT(key) DO UPDATE SET value = CASE
+    WHEN json_extract(value,'$.d') = date('now','localtime')
+      THEN json_object('d', json_extract(value,'$.d'), 'n', json_extract(value,'$.n') + 1)
+    ELSE json_object('d', date('now','localtime'), 'n', 1) END
+  WHERE (CASE WHEN json_extract(settings.value,'$.d') = date('now','localtime')
+      THEN json_extract(settings.value,'$.n') ELSE 0 END) < ?
+  RETURNING json_extract(value,'$.n') AS n`);
+const stmtSmsRelease = db.prepare(`UPDATE settings
+  SET value = json_set(value, '$.n', json_extract(value,'$.n') - 1)
+  WHERE key = 'sms_counter'
+    AND json_extract(value,'$.d') = date('now','localtime')
+    AND json_extract(value,'$.n') > 0`);
+function reserveSmsSlot(cap) {
+  const row = stmtSmsReserve.get(Number(cap));
+  return { ok: Boolean(row), count: row ? row.n : null };
+}
+function releaseSmsSlot() {
+  return stmtSmsRelease.run().changes > 0;
+}
+
 // شماره‌ی کاربر برای پیامک وضعیت سفارش
 function getUserPhone(userId) {
   return stmtUserById.get(Number(userId))?.phone || null;
@@ -3114,7 +3143,7 @@ module.exports = {
   logAdminAction, getAdminLog,
   getSettings, getSetting, setSettingsTx, getShippingQuote,
   quoteCoupon, adminListCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon, getCouponById,
-  bumpSmsCounter, getSmsCount, getUserPhone, createManualOrderTx,
+  bumpSmsCounter, getSmsCount, reserveSmsSlot, releaseSmsSlot, getUserPhone, createManualOrderTx,
   addStockAlert, getPendingStockAlerts, markStockAlertsNotified,
   bumpVisit, cleanupOldVisits, getTopPages,
   getCategoriesFull, getPublicCategories, ensureCategory, adminCreateCategory, adminUpdateCategoryTx, adminDeleteCategory, adminMoveCategoryTx,

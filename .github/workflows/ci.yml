@@ -113,6 +113,20 @@ jobs:
       - name: Discount tests
         run: node tests/discount.js
 
+      # سه نگهبانِ رفتاریِ تازه: چرخهٔ عمرِ workerِ cluster (کرشِ جوان باید
+      # ری‌استارت شود، خاموشیِ تمیز نباید وسطِ راه worker تولد کند)، سقفِ نرخِ
+      # SQLite (خرابیِ جدول = fail-open با شمارندهٔ degraded، نه قفلِ سایت)، و
+      # سقفِ روزانهٔ پیامکِ ورود (رزروِ اتمیک زیرِ چند پروسه، بی‌سوختنِ ظرفیت).
+      # هر سه سندباکسِ خودشان را می‌سازند و جهش‌هایشان در stepِ behavior است.
+      - name: Cluster lifecycle guard
+        run: node tests/cluster-restart.js
+
+      - name: Rate-limit degrade guard
+        run: node tests/rate-limit-degrade.js
+
+      - name: SMS daily cap guard
+        run: node tests/sms-daily-cap.js
+
       - name: Benchmark report integrity
         run: node tests/bench-report-integrity.js
 
@@ -250,12 +264,14 @@ jobs:
         run: node tests/guard-mutations.js --scope=backend
 
       # ---------- مجموعه‌های زنده‌ی رفتاری، زیرِ جهش ----------
-      # دودِ ۶۸۲ بررسی، امنیت و تخفیف در stepهای بالا اجرا می‌شوند و سبزبودن‌شان
-      # دیده می‌شود؛ سؤالِ این step چیزِ دیگری است: «آیا همان بررسی‌ها خرابیِ
-      # واقعیِ منطق را می‌گیرند؟» تا پیش از این هر سه با یک معافیتِ `needs` در
-      # `tests/guard-anchors.js` کنار گذاشته شده بودند («جهش لازم دارد، ولی
-      # ندارد»). حالا هر کدام سرورِ سندباکسِ خودش را می‌سازد (نه بک‌اندِ ۳۰۰۰،
-      # نه دیتابیسِ واقعی) و روی منطقِ واقعی جهش می‌خورد. اندازه‌گیری: ~۴۲ ثانیه.
+      # دودِ ۶۹۲ بررسی، امنیت، تخفیف، و سه نگهبانِ تازه (چرخهٔ cluster، سقفِ
+      # نرخ زیرِ خرابیِ SQLite، سقفِ روزانهٔ پیامک) در stepهای بالا اجرا می‌شوند
+      # و سبزبودن‌شان دیده می‌شود؛ سؤالِ این step چیزِ دیگری است: «آیا همان
+      # بررسی‌ها خرابیِ واقعیِ منطق را می‌گیرند؟» تا پیش از این هر سه با یک
+      # معافیتِ `needs` در `tests/guard-anchors.js` کنار گذاشته شده بودند
+      # («جهش لازم دارد، ولی ندارد»). حالا هر کدام محیطِ سندباکسِ خودش را
+      # می‌سازد (نه بک‌اندِ ۳۰۰۰، نه دیتابیسِ واقعی) و روی منطقِ واقعی جهش
+      # می‌خورد. اندازه‌گیری: ~۷۲ ثانیه.
       - name: Guard mutation harness (behavioral suites on a sandbox database)
         run: node tests/guard-mutations.js --scope=behavior
 

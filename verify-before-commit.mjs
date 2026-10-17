@@ -113,14 +113,14 @@ const STEPS = [
   },
   {
     label: 'جهش‌های نگهبان‌های فرانت‌اند',
-    why: '۲۱ نگهبانِ Vitest و اسکریپت‌های Next',
+    why: '۲۶ نگهبانِ Vitest و اسکریپت‌های Next',
     cwd: join(ROOT, 'backend'),
     args: ['tests/guard-mutations.js', '--scope=frontend'],
   },
   {
     label: 'جهش‌های مجموعه‌های رفتاری (روی سندباکس)',
     why:
-      'دود/امنیت/تخفیف — هر کدام خودش سندباکس و سرورِ خودش را می‌سازد؛ اندازه‌گیری: ۴۲ ثانیه برای یک دورِ کامل',
+      'دود/امنیت/تخفیف/چرخهٔ cluster/rate-limit/سقفِ پیامک — هر کدام خودش سندباکس و محیطِ خودش را می‌سازد؛ اندازه‌گیری: حدود یک دقیقه برای یک دورِ کامل',
     cwd: join(ROOT, 'backend'),
     args: ['tests/guard-mutations.js', '--scope=behavior'],
   },
