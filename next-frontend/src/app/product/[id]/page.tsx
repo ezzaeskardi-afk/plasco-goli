@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProduct, getRelatedProducts, getProducts } from "@/lib/api";
+import { getProduct, getRelatedProducts, getProducts, getShopInfo } from "@/lib/api";
 import { ProductDetail } from "@/components/ProductDetail";
 import { ProductReviews } from "@/components/ProductReviews";
 import { ProductCardGrid } from "@/components/ProductCard";
@@ -155,7 +155,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
     notFound();
   }
 
-  const related = await getRelatedProducts(numId).catch(() => []);
+  // تنظیماتِ فروشگاه را همین‌جا واکشی می‌کنیم تا کرایه‌ی JSON-LD از
+  // «هزینه‌ی ارسال»ی بیاید که مدیر در پنل گذاشته، نه یک عددِ هاردکد. هر دو
+  // واکشی مستقل‌اند و شکستِ یکی نباید صفحه را بیندازد (هر کدام catch دارد).
+  const [related, shop] = await Promise.all([
+    getRelatedProducts(numId).catch(() => []),
+    getShopInfo().catch(() => null),
+  ]);
 
   // تگ‌های قیمتِ فیسبوک (product:price:*) و `og:price:standard_amount`.
   //
@@ -185,7 +191,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   return (
     <>
       {priceMeta}
-      <ProductJsonLd product={product} />
+      <ProductJsonLd product={product} shippingCost={shop?.shippingCost} />
       <BreadcrumbJsonLd
         items={[
           { name: "خانه", url: "/" },

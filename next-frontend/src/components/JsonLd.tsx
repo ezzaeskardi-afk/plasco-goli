@@ -31,7 +31,15 @@ export function safeJsonLd(ld: unknown): string {
 }
 
 /* ---------- Store (صفحه اصلی) ---------- */
-export function StoreJsonLd() {
+export function StoreJsonLd({
+  shopPhone,
+  shopAddress,
+}: {
+  /** تلفنِ فروشگاه از تنظیماتِ پنل؛ خالی/غایب → ثابتِ اوراکل (`SHOP_PHONE`). */
+  shopPhone?: string;
+  /** نشانیِ فروشگاه از تنظیماتِ پنل؛ خالی/غایب → ثابتِ اوراکل (`STORE_ADDRESS`). */
+  shopAddress?: string;
+}) {
   // این بلوک عیناً از `index.html` نسخه‌ی Express می‌آید — با همان کلیدها و
   // همان مقادیر. اندازه‌گیریِ زنده نشان داد پرتِ اولیه‌ی Next چهار میدان را
   // جا انداخته بود (telephone، currenciesAccepted، paymentAccepted، نشانیِ
@@ -50,14 +58,28 @@ export function StoreJsonLd() {
     description:
       "فروشگاه تخصصی لوازم پلاستیکی خانه؛ تشت، صندلی، ظروف نگهداری، سبد و لوازم آشپزخانه و حمام.",
     image: `${SITE_URL}${OG_IMAGE}`,
-    telephone: SHOP_PHONE,
+    // تلفن/نشانی از تنظیماتِ پنل می‌آید و نبودش به همان ثابتِ اوراکلِ Express
+    // برمی‌گردد. قبلاً هر دو هاردکد بودند: مدیر شماره یا نشانی را از پنل عوض
+    // می‌کرد ولی داده‌ی ساختاریافته هنوز مالِ قبل را به گوگل می‌گفت — تناقضی
+    // که خودِ گوگل برایش هشدار می‌دهد. (پیش‌فرضِ تنظیمات خالی است، پس هر
+    // فروشگاهی که این‌ها را ویرایش نکرده باشد دقیقاً همان اوراکل را می‌گیرد.)
+    telephone: shopPhone?.trim() || SHOP_PHONE,
     // priceRange باید بازه‌ی قیمت باشد نه کدِ ارز (قبلاً "IRR" بود، که
     // بی‌معنی است — ارز جای خودش در Offer.priceCurrency آمده). `$$` همان
     // مقداری است که Express می‌داد و گوگل هم همین شکل را مستند کرده.
     priceRange: "$$",
     currenciesAccepted: "IRR",
     paymentAccepted: "پرداخت آنلاین زرین‌پال",
-    address: { "@type": "PostalAddress", ...STORE_ADDRESS },
+    address: shopAddress?.trim()
+      ? {
+          "@type": "PostalAddress",
+          // تنظیمات یک متنِ آزاد است؛ به‌عنوان خیابان می‌نشیند و شهر/کشور
+          // مثل اوراکل می‌مانند تا اسکیما معتبر بماند.
+          streetAddress: shopAddress.trim(),
+          addressLocality: STORE_ADDRESS.addressLocality,
+          addressCountry: STORE_ADDRESS.addressCountry,
+        }
+      : { "@type": "PostalAddress", ...STORE_ADDRESS },
     openingHoursSpecification: {
       "@type": "OpeningHoursSpecification",
       dayOfWeek: [
@@ -199,6 +221,7 @@ export function CollectionPageJsonLd({
 /* ---------- Product (صفحه تکی محصول) ---------- */
 export function ProductJsonLd({
   product,
+  shippingCost,
 }: {
   product: {
     id: number;
@@ -211,6 +234,12 @@ export function ProductJsonLd({
     category: string;
     rating?: { count: number; avg: number } | null;
   };
+  /**
+   * هزینه‌ی ارسال به **تومان**، از `/api/shop/info` (صفحه‌ی محصول سرورساید
+   * واکشی می‌کند). نبودنش — API بالا نبود — یعنی کلِ `shippingDetails` حذف
+   * می‌شود؛ اعلامِ کرایه‌ی حدسی بدتر از اعلام نکردن است.
+   */
+  shippingCost?: number;
 }) {
   const productUrl = `${SITE_URL}/product/${product.id}`;
   const ld = {
@@ -234,18 +263,28 @@ export function ProductJsonLd({
           : "https://schema.org/OutOfStock",
       itemCondition: "https://schema.org/NewCondition",
       seller: { "@type": "Organization", name: SHOP_NAME },
-      shippingDetails: {
-        "@type": "OfferShippingDetails",
-        shippingRate: {
-          "@type": "MonetaryAmount",
-          value: 1500000,
-          currency: "IRR",
-        },
-        shippingDestination: {
-          "@type": "DefinedRegion",
-          addressCountry: "IR",
-        },
-      },
+      // کرایه‌ی اعلامی به گوگل قبلاً عددِ هاردکدِ ۱٬۵۰۰٬۰۰۰ ریال بود، در حالی
+      // که کرایه‌ی واقعیِ فروشگاه از تنظیمات می‌آید (پیش‌فرض صفر = ارسال
+      // رایگان). یعنی داده‌ی ساختاریافته چیزی می‌گفت که در سبد خرید دیده
+      // نمی‌شد — هم سیگنالِ نامعتبر برای گوگل، هم ریسکِ شکایت مشتری. حالا
+      // از همان تنظیماتی می‌آید که سبد هم از آن می‌خواند؛ `* 10` یعنی ریال
+      // (قیمتِ خودِ محصول هم همین تبدیل را دارد).
+      ...(typeof shippingCost === "number"
+        ? {
+            shippingDetails: {
+              "@type": "OfferShippingDetails",
+              shippingRate: {
+                "@type": "MonetaryAmount",
+                value: shippingCost * 10,
+                currency: "IRR",
+              },
+              shippingDestination: {
+                "@type": "DefinedRegion",
+                addressCountry: "IR",
+              },
+            },
+          }
+        : {}),
       hasMerchantReturnPolicy: {
         "@type": "MerchantReturnPolicy",
         applicableCountry: "IR",

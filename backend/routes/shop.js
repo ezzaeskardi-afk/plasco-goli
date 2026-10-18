@@ -23,11 +23,15 @@ router.get('/info', (req, res) => {
   // آستانه‌ی «کم‌موجود» و «ارسال رایگان» هم در امضا هست، وگرنه مدیر عددش را عوض
   // می‌کند ولی مرورگر مشتری تا یک دقیقه پاسخ کش‌شده‌ی قبلی را نشان می‌دهد.
   const sig = ['i', s.announcement, s.shop_open, s.promo_text, s.promo_code, s.shop_phone,
-    s.low_stock_threshold, s.free_shipping_over, s.shipping_cost].join('|');
+    s.shop_address, s.low_stock_threshold, s.free_shipping_over, s.shipping_cost].join('|');
   if (etagJson(req, res, sig, { maxAge: 60 })) return;
   res.json({
     shopName: s.shop_name,
     shopPhone: s.shop_phone,
+    // نشانی در امضا و بدنه آمد چون `Store`ِ داده‌ی ساختاریافته‌ی صفحه‌ی اصلی
+    // (`JsonLd.tsx`) از همین می‌خواند؛ قبلاً نشانی در کد هاردکد بود و ویرایشش
+    // از پنل هیچ‌جا دیده نمی‌شد. خالی یعنی همان ثابتِ اوراکل (`STORE_ADDRESS`).
+    shopAddress: String(s.shop_address || '').trim(),
     announcement: String(s.announcement || '').trim(),
     shopOpen: s.shop_open !== '0',
     promoText: String(s.promo_text || '').trim(),

@@ -1388,7 +1388,14 @@ function crmGetCustomer(id) {
 const stmtCrmActInsert = db.prepare('INSERT INTO crm_activities (user_id, action, detail, meta) VALUES (?,?,?,?)');
 function crmLogActivity(userId, action, detail, meta) {
   try {
-    stmtCrmActInsert.run(Number(userId), String(action).slice(0, 50), String(detail || '').slice(0, 500), JSON.stringify(meta || {}));
+    // سقفِ meta: این پارامتر از بدنه‌ی درخواستِ پنل می‌آید و `detail` و `action`
+    // از قبل سقف دارند ولی meta نداشت — یعنی یک درخواست می‌توانست چند مگابایت
+    // در هر ردیف ذخیره کند و دفتر فعالیت را بی‌صدا پف‌دار کند. بزرگ‌تر از سقف
+    // با یک JSONِ کوچکِ معتبر جایگزین می‌شود (نه برشِ رشته، که JSON را
+    // خراب می‌کرد و خواننده‌ی بعدی به fallback می‌افتاد).
+    let metaJson = JSON.stringify(meta || {});
+    if (metaJson.length > 2000) metaJson = '{"_truncated":true}';
+    stmtCrmActInsert.run(Number(userId), String(action).slice(0, 50), String(detail || '').slice(0, 500), metaJson);
   } catch (e) { /* نبود activity نباید سایت را بشکند */ }
 }
 

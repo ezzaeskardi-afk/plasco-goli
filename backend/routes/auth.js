@@ -555,17 +555,22 @@ router.post('/password/login', passwordLoginLimiter, asyncHandler(async (req, re
 }));
 
 // آیا این شماره رمز دارد؟ (برای اینکه صفحه‌ی ورود گزینه‌ی «ورود با رمز» را نشان دهد)
-// محدودسازی لازم است: این مسیر وگرنه یک اوراکل است که با آن می‌شود فهرست
-// شماره‌های ثبت‌نام‌شده‌ی فروشگاه را کشف کرد.
+//
+// اوراکلِ بسته: پاسخ برای **هر شماره‌ی معتبرِ ایران** یکسان است — `true` — و
+// به کاربر/رمزِ دیتابیس نگاه نمی‌کند. قبلاً `Boolean(user && user.password_hash)`
+// برمی‌گرداند و با نرخِ ۴۰ درخواست/۱۰دقیقه می‌شد با آن فهرستِ شماره‌های
+// ثبت‌نام‌شده‌ی فروشگاه را کشف کرد (حتی «ثبت‌نام با رمز» و «ثبت‌نام فقط-OTP»
+// دو دسته‌ی جدا می‌ساخت). مصرف‌کننده‌ی UI همان گزینه را می‌سازد و مسیرِ واقعیِ
+// ورود (`/password/login`) هم پیامِ یکسان برای «کاربر نیست» و «رمز غلط»
+// می‌دهد، پس هیچ مرحله‌ای از ورود دیگر بین این حالت‌ها فرق نمی‌گذارد.
+// سقفِ نرخ هم می‌ماند: حجمِ درخواست خودش اطلاعاتِ جانبی نیست ولی ترمزِ
+// سوءاستفاده است.
 const hasPasswordLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 40, message: 'درخواست‌های زیاد؛ چند دقیقه بعد تلاش کنید' });
 
 router.post('/has-password', hasPasswordLimiter, asyncHandler(async (req, res) => {
   const phone = normalizePhone(req.body?.phone);
-  // برای جلوگیری از افشای فهرست حساب‌ها، پاسخ همیشه وضعیت عمومی می‌دهد؛
-  // مسیر ورود واقعی همچنان رمز/OTP را اعتبارسنجی می‌کند.
   if (!isValidIranPhone(phone)) return res.json({ hasPassword: false });
-  const user = getUserByPhone(phone);
-  res.json({ hasPassword: Boolean(user && user.password_hash) });
+  res.json({ hasPassword: true });
 }));
 
 /* تعیین/تغییر رمز عبور (کاربر باید وارد شده باشد)

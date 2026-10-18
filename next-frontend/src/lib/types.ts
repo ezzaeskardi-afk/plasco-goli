@@ -19,6 +19,14 @@ export interface Product {
   rating: { count: number; avg: number } | null;
   /** پله‌ی قیمت عمده — wholesaleInfo در backend/lib/db.js:737؛ ندارد null */
   wholesale: WholesaleInfo | null;
+  /**
+   * زمانِ آخرین تغییر — همان `updated_at` دیتابیس (UTC، قالب `YYYY-MM-DD HH:MM:SS`).
+   * `sitemap.ts` از همین، `lastmod` **واقعی** می‌سازد؛ قبلاً همه‌ی آدرس‌ها
+   * «حالا» می‌گرفتند که سیگنالِ دروغ است و گوگل بعد از چند بار کل lastmod را
+   * نادیده می‌گیرد. نبودنش (ردیفِ قدیمی) یعنی آدرس lastmod نمی‌گیرد — که
+   * صادقانه‌تر از «امروز» است.
+   */
+  updatedAt?: string | null;
 }
 
 /** تخفیف عمده‌ی خودِ محصول (صفحه‌ی محصول) — همان شکلِ CartItemWholesale */
@@ -124,6 +132,12 @@ export interface ShopCategory {
 export interface ShopInfo {
   shopName: string;
   shopPhone: string;
+  /**
+   * نشانیِ مغازه — قابل ویرایش از تنظیمات پنل (پیش‌فرض خالی).
+   * `StoreJsonLd` اگر خالی باشد به ثابتِ `STORE_ADDRESS` برمی‌گردد
+   * (همان نشانیِ اوراکلِ Express)، پس داده‌ی ساختاریافته هیچ‌وقت خالی نمی‌ماند.
+   */
+  shopAddress: string;
   announcement: string;
   shopOpen: boolean;
   promoText: string;

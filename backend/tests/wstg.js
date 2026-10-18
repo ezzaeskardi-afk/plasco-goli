@@ -780,7 +780,9 @@ const NOT_COVERED = [
   /* ---------------- WSTG-ATHN-06 — کشِ مرورگر ---------------- */
   section('ATHN-06', 'Browser Cache Weaknesses');
   {
-    for (const p of ['/api/auth/me', '/api/orders/mine', '/api/cart', '/api/addresses', '/api/auth/sessions']) {
+    // مسیرهای پنل هم سنجیده می‌شوند: no-storeِ سراسریِ `app.use('/api')` در
+    // server.js پشتِ دروازهٔ ادمین هم باید باشد (پاسخِ ۴۰۱/۴۰۳ هم نباید کش شود).
+    for (const p of ['/api/auth/me', '/api/orders/mine', '/api/cart', '/api/addresses', '/api/auth/sessions', '/api/admin/stats']) {
       const r = await request(A, 'GET', p);
       const cc = String(r.headers['cache-control'] || '');
       check(`پاسخِ حساسِ «${p}» کش‌نشدنی است`, /no-store/.test(cc), `Cache-Control=${cc || '(نیست)'}`);

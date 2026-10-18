@@ -268,7 +268,14 @@ router.post('/users/:id/staff', (req, res) => {
 function crmWrap(handler) {
   return (req, res) => {
     try { handler(req, res); }
-    catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+    catch (e) {
+      // خطای اعتبارسنجی (crmErr با status < 500) پیامِ امنِ خودش را دارد؛
+      // ولی خطای ناشناخته نباید متنِ داخلی — که ممکن است نامِ جدول یا
+      // جزئیاتِ مسیر را لو بدهد — به کلاینت بریزد. پیامِ عمومی + لاگِ سرور.
+      if (e && e.status && e.status < 500) return res.status(e.status).json({ error: e.message });
+      log.error('CRM route failed', e);
+      res.status(500).json({ error: 'خطای داخلی سرور' });
+    }
   };
 }
 
@@ -688,7 +695,10 @@ router.post('/orders/manual', (req, res) => {
   if (!picked.length) return res.status(400).json({ error: 'حداقل یک کالا انتخاب کنید' });
 
   const itemsTotal = picked.reduce((s, i) => s + i.price * i.qty, 0);
-  const shippingFee = Math.max(0, parseInt(req.body?.shippingFee, 10) || 0);
+  // سقفِ کرایه مثل بقیه‌ی پول‌ها: این عدد از فرمِ دستی می‌آید و بی‌سقف بود —
+  // یک رقمِ اشتباهی (۲۰۰ میلیون) مستقیم به `total`ِ سفارش می‌رفت. ۱۰ میلیون
+  // تومان چند برابرِ گران‌ترین کرایه‌ی واقعی است و برای تستِ مرزی هم عددِ تخت.
+  const shippingFee = Math.min(10_000_000, Math.max(0, parseInt(req.body?.shippingFee, 10) || 0));
   const fullName = String(req.body?.fullName || '').trim().slice(0, 60);
   const noteText = String(req.body?.note || '').trim().slice(0, 500);
 

@@ -2120,7 +2120,7 @@ const GUARDS = [
         // نامِ تازه را هم می‌گرفت. یک جهشِ بی‌خاصیت، خودش یک نگهبانِ قلابی است.
         label: 'قلمِ ProductJsonLd از مسیرِ محصول برداشته شود',
         file: 'next-frontend/src/app/product/[id]/page.tsx',
-        find: '      <ProductJsonLd product={product} />\n',
+        find: '      <ProductJsonLd product={product} shippingCost={shop?.shippingCost} />\n',
         replace: '',
         failedTest: 'دو قلم',
       },
@@ -2165,6 +2165,38 @@ const GUARDS = [
         find: '<ProductDetail product={product} />',
         replace: '<ProductDetail product={product} key={product.id} />',
         failedTest: 'محصول را از سرور',
+      },
+      // چهار قلمِ رفعِ ممیزیِ سئو (موجِ ادمین/CRM/SEO): هر کدام میراثِ یک
+      // «اگر برود هیچ خطایی نمی‌دهد» است — sitemap بی‌دسته/بی‌صفحه‌بندی،
+      // lastmodِ دروغ، کرایهٔ هاردکد و تلفن/نشانیِ سخت‌شده. جهش روی همان
+      // ادعای آزمون‌های تازه زده می‌شود تا «سبز ماندن» معنا داشته باشد.
+      {
+        label: 'دسته‌های سایتمپ از خروجی برداشته شوند',
+        file: 'next-frontend/src/app/sitemap.ts',
+        find: '        url: `${SITE_URL}/products?category=${encodeURIComponent(c.name)}`,',
+        replace: '        url: `${SITE_URL}/products`,',
+        failedTest: 'کانونیکال',
+      },
+      {
+        label: 'lastmod دوباره به «حالا» برگردد',
+        file: 'next-frontend/src/app/sitemap.ts',
+        find: '    const lastModified = isoOf(p.updatedAt);',
+        replace: '    const lastModified = new Date();',
+        failedTest: 'lastmod',
+      },
+      {
+        label: 'کرایهٔ JSON-LD دوباره هاردکد شود',
+        file: 'next-frontend/src/components/JsonLd.tsx',
+        find: '                value: shippingCost * 10,',
+        replace: '                value: 1500000,',
+        failedTest: 'shippingRate',
+      },
+      {
+        label: 'تلفنِ Store دیگر از تنظیمات خوانده نشود',
+        file: 'next-frontend/src/components/JsonLd.tsx',
+        find: 'telephone: shopPhone?.trim() || SHOP_PHONE,',
+        replace: 'telephone: SHOP_PHONE,',
+        failedTest: 'Store',
       },
     ],
   },

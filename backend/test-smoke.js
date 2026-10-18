@@ -487,6 +487,11 @@ function shutdown(code) {
     check('Login with password works (no SMS needed)', okPass.status === 200 && okPass.data.user?.phone === buyerPhone);
     const hasPw = await api('POST', '/auth/has-password', { phone: buyerPhone });
     check('has-password reports true', hasPw.status === 200 && hasPw.data.hasPassword === true);
+    // اوراکلِ بسته: برای شماره‌ی معتبری که هیچ حسابی ندارد هم پاسخ باید همان
+    // true باشد؛ وگرنه با چند درخواست می‌شد فهرستِ مشتری‌ها را کشف کرد.
+    const hasPwNoAcc = await api('POST', '/auth/has-password', { phone: '09120000000' });
+    check('has-password برای شماره‌ی بی‌حساب هم true است (اوراکل بسته)',
+      hasPwNoAcc.status === 200 && hasPwNoAcc.data.hasPassword === true);
     await api('POST', '/auth/logout');
 
     const adminUser = await loginAs(ADMIN_PHONE);
@@ -802,6 +807,21 @@ function shutdown(code) {
     }
     const stockManualBack = (await api('GET', `/products/${buyable.id}`)).data.product.stock;
     check('V9 manual order: admin cancel restores stock', stockManualBack === stockBeforeManual);
+
+    // کرایه‌ی فرمِ دستی سقف دارد: یک عددِ نجومی باید به سقفِ ۱۰ میلیون تومان
+    // کلمپ شود، نه اینکه مستقیم به totalِ سفارش برود (پنل این عدد را از فرم
+    // می‌گیرد و تا قبل از این هیچ سقفی نداشت).
+    const manualBigFee = await api('POST', '/admin/orders/manual', {
+      phone: manualPhone, fullName: 'Manual Fee Clamp',
+      items: [{ productId: buyable.id, qty: 1 }], shippingFee: 999999999999, note: 'smoke fee clamp'
+    });
+    check('V9 manual order: shippingFee capped at 10m toman',
+      manualBigFee.status === 200 && manualBigFee.data.order?.shippingFee === 10000000 &&
+      manualBigFee.data.order?.total === buyable.price + 10000000,
+      manualBigFee.status === 200 ? `fee=${manualBigFee.data.order?.shippingFee}` : `status ${manualBigFee.status}`);
+    if (manualBigFee.data.order?.id) {
+      await api('POST', `/admin/orders/${manualBigFee.data.order.id}/cancel`, { reason: 'smoke cleanup' });
+    }
 
     // «موجود شد خبرم کن»: ثبت روی ناموجود، بج پنل، پاک‌شدن بعد از شارژ
     await api('PUT', `/admin/products/${buyable.id}`, { stock: 0 });

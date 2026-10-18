@@ -708,7 +708,12 @@ export default async function HomePage() {
 
   return (
     <>
-      <StoreJsonLd />
+      {/* تلفن/نشانیِ Store از تنظیماتِ پنل می‌آید (shopInfo بالا سرورساید
+          واکشی می‌شود)؛ نبودِ هرکدام یعنی JSON-LD به ثابتِ اوراکل برمی‌گردد. */}
+      <StoreJsonLd
+        shopPhone={shopInfo?.shopPhone}
+        shopAddress={shopInfo?.shopAddress}
+      />
       <WebSiteJsonLd />
       <FAQPageJsonLd />
       <ItemListJsonLd products={products} />

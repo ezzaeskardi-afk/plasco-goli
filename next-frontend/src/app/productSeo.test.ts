@@ -114,6 +114,63 @@ describe("og:type صفحهٔ محصول", () => {
   });
 });
 
+// ============================================================
+// ممیزیِ سنگینِ سئو (موجِ ادمین/CRM/SEO) — چهار قلمِ «اگر بروند، خطا نمی‌دهند»
+// ============================================================
+// هیچ‌کدام از این چهار قلم اگر خراب شوند خطایی نمی‌دهند: sitemap هنوز XMLِ
+// معتبر است و JSON-LD هنوز اسکیمای معتبر. تنها چیزی که عوض می‌شود رفتارِ گوگل
+// و کارت‌های اشتراک‌گذاری است — پس هر چهارتا این‌جا قفل می‌شوند و هر چهارتا
+// لنگرِ جهش در `guard-mutations.js` دارند.
+describe("سئوی ممیزی: sitemap و داده‌ی ساختاریافته از منبعِ زنده تغذیه شوند", () => {
+  it("سایتمپ دسته‌ها و صفحه‌بندیِ فهرست را با کلیدِ کانونیکال می‌آورد", () => {
+    const src = stripComments(readSource("app/sitemap.ts"));
+    // دسته‌ها از همان منبعی می‌آیند که منو/فیلترهای سایت؛ نسخه‌ی Express
+    // همه‌ی دسته‌ها را به گوگل می‌داد و این‌جا هیچ‌کدام نبودند.
+    expect(src).toMatch(/getCategories\(\)/);
+    expect(src).toContain("?category=${encodeURIComponent(c.name)}");
+    // صفحه‌بندی هم بخشی از کاتالوگ است؛ قبلاً فقط صفحه‌ی اول ایندکس می‌شد.
+    expect(src).toContain("?page=${page}");
+    // و هیچ‌جا شکلِ عصرِ Express (`cat`) اعلام نمی‌شود — کلیدِ امروز
+    // `category` است و canonical هم همان را می‌شناسد.
+    expect(src).not.toContain("?cat=");
+  });
+
+  it("lastmod از updated_at واقعی می‌آید و هیچ آدرسی «حالا» نمی‌گیرد", () => {
+    const src = stripComments(readSource("app/sitemap.ts"));
+    // سیگنالِ دروغِ قبلی: `lastModified: now` روی همه‌ی آدرس‌ها.
+    expect(src).not.toMatch(/lastModified:\s*now/);
+    expect(src).not.toMatch(/lastModified:\s*new Date\(\)/);
+    // مرجعِ تاریخ، خودِ updated_at محصول است که API می‌فرستد.
+    expect(src).toMatch(/isoOf\(p\.updatedAt\)/);
+    // بدونِ Z، تاریخِ UTCِ دیتابیس محلی تفسیر می‌شود (درسِ `faDate`).
+    expect(src).toMatch(/\+ "Z"/);
+  });
+
+  it("shippingRate از تنظیماتِ فروشگاه می‌آید، نه عددِ هاردکد", () => {
+    const jsonLd = stripComments(readSource("components/JsonLd.tsx"));
+    expect(jsonLd).not.toContain("1500000");
+    expect(jsonLd).toMatch(/typeof shippingCost === "number"/);
+    expect(jsonLd).toMatch(/value: shippingCost \* 10/);
+    // و مسیرِ محصول عدد را سرورساید از همان اندپوینتی می‌گیرد که سبد از
+    // آن می‌خواند (`/api/shop/info`).
+    const page = stripComments(readSource(PRODUCT_PAGE));
+    expect(page).toMatch(/getShopInfo\(\)/);
+    expect(page).toMatch(/shippingCost=\{shop\?\.shippingCost\}/);
+  });
+
+  it("تلفن و نشانیِ Store از تنظیمات می‌آید با بازگشت به ثابتِ اوراکل", () => {
+    const jsonLd = stripComments(readSource("components/JsonLd.tsx"));
+    expect(jsonLd).toMatch(/telephone: shopPhone\?\.trim\(\) \|\| SHOP_PHONE/);
+    expect(jsonLd).toMatch(/shopAddress\?\.trim\(\)/);
+    expect(jsonLd).toMatch(/\{ "@type": "PostalAddress", \.\.\.STORE_ADDRESS \}/);
+    // صفحه‌ی اصلی همان دو مقدار را از `shopInfo`ی سرورساید پاس می‌دهد؛
+    // نبودنشان (API خاموش) یعنی همان ثابتِ اوراکل، نه مقدارِ خالی.
+    const home = stripComments(readSource("app/page.tsx"));
+    expect(home).toMatch(/shopPhone=\{shopInfo\?\.shopPhone\}/);
+    expect(home).toMatch(/shopAddress=\{shopInfo\?\.shopAddress\}/);
+  });
+});
+
 describe("ردیفِ اعتماد باید در HTMLِ سروشده باشد، نه بعد از جاوااسکریپت", () => {
   it("صفحهٔ محصول، محصول را از سرور به `ProductDetail` می‌دهد", () => {
     // ردیفِ اعتماد داخلِ `ProductDetail` است و آن کامپوننت محصول را از

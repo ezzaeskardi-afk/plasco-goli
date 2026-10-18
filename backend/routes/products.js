@@ -67,7 +67,12 @@ function serializeProduct(p, ratings = null) {
     // امتیاز نظرات تأییدشده — کارت‌ها و صفحه‌ی محصول ستاره نشان می‌دهند
     rating: (ratings && ratings[p.id]) || { count: 0, avg: 0 },
     // قیمت‌گذاری عمده (B2B) — null یعنی این کالا عمده‌فروشی ندارد
-    wholesale: wholesaleInfo(p)
+    wholesale: wholesaleInfo(p),
+    // زمانِ آخرین تغییر (UTC، `YYYY-MM-DD HH:MM:SS`) — مصرف‌کننده‌ی عمومی‌اش
+    // `sitemap.ts` است که `lastmod` واقعی هر محصول را از همین می‌سازد. قبلاً
+    // sitemap برای همه «حالا» می‌گذاشت که به گوگل سیگنالِ دروغ می‌داد.
+    // ردیفِ قدیمی فیلد را ندارد → null (sitemap آن‌وقت lastmod نمی‌گذارد).
+    updatedAt: p.updated_at || null
   };
 }
 
