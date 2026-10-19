@@ -67,6 +67,22 @@ import type { AdminOrder, OrderStatus } from "@/lib/adminTypes";
 
 type Filter = "all" | "active" | OrderStatus;
 
+// رتبهٔ پیشرویِ وضعیت — ملاکِ «اصلاحی بودنِ» یک گذر. return_requested هم‌ردهٔ
+// delivered است: پرچمی روی آن، نه ایستگاهی جدا در خطِ پیشروی.
+//
+// چرا لازم شد: روی سفارشِ تحویل‌شده دکمه‌ای به نام «ارسال شد» دیده می‌شد که
+// در واقع گذرِ برگشتی (delivered→shipped) بود؛ مدیر می‌زد و بعد از زدنِ
+// «تحویل شد» همه‌چیز «مثلِ اول» می‌شد. گذرهای اصلاحی باید صریح و کم‌رنگ
+// باشند، نه هم‌اسمِ دکمهٔ پیشروی.
+const STATUS_RANK: Record<string, number> = {
+  paid: 1,
+  shipped: 2,
+  delivered: 3,
+  return_requested: 3,
+};
+const isCorrection = (from: string, to: OrderStatus) =>
+  (STATUS_RANK[to] ?? 0) > 0 && (STATUS_RANK[to] ?? 0) <= (STATUS_RANK[from] ?? 0);
+
 export function OrdersContent() {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -209,7 +225,7 @@ export function OrdersContent() {
                   setOffset(0);
                 }}
                 // ۳۶ پیکسل روی موبایل، ۲۸ روی دسکتاپ — همان استدلالِ `Btn`.
-                className="rounded-full px-3 py-2 text-xs font-bold transition-colors sm:py-1.5"
+                className="admin-chip rounded-full px-3 py-2 text-xs font-bold transition-colors sm:py-1.5"
                 style={
                   on
                     ? { background: "var(--color-teal-tint)", color: "var(--color-teal)" }
@@ -240,7 +256,7 @@ export function OrdersContent() {
               ذخیره‌ی فایل باز شود. سقفِ سرور ۵۰۰۰ سفارش است. */}
           <a
             href={ordersCsvHref({ status: filter, q: search })}
-            className="rounded-full px-3.5 py-2 text-xs font-bold min-h-10 sm:min-h-0 inline-flex items-center justify-center shrink-0"
+            className="admin-chip rounded-full px-3.5 py-2 text-xs font-bold min-h-10 sm:min-h-0 inline-flex items-center justify-center shrink-0"
             style={{ background: "var(--color-surface-2)", color: "var(--color-ink-soft)" }}
           >
             خروجی اکسل
@@ -308,13 +324,9 @@ export function OrdersContent() {
                       <button
                         type="button"
                         onClick={() => setSelectedId(o.id)}
-                        className="w-full text-right rounded-[16px] p-3 transition-colors"
-                        style={{
-                          background: "var(--color-surface)",
-                          border: `1px solid ${
-                            on ? "var(--color-teal)" : "var(--color-line)"
-                          }`,
-                        }}
+                        className={`admin-list-row w-full text-right rounded-[16px] p-3 ${
+                          on ? "is-selected" : ""
+                        }`}
                         aria-pressed={on}
                       >
                         <div className="flex items-center gap-2 mb-1.5">
@@ -645,24 +657,39 @@ function OrderDetail({
         )}
 
         <div className="flex flex-wrap gap-1.5">
-          {nexts.map((to) => (
-            <Btn
-              key={to}
-              disabled={busy}
-              tone={to === "canceled" ? "coral" : "teal"}
-              onClick={() => onStatus(order.status, to)}
-              title={
-                to === "canceled"
-                  ? "با این دکمه لغو می‌شود؛ برای ثبت دلیل از «لغو با دلیل» استفاده کن"
-                  : undefined
-              }
-            >
-              {to === "shipped" && "ارسال شد"}
-              {to === "delivered" && "تحویل شد"}
-              {to === "paid" && "برگشت به پرداخت‌شده"}
-              {to === "canceled" && "لغو"}
-            </Btn>
-          ))}
+          {nexts.map((to) => {
+            // گذرِ اصلاحی با نامِ واضح و رنگِ خنثی می‌آید: «برگشت به …» — نه
+            // هم‌اسمِ دکمهٔ پیشروی. وگرنه مدیر روی سفارشِ تحویل‌شده «ارسال شد»
+            // می‌بیند، می‌زند و سفارش بی‌صدا عقب می‌رود (باگِ گزارش‌شده).
+            const correction = isCorrection(order.status, to);
+            const label =
+              to === "canceled"
+                ? "لغو"
+                : correction
+                  ? `برگشت به ${ORDER_STATUS[to].label}`
+                  : to === "shipped"
+                    ? "ارسال شد"
+                    : to === "delivered"
+                      ? "تحویل شد"
+                      : ORDER_STATUS[to].label;
+            return (
+              <Btn
+                key={to}
+                disabled={busy}
+                tone={to === "canceled" ? "coral" : correction ? "dim" : "teal"}
+                onClick={() => onStatus(order.status, to)}
+                title={
+                  to === "canceled"
+                    ? "با این دکمه لغو می‌شود؛ برای ثبت دلیل از «لغو با دلیل» استفاده کن"
+                    : correction
+                      ? "گذرِ اصلاحی — وضعیت را به عقب برمی‌گرداند"
+                      : undefined
+                }
+              >
+                {label}
+              </Btn>
+            );
+          })}
 
           {/* تأییدِ مرجوعی مسیرِ خودش را دارد: موجودی هم برمی‌گردد (تراکنشِ اتمی).
               از همین API می‌رود، ولی به‌عنوان یک کارِ جدا نشان داده می‌شود. */}
@@ -680,6 +707,12 @@ function OrderDetail({
             </Btn>
           )}
         </div>
+
+        {nexts.some((to) => isCorrection(order.status, to)) && (
+          <p className="mt-2 text-[10px]" style={{ color: "var(--color-ink-dim)" }}>
+            دکمه‌های کمرنگ اصلاحِ اشتباه‌اند و وضعیت را به عقب برمی‌گردانند.
+          </p>
+        )}
 
         {cancelOpen && (
           <div className="mt-3 flex gap-2">

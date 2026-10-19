@@ -63,13 +63,7 @@ export function ProductCard({ product }: { product: Product }) {
   // لینک نشسته: <button> داخل <a> از نظر HTML نامعتبر است و رفتار کلیک هم در
   // مرورگرها یکسان نیست.
   return (
-    <article
-      className="group flex flex-col rounded-[18px] overflow-hidden transition-all duration-300 hover:-translate-y-1"
-      style={{
-        background: "var(--color-surface)",
-        boxShadow: "var(--shadow)",
-      }}
-    >
+    <article className="product-card group flex flex-col rounded-[18px] overflow-hidden">
       {/* `prefetch={false}` — عمداً، و با اندازه‌گیری نه سلیقه.
 
           پیش‌فرضِ `next/link` این است: هر لینکی که به دید بیاید، RSCِ مقصدش
@@ -144,7 +138,7 @@ export function ProductCard({ product }: { product: Product }) {
               inWishlist ? "حذف از علاقه‌مندی‌ها" : "افزودن به علاقه‌مندی‌ها"
             }
             aria-pressed={inWishlist}
-            className="absolute top-2 left-2 z-20 rounded-full p-1.5 transition-colors"
+            className="absolute top-2 left-2 z-20 rounded-full p-1.5 transition duration-200 hover:scale-105 hover:brightness-125"
             style={{
               background: "rgba(11,20,17,0.55)",
               color: inWishlist ? "var(--color-coral)" : "var(--color-ink-soft)",
@@ -217,11 +211,8 @@ export function ProductCard({ product }: { product: Product }) {
             // عنوانِ محصول در برچسب می‌آید، وگرنه صفحه‌خوان در فهرستِ محصولات
             // بیست‌تا دکمه‌ی «خرید» می‌خواند و هیچ‌کدام معلوم نیست کدام است.
             aria-label={`افزودن ${product.title} به سبد خرید`}
-            className="w-full rounded-full py-1.5 text-xs font-bold transition-colors inline-flex items-center justify-center gap-1 disabled:cursor-wait"
+            className={`product-buy ${justAdded ? "product-buy-added" : ""} w-full rounded-full py-1.5 text-xs font-bold transition-all duration-200 inline-flex items-center justify-center gap-1 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.98] disabled:cursor-wait`}
             style={{
-              background: justAdded
-                ? "var(--color-teal-dark)"
-                : "var(--color-teal)",
               color: "#04211B",
               minHeight: "34px",
               opacity: busy ? 0.75 : 1,

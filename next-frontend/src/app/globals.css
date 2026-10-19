@@ -1200,3 +1200,204 @@
   }
 }
 
+/* ============================================================
+   کارتِ محصول و دکمه‌های فهرست — نسخهٔ غنی‌تر
+   ============================================================
+   کارفرما حس کرد کارت‌ها «ساده» شدند: هاورِ قبلی فقط ۴px بالا می‌رفت و
+   تصویر ۵٪ زوم می‌شد — حالی که نسخهٔ Express (fixtures/legacy-src/css/
+   style.css:542-556 و 672-696) بالابرِ ۸px + حاشیهٔ سبز + هاله + درخششِ
+   کشیده روی دکمهٔ خرید داشت. این بلوک همان زبان را با توکن‌های همین پروژه
+   برمی‌گرداند؛ همه‌چیز transform/opacity است (بی‌جاب‌جاییِ layout) و در
+   reduced-motion ساکن می‌شود. */
+.product-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  box-shadow: var(--shadow);
+  transition:
+    transform 0.28s ease,
+    box-shadow 0.28s ease,
+    border-color 0.28s ease;
+}
+.product-card:hover,
+.product-card:focus-within {
+  transform: translateY(-6px);
+  border-color: rgba(37, 214, 176, 0.42);
+  box-shadow:
+    var(--shadow),
+    0 0 0 1px rgba(37, 214, 176, 0.3),
+    0 18px 40px rgba(37, 214, 176, 0.08);
+}
+/* هالهٔ سبزِ بالای کارت — همتای `.product-card::after` نسخهٔ قدیم */
+.product-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.28s ease;
+  background: radial-gradient(
+    120% 80% at 50% 0%,
+    rgba(37, 214, 176, 0.1),
+    transparent 60%
+  );
+}
+.product-card:hover::after,
+.product-card:focus-within::after {
+  opacity: 1;
+}
+
+/* دکمهٔ خرید: گرادیان + سایهٔ سبز + درخششِ کشیده روی هاورِ کارت */
+.product-buy {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--color-teal) 0%, var(--color-teal-dark) 100%);
+  box-shadow: 0 4px 14px rgba(37, 214, 176, 0.22);
+}
+.product-buy::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 65%
+  );
+  transform: translateX(-130%);
+  transition: transform 0.55s ease;
+}
+.product-card:hover .product-buy::before {
+  transform: translateX(130%);
+}
+/* حالتِ «اضافه شد» — یک لحظه تیره می‌شود؛ گرادیان را با کلاس عوض می‌کنیم نه
+   استایلِ اینلاین، وگرنه shorthandِ inline پس‌زمینهٔ گرادیانی را پاک می‌کند. */
+.product-buy-added {
+  background: var(--color-teal-dark);
+}
+
+/* دکمهٔ «مشاهده‌ی همه‌ی محصولات» — همتای `.btn-outline:hover` قدیم:
+   بالابرِ ملایم، حاشیه و متنِ سبز، پس‌زمینهٔ تِنِتِ سبز و هاله. */
+.products-cta {
+  border: 1.5px solid var(--color-line-strong);
+  color: var(--color-ink);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.products-cta:hover,
+.products-cta:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(37, 214, 176, 0.55);
+  color: var(--color-teal);
+  background: var(--color-teal-tint);
+  box-shadow: 0 8px 22px rgba(37, 214, 176, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-card,
+  .product-card:hover,
+  .product-card:focus-within,
+  .product-card::after,
+  .product-buy::before,
+  .product-card:hover .product-buy::before,
+  .products-cta,
+  .products-cta:hover,
+  .products-cta:focus-visible {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* ============================================================
+   پنلِ ادمین — ردیف‌های فهرست و چیپ‌های فیلتر
+   ============================================================
+   چرا اینجا و نه با کلاس‌های Tailwindِ درونِ کامپوننت: استایلِ پایهٔ این
+   ردیف‌ها inline بود (رنگِ سطح/حاشیه از متغیرها) و استایلِ inline از هر
+   `hover:` قوی‌تر است — یعنی هاور عملاً مرده بود. با چرخِ واقعیِ ماوس
+   اندازه‌گیری شد: `hoverStyle.changed=false`. حالا پایه، هاور و حالتِ
+   انتخاب یک‌جا اینجاست تا همهٔ ردیف‌ها یکسان رفتار کنند و ترنزیشن قابلِ
+   مدیریت بماند (و آزمونِ زنده بتواند کلاس‌ها را ببیند). */
+.admin-list-row {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+.admin-list-row:hover {
+  background: var(--color-surface-2);
+  border-color: var(--color-line-control);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  transform: translateY(-1px);
+}
+.admin-list-row:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+}
+/* انتخاب‌شده عمداً بیش از «حاشیهٔ سبز» است: پس‌زمینهٔ روشن‌تر + حلقهٔ داخلی +
+   درخششِ ملایم + نوارِ کناره — تا مدیر با یک نگاه بفهمد کدام سفارش باز است. */
+.admin-list-row.is-selected {
+  background: var(--color-surface-2);
+  border-color: var(--color-teal);
+  box-shadow:
+    inset 0 0 0 1px var(--color-teal),
+    0 6px 18px rgba(37, 214, 176, 0.14);
+}
+.admin-list-row.is-selected::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0.55rem;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--color-teal);
+}
+/* روی دستگاهِ لمسی هاور معنا ندارد؛ بدونِ این، لمسِ اول ردیف را «هاورشده»
+   نگه می‌دارد و با حالتِ انتخاب قاطی می‌شود. */
+@media (hover: none) {
+  .admin-list-row:hover {
+    background: var(--color-surface);
+    border-color: var(--color-line);
+    box-shadow: none;
+    transform: none;
+  }
+}
+
+/* چیپ‌های فیلتر (تب‌های سفارش، فیلترِ مشتری، بازهٔ گزارش…) استایلِ پایهٔ
+   inline دارند؛ هاور از `filter` و `box-shadow` استفاده می‌کند چون این دو
+   با backgroundِ inline تضاد ندارند. */
+.admin-chip {
+  transition:
+    box-shadow 0.15s ease,
+    filter 0.15s ease,
+    transform 0.15s ease;
+}
+.admin-chip:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 0 1px var(--color-line-control);
+}
+.admin-chip:active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-list-row,
+  .admin-list-row:hover,
+  .admin-chip,
+  .admin-chip:active {
+    transition: none;
+    transform: none;
+  }
+}
+

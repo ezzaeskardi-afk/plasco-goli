@@ -298,8 +298,7 @@ function BestSellersSection({ products }: { products: Product[] }) {
       <div className="mt-9 flex flex-col items-center gap-3">
         <Link
           href="/products"
-          className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold transition-colors"
-          style={{ border: "1.5px solid var(--color-line-strong)", color: "var(--color-ink)" }}
+          className="products-cta inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-bold"
         >
           <Icon name="package" size={18} />
           مشاهده‌ی همه‌ی محصولات

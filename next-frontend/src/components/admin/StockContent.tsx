@@ -357,7 +357,7 @@ export function StockContent() {
                 key={f.key}
                 type="button"
                 onClick={() => setFilter(f.key)}
-                className="rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
+                className="admin-chip rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
                 style={
                   on
                     ? { background: "var(--color-teal-tint)", color: "var(--color-teal)" }
@@ -420,7 +420,7 @@ export function StockContent() {
                 setBulkValue("");
               }}
               aria-label="عملیات گروهی"
-              className="rounded-full px-3 py-2 text-xs font-bold min-h-10 sm:min-h-0"
+              className="admin-chip rounded-full px-3 py-2 text-xs font-bold min-h-10 sm:min-h-0"
               style={{
                 background: "var(--color-surface-2)",
                 color: "var(--color-ink)",

@@ -222,7 +222,7 @@ export function PeopleContent() {
                 key={f.key}
                 type="button"
                 onClick={() => resetToFirstPage(setFilter)(f.key)}
-                className="rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
+                className="admin-chip rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
                 style={
                   on
                     ? { background: "var(--color-teal-tint)", color: "var(--color-teal)" }
@@ -466,7 +466,7 @@ function Pager({
             type="button"
             onClick={() => onGo(n)}
             aria-current={n === page ? "page" : undefined}
-            className="rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
+            className="admin-chip rounded-full px-3 py-2 text-xs font-bold sm:py-1.5"
             style={
               n === page
                 ? { background: "var(--color-teal)", color: "#04211B" }

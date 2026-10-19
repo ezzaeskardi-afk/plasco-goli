@@ -170,7 +170,7 @@ export function ActivityContent() {
             type="button"
             onClick={() => setLimit(n)}
             aria-pressed={limit === n}
-            className="rounded-full px-3 py-2 text-xs font-bold min-h-10 sm:min-h-0 sm:py-1.5"
+            className="admin-chip rounded-full px-3 py-2 text-xs font-bold min-h-10 sm:min-h-0 sm:py-1.5"
             style={
               limit === n
                 ? { background: "var(--color-teal-tint)", color: "var(--color-teal)" }
