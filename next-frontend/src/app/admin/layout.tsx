@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { AdminNav } from "@/components/AdminNav";
+import { AdminSidebar } from "@/components/AdminSidebar";
 import { AdminTopBar } from "@/components/AdminTopBar";
 import { ADMIN_SECTIONS, PENDING_SECTIONS, READY_SECTIONS } from "@/lib/adminSections";
 import {
@@ -98,54 +98,45 @@ export default async function AdminLayout({
 
   return (
     <div
-      className="flex min-h-screen flex-col"
+      className="flex min-h-screen flex-col lg:flex-row"
       style={{ background: "var(--color-cream)" }}
     >
-      <header
-        className="sticky top-0 z-40 border-b backdrop-blur-md"
-        style={{
-          borderColor: "var(--color-line)",
-          // شیشه‌ای و کمی تیره‌تر از بدنه: وقتی محتوای پنل زیرِ نوار اسکرول
-          // می‌شود، متنِ محتوا از پشتش خوانده نشود ولی معلوم باشد چیزی آنجاست.
-          background: "linear-gradient(180deg, rgba(18,31,26,.94), rgba(11,20,17,.9))",
-        }}
-      >
-        {/* هر دو ردیف خودشان `mx-auto max-w-[1180px]` دارند — پس خطِ جداکننده‌ی
-            زیرِ نوار (`border-t` روی خودِ `AdminNav`) عرضِ کامل را می‌گیرد و
-            محتوا در ستونِ ۱۱۸۰ می‌ماند، هم‌ترازِ بدنه‌ی صفحه. */}
-        <AdminTopBar role={role} phone={phone} />
-        <AdminNav role={role} />
-      </header>
+      {/* سایدبارِ سمتِ راست (RTL) در دسکتاپ؛ در موبایل، نوارِ بالای جمع‌وجور +
+          کشوی بخش‌ها از همان سمت. خودِ سایدبار «مشاهده سایت» و «خروج از حساب»
+          را هم دارد تا مدیر برای هیچ‌کدام به فروشگاه برنگردد. */}
+      <AdminSidebar role={role} phone={phone} />
 
-      <div className="flex-1">{children}</div>
+      <div className="min-w-0 flex-1">
+        {children}
 
-      {/* پانویسِ وضعیتِ مهاجرت.
+        {/* پانویسِ وضعیتِ مهاجرت.
 
-          عمداً اینجاست و نه در داشبورد: شمارشِ «چند بخش منتقل شده» اطلاعاتِ
-          وضعیتِ پروژه است، نه کاری که مدیر برای فروش کند. ولی پنهان‌کردنش هم
-          غلط بود: مدیر باید می‌فهمید چرا بخش‌های باقی‌مانده در نوار خاکستری‌اند
-          و کجا پیدایشان کند. عددها از `adminSections.ts` می‌آیند. */}
-      {/* برای کارمند نشان داده نمی‌شد: او فقط به سفارش‌ها راه دارد، پس این
-          جمله که «چند بخش منتقل شده و چند بخش در پنل Express است» برایش بی‌ربط
-          بود — بخش‌های Express هم اصلاً در نوارش نیستند. */}
-      {/* ⚠️ **الان دیگر رندر نمی‌شود:** هر ۱۳ بخش به Next منتقل شده، پس
-          `PENDING_SECTIONS.length` صفر است و این شرط هرگز درست نمی‌شود. شرط
-          عمداً حذف نشد: با برگشتِ موقتیِ یک نما به Express یا اضافه‌شدنِ نمای
-          چهاردهم، همین بلوک بی‌هیچ تغییری برمی‌گردد — و گرنه مدیر یک بار دیگر
-          می‌بیند چیزی در نوار خاکستری است و هیچ‌جا نگفته شده چرا. */}
-      {role !== "staff" && PENDING_SECTIONS.length > 0 && (
-        <footer className="mx-auto max-w-[1180px] px-4 pt-4 pb-10 sm:px-6">
-          <p
-            className="text-[11px] leading-relaxed"
-            style={{ color: "var(--color-ink-dim)" }}
-          >
-            {fa(READY_SECTIONS.length)} بخش از {fa(ADMIN_SECTIONS.length)} بخشِ پنل به
-            نسخه‌ی Next منتقل شده است. {fa(PENDING_SECTIONS.length)} بخشِ دیگر —
-            آن‌هایی که در نوارِ بالا برچسبِ «Express» دارند — هنوز در پنل قبلی
-            است و همان‌جا کار می‌کند.
-          </p>
-        </footer>
-      )}
+            عمداً اینجاست و نه در داشبورد: شمارشِ «چند بخش منتقل شده» اطلاعاتِ
+            وضعیتِ پروژه است، نه کاری که مدیر برای فروش کند. ولی پنهان‌کردنش هم
+            غلط بود: مدیر باید می‌فهمید چرا بخش‌های باقی‌مانده در نوار خاکستری‌اند
+            و کجا پیدایشان کند. عددها از `adminSections.ts` می‌آیند. */}
+        {/* برای کارمند نشان داده نمی‌شد: او فقط به سفارش‌ها راه دارد، پس این
+            جمله که «چند بخش منتقل شده و چند بخش در پنل Express است» برایش بی‌ربط
+            بود — بخش‌های Express هم اصلاً در نوارش نیستند. */}
+        {/* ⚠️ **الان دیگر رندر نمی‌شود:** هر ۱۳ بخش به Next منتقل شده، پس
+            `PENDING_SECTIONS.length` صفر است و این شرط هرگز درست نمی‌شود. شرط
+            عمداً حذف نشد: با برگشتِ موقتیِ یک نما به Express یا اضافه‌شدنِ نمای
+            چهاردهم، همین بلوک بی‌هیچ تغییری برمی‌گردد — و گرنه مدیر یک بار دیگر
+            می‌بیند چیزی در نوار خاکستری است و هیچ‌جا نگفته شده چرا. */}
+        {role !== "staff" && PENDING_SECTIONS.length > 0 && (
+          <footer className="mx-auto max-w-[1180px] px-4 pt-4 pb-10 sm:px-6">
+            <p
+              className="text-[11px] leading-relaxed"
+              style={{ color: "var(--color-ink-dim)" }}
+            >
+              {fa(READY_SECTIONS.length)} بخش از {fa(ADMIN_SECTIONS.length)} بخشِ پنل به
+              نسخه‌ی Next منتقل شده است. {fa(PENDING_SECTIONS.length)} بخشِ دیگر —
+              آن‌هایی که در نوارِ بالا برچسبِ «Express» دارند — هنوز در پنل قبلی
+              است و همان‌جا کار می‌کند.
+            </p>
+          </footer>
+        )}
+      </div>
     </div>
   );
 }

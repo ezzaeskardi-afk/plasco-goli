@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
+import { useLogout } from "@/lib/useLogout";
 import type { PanelRole } from "@/components/admin/NoAccess";
 
 // ============================================================
@@ -54,6 +55,8 @@ export function AdminTopBar({
   role?: PanelRole;
   phone?: string;
 }) {
+  const { logout, busy } = useLogout();
+
   return (
     <div className="mx-auto flex max-w-[1180px] items-center justify-between gap-2 px-4 py-2.5 sm:gap-3 sm:px-6">
       {/* ---------- برند ---------- */}
@@ -125,6 +128,23 @@ export function AdminTopBar({
           <span className="hidden sm:inline">بازگشت به صفحه سایت</span>
           <span className="sm:hidden">صفحه سایت</span>
         </Link>
+
+        <button
+          type="button"
+          onClick={logout}
+          disabled={busy}
+          aria-busy={busy}
+          title="خروج از حساب"
+          className="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[11px] font-bold transition-colors hover:brightness-125 disabled:cursor-wait disabled:opacity-60"
+          style={{
+            background: "var(--color-surface-2)",
+            border: "1px solid var(--color-line)",
+            color: "var(--color-coral)",
+          }}
+        >
+          <Icon name="logout" size={14} />
+          <span className="hidden sm:inline">{busy ? "در حال خروج…" : "خروج"}</span>
+        </button>
       </div>
     </div>
   );

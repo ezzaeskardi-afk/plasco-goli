@@ -922,7 +922,7 @@ polasco-goli/
 │       │   ├── parityManifest.test.ts ← ۸ آزمونِ ساختاریِ مانیفستِ برابریِ فروشگاه: پوششِ کاملِ صفحه‌ها و فایل‌ها، دلیلِ اجباریِ هر واگرایی، needleهای مرده
 │       │   ├── contrastTokens.test.ts ← ۱۲ آزمونِ کنتراستِ پالتِ تم (WCAG 2.2 AA): هر جفتِ متن/زمینه با ترکیبِ آلفا، نام‌های کوتاهِ :root، پوششِ توکن‌ها، و هر `var(--…)`ی که سورس می‌خواند (وارثِ contrast-audit.js)
 │       │   ├── staticPathsCoverage.test.ts ← ۶ آزمونِ پوششِ مسیرهای ثابت: هر ارجاعِ سورس باید سنجیده شود و هر ردیفِ سنجش باید ارجاع یا قراردادِ مستند داشته باشد — حذفِ یک ردیف از فهرست قرمز می‌شود
-│       ├── components/        ← ۳۸ کامپوننت + ۹ آزمون + ۴ کامپوننتِ صفحه اصلی + ۱۳ فایلِ محتوای پنل
+│       ├── components/        ← ۴۰ کامپوننت + ۹ آزمون + ۴ کامپوننتِ صفحه اصلی + ۱۳ فایلِ محتوای پنل
 │       │   ├── Header.tsx / Footer.tsx / AdminNav.tsx / AdminTopBar.tsx / Toast.tsx
 │       │   ├── ProductCard.tsx / ProductDetail.tsx / ProductReviews.tsx / StarRow.tsx
 │       │   ├── AccountContent.tsx / CartContent.tsx / CheckoutContent.tsx / CrmContent.tsx
