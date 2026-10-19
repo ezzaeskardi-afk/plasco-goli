@@ -136,7 +136,7 @@ function HeroSection() {
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/products"
-            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
+            className="hero-cta inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
             style={{
               background: "var(--color-teal)",
               color: "#04211B",
@@ -153,7 +153,7 @@ function HeroSection() {
               چشمِ نگهبانِ پوشش پنهان می‌ماند؛ حالا `copyParity` قفلش می‌کند. */}
           <Link
             href="/login"
-            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
+            className="hero-cta-outline inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
             style={{
               background: "transparent",
               color: "var(--color-ink)",

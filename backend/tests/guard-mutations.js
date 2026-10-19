@@ -1213,6 +1213,16 @@ const GUARDS = [
         // ویندوز: Nodeِ تقلبیِ ۲۰ «تازه» شمرده می‌شود | لینوکس: کفِ آستانه
         expect: /node:sqlite/,
       },
+      {
+        // ناظرِ کدِ پیامکی از پنجره برداشته شود: کدِ ورودِ حالتِ آزمایشی دوباره
+        // فقط در فایلِ لاگ می‌ماند و کاربر در پنجره چیزی نمی‌بیند (همان باگی
+        // که گزارش شد). این بررسیِ ایستا روی هر دو سیستم‌عامل می‌نشیند.
+        label: 'ناظرِ کدِ پیامکی از پنجرهٔ StartSite برداشته شود',
+        file: 'StartSite.bat',
+        find: "Get-Content $f -Wait -Encoding UTF8 | Select-String -SimpleMatch '[TEST MODE'",
+        replace: 'rem mutation: sms watcher disabled',
+        expect: /پیامکی/,
+      },
     ],
   },
   {

@@ -1055,6 +1055,86 @@
   }
 }
 
+/* ---------- هاورِ لینک‌های نوار ناوبری (subnav) ---------- */
+/* خطِ زیرینِ گرادیانیِ فیروزه→طلایی که از مرکز باز می‌شود. رنگِ پایهٔ متن با
+   style درون‌خطی ست می‌شود و دست‌نخورده می‌ماند؛ هاور روی همین خط + رنگِ
+   teal (از کلاسِ Tailwind) می‌نشیند تا لینکِ فعالِ صفحه هم گم نشود. */
+.subnav-link {
+  position: relative;
+  padding-block: 4px;
+}
+.subnav-link::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--color-teal), var(--color-gold));
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.22s ease;
+}
+.subnav-link:hover::after,
+.subnav-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+/* ---------- دکمه‌های CTA هیرو — هاورِ زنده ---------- */
+/* `!important` فقط جایی که استایلِ پایه درون‌خطی است (سایه/حاشیه/رنگ) —
+   وگرنه استایلِ درون‌خطی از کلاس هاور جلو می‌زند. */
+.hero-cta {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease !important;
+}
+.hero-cta:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.07);
+  box-shadow: 0 22px 48px -14px rgba(37, 214, 176, 0.62), 0 0 0 5px var(--color-teal-tint) !important;
+}
+.hero-cta:active {
+  transform: translateY(0);
+}
+/* درخششِ موربی که با هاور از روی دکمه رد می‌شود */
+.hero-cta::after {
+  content: "";
+  position: absolute;
+  inset: -40% -120%;
+  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.28) 50%, transparent 60%);
+  transform: translateX(-70%);
+  transition: transform 0.55s ease;
+  pointer-events: none;
+}
+.hero-cta:hover::after {
+  transform: translateX(70%);
+}
+.hero-cta-outline {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease,
+    border-color 0.2s ease, color 0.2s ease !important;
+}
+.hero-cta-outline:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-teal) !important;
+  background: var(--color-teal-tint) !important;
+  color: var(--color-teal) !important;
+  box-shadow: 0 18px 40px -18px rgba(37, 214, 176, 0.55);
+}
+.hero-cta-outline:active {
+  transform: translateY(0);
+}
+
+/* ---------- باکس‌های کدِ یک‌بارمصرف — فوکوسِ فیروزه‌ای به‌جای حلقهٔ طلایی ---------- */
+/* قاعدهٔ سراسریِ `:focus-visible` حلقهٔ طلایی می‌گذارد؛ روی باکس‌های کد آن
+   حلقه با هویتِ فیروزه‌ایِ خودِ فرم نمی‌خواند (کاربر دید: «زردِ غلط»).
+   اینجا همان حلقه به «حاشیهٔ فیروزه‌ای + هاله» تبدیل می‌شود. `!important`
+   چون حاشیهٔ پایه با style درون‌خطی ست می‌شود. */
+.otp-box:focus-visible {
+  outline: none;
+  border-color: var(--color-teal) !important;
+  box-shadow: 0 0 0 4px var(--color-teal-tint), 0 10px 26px -12px rgba(37, 214, 176, 0.6);
+}
+
 /* ---------- نوارِ متحرکِ اعتماد ---------- */
 .marquee {
   overflow: hidden;
@@ -1084,9 +1164,13 @@
   font-weight: 400;
   font-size: 12px;
 }
+/* پله = عرضِ *یک* نسخه از شش نسخه — چون `translateX`ِ درصدی نسبت به عرضِ کلِ
+   نوار (شش‌تایی) حساب می‌شود، نه نسبت به ظرف. عددِ ۶ باید با تعدادِ نسخه‌های
+   `Marquee.tsx` یکی بماند؛ نگهبانِ هندسی در `04-performance-budget.spec.ts`
+   رابطهٔ (N−1)×C ≥ W را می‌سنجد. اگر روزی نسخه‌ها کم شد، آن‌جا قرمز می‌شود. */
 @keyframes marquee {
   to {
-    transform: translateX(50%);
+    transform: translateX(calc(100% / 6));
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1095,6 +1179,17 @@
   }
   .marquee-track {
     animation: none;
+  }
+  /* پالایشِ همین دور: این‌ها هم حرکتِ تزئینی‌اند و باید ساکن شوند */
+  .subnav-link::after,
+  .hero-cta,
+  .hero-cta::after,
+  .hero-cta-outline {
+    transition: none;
+  }
+  .hero-cta:hover,
+  .hero-cta-outline:hover {
+    transform: none;
   }
 }
 

@@ -818,7 +818,7 @@ export function LoginForm() {
                 onChange={(e) => handleOtpInput(i, e.target.value)}
                 onPaste={(e) => handleOtpPaste(i, e)}
                 onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                className="w-12 h-14 text-center text-xl font-bold rounded-xl outline-none transition-colors"
+                className="otp-box w-12 h-14 text-center text-xl font-bold rounded-xl outline-none transition-colors"
                 style={{
                   background: "var(--color-surface-2)",
                   color: "var(--color-ink)",
@@ -921,7 +921,7 @@ export function LoginForm() {
                 onChange={(e) => handleTotpInput(i, e.target.value)}
                 onPaste={(e) => handleTotpPaste(i, e)}
                 onKeyDown={(e) => handleTotpKeyDown(i, e)}
-                className="w-11 h-14 text-center text-xl font-bold rounded-xl outline-none transition-colors"
+                className="otp-box w-11 h-14 text-center text-xl font-bold rounded-xl outline-none transition-colors"
                 style={{
                   background: "var(--color-surface-2)",
                   color: "var(--color-ink)",

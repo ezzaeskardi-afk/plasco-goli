@@ -20,6 +20,9 @@ import {
   requestOtpCode,
 } from "./helpers";
 
+// همان فیروزه‌ایِ `--color-teal` — دو سنجشِ رنگ در همین فایل از همین یک ثابت می‌خوانند.
+const OTP_TEAL = "rgb(37, 214, 176)";
+
 test("ورودِ مشتریِ تازه: شماره → کد → نام → حساب", async ({ page }) => {
   const phone = freshPhone();
 
@@ -203,7 +206,14 @@ test("مرحلهٔ کد: هر رقم در خانهٔ خودش، فوکوس جل�
   const filledBorder = await borderOf(0);
   expect(filledBorder, "رنگِ خانهٔ پرشده باید از خانهٔ خالی جدا باشد").not.toBe(emptyBorder);
   await expect(boxes.nth(4), "خانهٔ پنجم هنوز دست‌نخورده است").toHaveValue("");
-  expect(await borderOf(4), "خانهٔ خالی رنگِ خانهٔ پرشده را نگیرد").toBe(emptyBorder);
+  // خانهٔ پنجم حالا **خانهٔ فعال** است: با تایپِ رقمِ چهارم، فوکوس خودش اینجا
+  // پریده و طبق قراردادِ تازهٔ فوکوس باید حاشیهٔ فیروزه‌ای بگیرد (حتی خالی).
+  // تفکیکِ «خالی از پرشده» را همان بالا روی خانه‌های بی‌فوکوس سنجیدیم.
+  await expect
+    .poll(() => borderOf(4), {
+      message: "خانهٔ فعال (حتی خالی) باید حاشیهٔ فیروزه‌ایِ فوکوس را بگیرد",
+    })
+    .toBe(OTP_TEAL);
 
   const verify = page.waitForResponse((r) => r.url().includes("/api/auth/otp/verify"));
   await page.keyboard.type(code[4]);
@@ -273,4 +283,61 @@ test("ورودِ دوم با همان شماره: نام دیگر پرسیده �
   const me = await currentUser(page);
   expect(me?.phone).toBe(phone);
   expect(me?.fullName).toBe(CUSTOMER_NAME);
+});
+
+// ============================================================
+// سناریو ۶ — همان دکمه‌ای که کاربر گزارش کرد «کار نمی‌کند»
+// ============================================================
+// چرا با مرورگرِ واقعی: گزارشِ کاربر این بود که کلیک روی «ورود / ثبت‌نام»ِ
+// هیرو هیچ‌کاری نمی‌کند. این دکمه یک لینکِ ساده است، ولی تا همین‌جا هیچ
+// آزمونی همین یک کلیک را نمی‌سنجید — سناریوهای بالا همه مستقیم `/login`
+// می‌رفتند. اگر روزی روی‌کارتی (دکورِ شناور، منوی باز، خطای hydration) دکمه
+// را بپوشاند یا href عوض شود، همان لحظه این‌جا قرمز می‌شود.
+test("دکمهٔ «ورود / ثبت‌نام»ِ هیرو از صفحهٔ اصلی به فرمِ ورود می‌رسد", async ({ page }) => {
+  await page.goto("/");
+  const heroCta = page.locator('#home a[href="/login"]').first();
+  await expect(heroCta).toBeVisible();
+  await heroCta.click();
+  await expect(page).toHaveURL(/\/login(\?|$)/);
+});
+
+test("دکمهٔ «ورود»ِ نوارِ بالا هم به فرمِ ورود می‌رسد", async ({ page }) => {
+  await page.goto("/");
+  const headerCta = page.locator('header a[href="/login"]').first();
+  await expect(headerCta).toBeVisible();
+  await headerCta.click();
+  await expect(page).toHaveURL(/\/login(\?|$)/);
+});
+
+// ============================================================
+// سناریو ۷ — حلقهٔ فوکوسِ باکس‌های کد: فیروزه‌ای، نه زرد
+// ============================================================
+// قاعدهٔ سراسریِ `:focus-visible` یک حلقهٔ **طلایی** می‌گذارد؛ کاربر روی
+// باکس‌های کد آن را «زردِ غلط» دید. حالا باکسِ فعال باید حاشیهٔ فیروزه‌ای
+// بگیرد و هیچ حلقه‌ای نداشته باشد. این ادعا فقط با CSSِ واقعیِ مرورگر
+// سنجیدنی است — jsdom استایلِ محاسبه‌شده ندارد — پس همین‌جا قفل می‌شود.
+test("باکسِ کدِ فعال حاشیهٔ فیروزه‌ای دارد، نه حلقهٔ طلایی", async ({ page }) => {
+  const phone = freshPhone();
+  await page.goto("/login");
+  await page.getByPlaceholder("۰۹۱۲۳۴۵۶۷۸۹").fill(phone);
+  await requestOtpCode(page, phone);
+
+  const box = page.locator('input[autocomplete="one-time-code"]').first();
+  await box.focus();
+  // حاشیه `transition-colors` دارد؛ تک‌خوانیِ لحظه‌ای وسطِ انیمیشن می‌افتد
+  // (اجرای واقعی رنگِ میانِ راه را دید). پس تا «حالتِ آرام» صبر می‌کنیم.
+  await expect
+    .poll(async () => box.evaluate((el) => getComputedStyle(el).borderTopColor), {
+      message: "حاشیهٔ باکسِ فعال باید فیروزه‌ای (teal) شود",
+    })
+    .toBe(OTP_TEAL);
+
+  const style = await box.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { outline: s.outlineStyle, border: s.borderTopColor, shadow: s.boxShadow };
+  });
+
+  expect(style.outline, "حلقهٔ outlineِ طلایی باید خاموش باشد").toBe("none");
+  expect(style.border, "حاشیهٔ باکسِ فعال باید فیروزه‌ای (teal) باشد").toBe(OTP_TEAL);
+  expect(style.shadow, "هالهٔ فوکوس باید دیده شود").not.toBe("none");
 });

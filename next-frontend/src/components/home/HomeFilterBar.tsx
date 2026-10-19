@@ -74,7 +74,9 @@ export function HomeFilterBar() {
   return (
     <div
       data-reveal=""
-      className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-3"
+      // وسط‌چین: پیش از این نوارِ مرتب‌سازی/قیمت به لبهٔ راست چسبیده بود و
+      // زیرِ سرتیترِ وسط‌چینِ بخش («پرفروش‌ها») ناهم‌تراز می‌افتاد.
+      className="mb-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-3"
     >
       <label className="flex items-center gap-2 text-xs font-bold" style={{ color: "var(--color-ink-soft)" }}>
         <Icon name="refresh" size={15} style={{ color: "var(--color-gold)" }} />

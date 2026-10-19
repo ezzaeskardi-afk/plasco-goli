@@ -304,7 +304,7 @@ function Subnav({ categories }: { categories: ShopCategory[] }) {
               <Link
                 key={link.href}
                 href={link.href}
-                className="transition-colors hover:text-teal"
+                className="subnav-link transition-colors hover:text-teal"
                 style={{ color: active ? "var(--color-teal)" : "var(--color-ink-soft)" }}
               >
                 {link.label}

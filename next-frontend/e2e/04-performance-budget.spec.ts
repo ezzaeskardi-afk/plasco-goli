@@ -200,3 +200,39 @@ test("صفحه‌های اصلی از بودجهٔ کارایی بیرون نم�
     await context.close();
   }
 });
+
+// ============================================================
+// نگهبانِ هندسیِ نوارِ متحرک — «حلقهٔ بی‌فاصله» فقط یک ادعای CSS است
+// ============================================================
+// چرا این‌جا و با مرورگرِ واقعی: گزارشِ کاربر این بود که سرِ هر دور، سمتِ
+// چپِ نوارِ «پرداخت امن…» **فاصلهٔ خالی** می‌دهد. ریشه هندسی است: نوار
+// `display:flex` و صفحه RTL است، پس لبهٔ راستِ نوارِ درونی همان لبهٔ راستِ
+// ظرف است و انیمیشن به راست می‌رود؛ همین‌که عرضِ یک نسخه از عرضِ ظرف کمتر
+// شود (C < W — روی هر نمایشگری پهن‌تر از ~۱۰۰۰px)، تا انتهای نیم‌سیکل لبهٔ
+// چپ خالی می‌شود. حالا N نسخه در `Marquee.tsx` تکرار می‌شود و پلهٔ انیمیشن
+// در `globals.css` یک نسخه است (`translateX(100%/N)`)، پس شرطِ بی‌فاصله‌
+// بودن در هر لحظه دقیقاً `(N−1)×C ≥ W` است. این آزمون همان نامساوی را از
+// خودِ DOM می‌سنجد — اگر کسی تعدادِ نسخه‌ها یا پلهٔ انیمیشن را جدا عوض کند،
+// همین‌جا قرمز می‌شود (هیچ آزمونِ jsdom نمی‌تواند این هندسه را ببیند).
+test("نوارِ متحرک همیشه پر است: (N−1)×عرضِ یک نسخه ≥ عرضِ ظرف", async ({ page }) => {
+  await page.goto("/");
+  const m = await page.evaluate(() => {
+    const track = document.querySelector(".marquee-track") as HTMLElement | null;
+    if (!track) return null;
+    const copies = Array.from(track.children) as HTMLElement[];
+    return {
+      n: copies.length,
+      copyW: copies[0].getBoundingClientRect().width,
+      containerW: track.parentElement!.getBoundingClientRect().width,
+      anim: getComputedStyle(track).animationName,
+    };
+  });
+  expect(m, "نوارِ متحرک در صفحهٔ خانه پیدا نشد").not.toBeNull();
+  expect(m!.anim, "انیمیشنِ نوار باید فعال باشد").toBe("marquee");
+  expect(m!.n, "نوار باید دست‌کم دو نسخه داشته باشد").toBeGreaterThanOrEqual(2);
+  expect(
+    (m!.n - 1) * m!.copyW,
+    `با ${m!.n} نسخه: (N−1)×C باید ≥ عرضِ ظرف (${Math.round(m!.containerW)}px) باشد`
+      + " — وگرنه سرِ هر دور سمتِ چپ فاصلهٔ خالی می‌دهد",
+  ).toBeGreaterThanOrEqual(m!.containerW);
+});

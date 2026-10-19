@@ -123,6 +123,16 @@ check('مقایسهٔ Node در سابروتین است (وگرنه داخلِ �
   src.search(/%NODE_MAJ% LSS \d+ goto :node_old/) > src.indexOf(':nodecheck') &&
   !/\n\s{4}if %NODE_MAJ% LSS \d+/.test(src));
 
+// ناظرِ کدِ پیامکیِ حالتِ آزمایشی: بک‌اند خروجی‌اش را به فایلِ لاگ می‌فرستد و
+// بدونِ این ناظر، کدِ ورود فقط در همان فایل دیده می‌شود — همان چیزی که کاربر
+// گزارش کرد («قبلاً کد پیش‌فرض در پنجره می‌آمد، حالا نمی‌آید»). این بررسی هر
+// دو نیمهٔ مکانیزم را می‌خواهد: خواندنِ زندهٔ لاگ (`-Wait`) و فیلترِ خطِ
+// TEST MODE و چاپش به‌عنوان [SMS TEST]. اگر روزی یکی بیفتد، همین‌جا قرمز است.
+check('کدِ پیامکیِ حالتِ آزمایشی در پنجرهٔ StartSite دیده می‌شود (نه فقط در فایلِ لاگ)',
+  /Get-Content\b[^\r\n]*-Wait/.test(src) &&
+  /Select-String -SimpleMatch '\[TEST MODE'/.test(src) &&
+  /Write-Host[^\r\n]*\[SMS TEST\]/.test(src));
+
 if (!WINDOWS) {
   console.log('\n  (بخشِ اجرایی روی این سیستم‌عامل معنا ندارد: `.bat` فقط ویندوز است)');
   console.log(`\nStartsite diagnostics: ${pass} passed, ${fail} failed`);

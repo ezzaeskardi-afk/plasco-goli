@@ -251,6 +251,12 @@ set "PORT=3000"
 echo [1/2] Starting the backend on :3000 ^(log: backend\logs\local-start.log^) ...
 start /b /d "%HERE%backend" cmd /c "npm start > logs\local-start.log 2>&1"
 
+rem The login code of the SMS test mode ("[TEST MODE - no real SMS] ... 12345")
+rem ends up ONLY inside the log file now that the backend's console is
+rem redirected. Mirror exactly those lines into this window, so the code is
+rem visible where a developer expects it (this used to be plain console.log).
+start /b powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $f = Join-Path '%HERE%backend' 'logs\local-start.log'; while (-not (Test-Path $f)) { Start-Sleep -Milliseconds 400 }; Get-Content $f -Wait -Encoding UTF8 | Select-String -SimpleMatch '[TEST MODE' | ForEach-Object { Write-Host ('  [SMS TEST] ' + $_.Line.Trim()) -ForegroundColor Yellow } }"
+
 rem Wait for :3000 (up to 60s). Not fatal: the storefront still starts, the build
 rem merely renders fewer pages - so this warns instead of failing.
 powershell -NoProfile -Command "for($i=0;$i -lt 60;$i++){ try{ $c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',3000); $c.Close(); exit 0 } catch { Start-Sleep -Seconds 1 } }; exit 1"
