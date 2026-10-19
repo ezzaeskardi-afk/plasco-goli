@@ -20,6 +20,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { LoginForm } from "@/components/LoginForm";
 import {
@@ -135,6 +136,7 @@ function otpVerifyPayload(
 let container: HTMLDivElement;
 let root: Root;
 let rootMounted = false;
+let queryClient: QueryClient;
 
 function bodyOf(): string {
   return container.textContent ?? "";
@@ -197,7 +199,11 @@ async function mount() {
   root = createRoot(container);
   rootMounted = true;
   await act(async () => {
-    root.render(<LoginForm />);
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <LoginForm />
+      </QueryClientProvider>,
+    );
   });
   await flush();
 }
@@ -251,6 +257,7 @@ beforeEach(() => {
 
   container = document.createElement("div");
   document.body.appendChild(container);
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   rootMounted = false;
 });
 
@@ -574,6 +581,7 @@ describe("بعد از ورود، ناوبری هیچ‌وقت معلّق نمی�
   });
 
   it("مسیرِ کدِ یکبارمصرف هم همین گارد را دارد", async () => {
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     await mount();
     await typeIntoPhone("09120000042");
     await submitForm();
@@ -588,6 +596,9 @@ describe("بعد از ورود، ناوبری هیچ‌وقت معلّق نمی�
 
     expect(vi.mocked(verifyOtp)).toHaveBeenCalledWith("09120000042", "12345");
     expect(nav.push).toHaveBeenCalledWith("/checkout");
+    // هدر در چیدمانِ ریشه کوئریِ auth را با حالتِ مهمان کش کرده است؛ بدونِ
+    // باطل‌کردنش، دکمه‌ی «ورود» تا رفرش می‌ماند.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["auth"] });
 
     await advance(NAV_FALLBACK_MS);
     expect(vi.mocked(hardNavigate)).toHaveBeenCalledWith("/checkout");

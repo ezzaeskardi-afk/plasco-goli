@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   getChallenge,
   requestOtp,
@@ -107,6 +108,7 @@ function serverResendSeconds(res: { retryAfter?: number }): number {
 
 export function LoginForm() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   // مقصدِ بازگشت از خودِ آدرس می‌آید، پس هرگز نباید بدونِ بررسی استفاده شود:
   // `/login?redirect=https://evil.example` کاربر را بعد از ورودِ موفق به
@@ -191,9 +193,13 @@ export function LoginForm() {
 
   const goToRedirect = useCallback(() => {
     if (navFallback.current) clearTimeout(navFallback.current);
+    // هدر در چیدمانِ ریشه نشسته و کوئریِ `auth` را با دادهٔ مهمان کش کرده است.
+    // بدونِ این، بعد از ورودِ موفق همان «ورود» تا رفرش می‌ماند، چون داده هنوز
+    // «تازه» است و `refetchOnMount` کاری نمی‌کند.
+    queryClient.invalidateQueries({ queryKey: ["auth"] });
     router.push(redirect);
     navFallback.current = setTimeout(() => hardNavigate(redirect), NAV_FALLBACK_MS);
-  }, [router, redirect]);
+  }, [router, redirect, queryClient]);
 
   // شمارش معکوس cooldown — پایدار در برابر رفرش: **لحظه‌ی پایان به‌همراهِ
   // شماره** ذخیره می‌شود و موقعِ برگشت به همان مرحله‌ی کد بازمحاسبه می‌شود.
