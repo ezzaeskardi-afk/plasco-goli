@@ -29,7 +29,8 @@ import { useScrollPast } from "@/lib/useScrollPast";
 //      هرگز `common.js` را لود نمی‌کرد. پنل ابزارِ کار است و دکمه‌ی «بازگشت به
 //      بالا» و انیمیشنِ ورود روی جدول‌هایش فقط مزاحمت است.
 
-/** نشانه‌ی «این المان را قبلاً به ناظر داده‌ام» — تا دوباره تأخیر نگیرد. */
+/** نشانه‌ی «این المان در اجرای فعلی به ناظر داده شده» — تا ناظرِ همان اجرا
+    دوباره ثبتش نکند و تأخیر پله‌ای تکرار نشود. مقدارش هر اجرا عوض می‌شود. */
 const BOUND = "revealBound";
 
 export function ScrollFx() {
@@ -61,6 +62,11 @@ export function ScrollFx() {
     // تأخیرِ پله‌ای، به‌ازای هر والد. ترتیبِ پیمایش همان ترتیبِ DOM است، پس
     // کارت‌های یک گرید پشت‌سرهم می‌آیند و گرید بعدی از صفر شروع می‌کند.
     const seen = new Map<Element, number>();
+    // نشانهٔ BOUND برای هر اجرا مقدارِ تازه می‌گیرد. با یک نشانهٔ ثابت، ناظرِ
+    // اجرای قبلی گره‌های صفحهٔ تازه را «دیده‌شده» علامت می‌زد، اجرای بعدی ردشان
+    // می‌کرد و ناظرِ تازه هرگز آن‌ها را نمی‌دید — یعنی محتوای صفحهٔ بعدِ
+    // ناوبریِ نرم (ورود → خانه) نامرئی می‌ماند تا رفرش.
+    const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     const io = new IntersectionObserver(
       (entries) => {
@@ -76,8 +82,8 @@ export function ScrollFx() {
     );
 
     const observe = (el: HTMLElement) => {
-      if (el.dataset[BOUND] === "1") return;
-      el.dataset[BOUND] = "1";
+      if (el.dataset[BOUND] === runId) return;
+      el.dataset[BOUND] = runId;
       const key = el.parentElement || document.body;
       const i = seen.get(key) ?? 0;
       seen.set(key, i + 1);
@@ -103,7 +109,8 @@ export function ScrollFx() {
       io.disconnect();
     };
     // `pathname` در وابستگی‌ها هست چون محتوای مسیرِ تازه باید از نو پیوند بخورد
-    // (نشانه‌ی BOUND روی المان‌های قدیمی می‌ماند و بی‌خطر است).
+    // (نشانه‌ی BOUND در هر اجرا مقدارِ تازه می‌گیرد، پس المان‌های مسیرِ قبلی
+    // دوباره به ناظرِ تازه معرفی می‌شوند).
   }, [enabled, pathname]);
 
   if (!enabled) return null;

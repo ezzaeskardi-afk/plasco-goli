@@ -183,6 +183,40 @@ describe("ScrollFx — ناظرِ واقعی", () => {
     });
     expect(FakeIO.all.at(-1)?.targets).toHaveLength(1);
   });
+
+  it("ناوبریِ نرم محتوای مسیرِ تازه را بی‌ناظر نمی‌گذارد", async () => {
+    vi.stubGlobal("IntersectionObserver", FakeIO);
+    pathname = "/login";
+    addReveal(`<p data-reveal=""></p>`);
+    await mount();
+    const firstIo = FakeIO.all.at(-1);
+    expect(firstIo?.targets).toHaveLength(1);
+
+    // محتوای صفحه‌ی خانه می‌رسد در حالی که ناظرِ گرهِ اجرای قبلی (لاگین) هنوز
+    // زنده است؛ همان لحظه گره را با نشانه‌ی خودش «دیده‌شده» علامت می‌زند.
+    pathname = "/";
+    await act(async () => {
+      fixtures.innerHTML = `<p data-reveal=""></p>`;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const fresh = fixtures.querySelector<HTMLElement>("[data-reveal]");
+    expect(fresh?.dataset.revealBound).toBeTruthy();
+
+    // اجرای تازه ناظرِ تازه می‌سازد؛ گرهِ نشان‌دارِ اجرای قبلی نباید رد شود،
+    // وگرنه تا رفرش نامرئی می‌ماند (همان صفحه‌ی خالیِ بعد از ورود).
+    await act(async () => {
+      root.render(<ScrollFx />);
+    });
+    const io = FakeIO.all.at(-1);
+    expect(io).not.toBe(firstIo);
+    expect(io?.targets).toHaveLength(1);
+
+    await act(async () => {
+      io?.enter();
+    });
+    expect(fixtures.querySelectorAll("[data-reveal].is-visible")).toHaveLength(1);
+  });
 });
 
 describe("ScrollFx — دکمه‌ی بازگشت به بالا", () => {
