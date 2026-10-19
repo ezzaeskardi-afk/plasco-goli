@@ -2858,8 +2858,8 @@ const GUARDS = [
         // بهینه‌ساز باید ۴xx بدهد و همان‌جا گرفته شود.
         label: 'فایلِ مبدأِ عکسِ صفحهٔ خانه ناپدید شود (بهینه‌سازِ عکس خطا می‌دهد)',
         file: 'next-frontend/src/app/page.tsx',
-        find: 'src="/picture/products/ست ادویه گردان 8 عددی چوبی.jpg"',
-        replace: 'src="/picture/products/ست ادویه گردان 8 عددی چوبی-404.jpg"',
+        find: 'src="/picture/products/ست ادویه گردان 8 عددی چوبی.jpg"\n            alt=""\n            width={921}\n            height={682}\n            sizes="(max-width: 767px) 100vw, (max-width: 1180px) 50vw, 560px"',
+        replace: 'src="/picture/products/ست ادویه گردان 8 عددی چوبی-404.jpg"\n            alt=""\n            width={921}\n            height={682}\n            sizes="(max-width: 767px) 100vw, (max-width: 1180px) 50vw, 560px"',
         expect: /بهینه‌سازِ عکسِ Next در/,
       },
     ],
