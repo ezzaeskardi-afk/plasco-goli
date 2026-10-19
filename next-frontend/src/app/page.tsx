@@ -110,85 +110,120 @@ function HeroSection() {
 
       {/* `data-reveal` — همتای همان نشانه در index.html. دیده‌شدنش کار
           `ScrollFx` است؛ بدونِ آن این بخش نامرئی می‌ماند (globals.css). */}
-      <div data-reveal="" className="relative mx-auto max-w-[1180px] px-6 text-center">
-        {/* عیناً همان متنِ هیروی `index.html:210-218` — eyebrow، سرتیتر، لید،
-            دکمه‌ها و چیپ‌های اعتماد. پیش از این هیرو بازنویسی شده بود
-            («فروشگاه محصولات پلاستیکی») و هیچ‌کدام از جمله‌های Express را
-            نداشت؛ در گزارشِ برابری همین‌ها بدهیِ بازِ متن بودند. */}
-        <Eyebrow>فروشگاه محله‌ای، با اعتماد چند نسل</Eyebrow>
-        <h1
-          id="hero-title"
-          className="text-3xl md:text-5xl font-extrabold leading-tight mb-4"
-        >
-          هر چی خانه‌ی شما لازم داره،{" "}
-          <em className="not-italic" style={{ color: "var(--color-gold)" }}>
-            پلاستیکی و رنگی
-          </em>
-          ، همین‌جاست
-        </h1>
-        <p className="text-sm md:text-base text-ink-soft max-w-xl mx-auto mb-6 leading-relaxed">
-          پلاسکو گلی سال‌هاست کنار خانواده‌های همین محله ایستاده؛ از تشت و صندلی
-          گرفته تا ظرف نگهداری، سبد و هر وسیله‌ی پلاستیکی که یک خانه برای زندگی
-          روزمره لازم دارد. جنس اصل، قیمت منصفانه، خرید آنلاین راحت.
-        </p>
-
-        {/* دکمه‌های CTA — هر دو عیناً همان‌های هیروی Express (`index.html:222-232`):
-            «مشاهده محصولات» (primary) و «ورود / ثبت‌نام» (outline). */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/products"
-            className="hero-cta inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
-            style={{
-              background: "var(--color-teal)",
-              color: "#04211B",
-              boxShadow: "var(--shadow-glow-teal)",
-            }}
+      <div
+        data-reveal=""
+        className="relative mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-10 px-6 text-center md:grid-cols-[1.1fr_.9fr] md:gap-16 md:text-right"
+      >
+        <div>
+          {/* عیناً همان متنِ هیروی `index.html:210-218` — eyebrow، سرتیتر، لید،
+              دکمه‌ها و چیپ‌های اعتماد. پیش از این هیرو بازنویسی شده بود
+              («فروشگاه محصولات پلاستیکی») و هیچ‌کدام از جمله‌های Express را
+              نداشت؛ در گزارشِ برابری همین‌ها بدهیِ بازِ متن بودند. */}
+          <Eyebrow>فروشگاه محله‌ای، با اعتماد چند نسل</Eyebrow>
+          <h1
+            id="hero-title"
+            className="text-3xl md:text-5xl font-extrabold leading-tight mb-4"
           >
-            <Icon name="cart" size={18} />
-            مشاهده محصولات
-          </Link>
-          {/* دکمهٔ دوم — عیناً `<a class="btn btn-outline" href="login.html">`
-              در `index.html:229-231`: آیکونِ کاربر + «ورود / ثبت‌نام». پیش از
-              این «خرید عمده» بود که در هیروی Express وجود ندارد (فقط در
-              ناوبری) و چون همان متن روی همین صفحه جای دیگری هم می‌آمد، از
-              چشمِ نگهبانِ پوشش پنهان می‌ماند؛ حالا `copyParity` قفلش می‌کند.
-              برای کاربرِ واردشده، همین دکمه به حساب/پنل تبدیل می‌شود. */}
-          <HeroAuthCta guestLabel="ورود / ثبت‌نام" />
-        </div>
+            هر چی خانه‌ی شما لازم داره،{" "}
+            <em className="not-italic" style={{ color: "var(--color-gold)" }}>
+              پلاستیکی و رنگی
+            </em>
+            ، همین‌جاست
+          </h1>
+          <p className="text-sm md:text-base text-ink-soft max-w-xl mx-auto mb-6 leading-relaxed md:mx-0">
+            پلاسکو گلی سال‌هاست کنار خانواده‌های همین محله ایستاده؛ از تشت و صندلی
+            گرفته تا ظرف نگهداری، سبد و هر وسیله‌ی پلاستیکی که یک خانه برای زندگی
+            روزمره لازم دارد. جنس اصل، قیمت منصفانه، خرید آنلاین راحت.
+          </p>
 
-        {/* چیپ‌های اعتماد — چهار قلمِ `index.html:477-482` */}
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">
-          {HERO_CHIPS.map((c) => (
-            <span
-              key={c.label}
-              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold"
+          {/* دکمه‌های CTA — هر دو عیناً همان‌های هیروی Express (`index.html:222-232`):
+              «مشاهده محصولات» (primary) و «ورود / ثبت‌نام» (outline). */}
+          <div className="flex flex-wrap items-center justify-center gap-3 md:justify-start">
+            <Link
+              href="/products"
+              className="hero-cta inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
               style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-line)",
-                color: "var(--color-ink-soft)",
+                background: "var(--color-teal)",
+                color: "#04211B",
+                boxShadow: "var(--shadow-glow-teal)",
               }}
             >
-              <Icon name={c.icon} size={15} style={{ color: "var(--color-teal)" }} />
-              {c.label}
-            </span>
-          ))}
+              <Icon name="cart" size={18} />
+              مشاهده محصولات
+            </Link>
+            {/* دکمهٔ دوم — عیناً `<a class="btn btn-outline" href="login.html">`
+                در `index.html:229-231`: آیکونِ کاربر + «ورود / ثبت‌نام». پیش از
+                این «خرید عمده» بود که در هیروی Express وجود ندارد (فقط در
+                ناوبری) و چون همان متن روی همین صفحه جای دیگری هم می‌آمد، از
+                چشمِ نگهبانِ پوشش پنهان می‌ماند؛ حالا `copyParity` قفلش می‌کند.
+                برای کاربرِ واردشده، همین دکمه به حساب/پنل تبدیل می‌شود. */}
+            <HeroAuthCta guestLabel="ورود / ثبت‌نام" />
+          </div>
+
+          {/* چیپ‌های اعتماد — چهار قلمِ `index.html:477-482` */}
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5 md:justify-start">
+            {HERO_CHIPS.map((c) => (
+              <span
+                key={c.label}
+                className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold"
+                style={{
+                  background: "var(--color-surface)",
+                  border: "1px solid var(--color-line)",
+                  color: "var(--color-ink-soft)",
+                }}
+              >
+                <Icon name={c.icon} size={15} style={{ color: "var(--color-teal)" }} />
+                {c.label}
+              </span>
+            ))}
+          </div>
         </div>
 
-        {/* دو برچسبِ شناورِ قابِ تصاویر در Express (float-tagها). این‌جا که هیرو
-            متنی است، زیرِ چیپ‌ها می‌آیند تا همان دو جمله هم در صفحه باشد. */}
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-2.5">
-          {HERO_FLOAT_TAGS.map((c) => (
-            <span
-              key={c.label}
-              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-bold"
-              style={{
-                background: "var(--color-gold-tint)",
-                color: "var(--color-gold)",
-              }}
-            >
-              <Icon name={c.icon} size={15} />
+        {/* گالریِ شناورِ هیرو — همتای `.basin-stack.hero-gallery` در
+            `index.html:241-252`: سه عکسِ واقعیِ محصول در چیدمانِ hg-grid و دو
+            برچسبِ شناورِ float-tag. این بخش در مهاجرت به Next جا افتاده بود و
+            هیرو به یک ستونِ متنی تبدیل شده بود. */}
+        <div
+          data-reveal=""
+          aria-hidden="true"
+          className="basin-stack hero-gallery order-first md:order-none"
+        >
+          <div className="hg-grid">
+            <figure className="hg-item hg-a">
+              <Image
+                src="/picture/products/کاسه سرو پایه چوبی 2 لیتر.jpg"
+                alt=""
+                width={938}
+                height={760}
+                priority
+                sizes="(max-width: 767px) 100vw, 300px"
+              />
+            </figure>
+            <figure className="hg-item hg-b">
+              <Image
+                src="/picture/products/ست ادویه گردان 8 عددی چوبی.jpg"
+                alt=""
+                width={921}
+                height={682}
+                loading="eager"
+                sizes="(max-width: 767px) 100vw, 240px"
+              />
+            </figure>
+            <figure className="hg-item hg-c">
+              <Image
+                src="/picture/products/سطل شیاردار درب چوبی 3 لیتر.jpg"
+                alt=""
+                width={963}
+                height={746}
+                sizes="(max-width: 767px) 100vw, 240px"
+              />
+            </figure>
+          </div>
+          {HERO_FLOAT_TAGS.map((c, index) => (
+            <div key={c.label} className={`float-tag tag-${index + 1}`}>
+              <Icon name={c.icon} size={18} style={{ color: "var(--color-gold)" }} />
               {c.label}
-            </span>
+            </div>
           ))}
         </div>
       </div>

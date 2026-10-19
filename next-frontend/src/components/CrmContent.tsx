@@ -426,33 +426,50 @@ export function CrmContent() {
 
             {/* درآمد ماهانه */}
             <div className="rounded-2xl p-4" style={{ background: "var(--color-surface)" }}>
-              <h3 className="text-sm font-bold mb-3" style={{ color: "var(--color-ink)" }}>
-                درآمد ماهانه
-              </h3>
-              <div className="flex items-end gap-1 h-32">
-                {revenue.map((m) => {
-                  const maxRev = Math.max(...revenue.map((r) => r.revenue), 1);
-                  const h = (m.revenue / maxRev) * 100;
-                  return (
-                    <div key={m.month} className="h-full flex-1 flex flex-col items-center gap-1">
-                      <span className="text-[9px] text-ink-dim">{toFa(m.revenue / 1000000)}M</span>
-                      {/* ناحیه‌ی میله با ارتفاعِ قطعی (`flex-1`): ارتفاعِ میله
-                          «درصد» است و درصد فقط با والدِ قطعی حساب می‌شود —
-                          بدونِ این لایه، هر ۱۲ میله صفر پیکسل می‌شدند (همان
-                          ایرادی که در نمودارِ ۱۴ روزِ داشبورد بود). */}
-                      <div className="flex w-full flex-1 items-end">
-                        <div
-                          className="w-full rounded-t-md transition-all min-h-[2px]"
-                          style={{
-                            height: `${Math.max(h, 2)}%`,
-                            background: "var(--color-teal)",
-                          }}
-                        />
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>
+                  درآمد ماهانه
+                </h3>
+                <span className="text-[10px] font-medium" style={{ color: "var(--color-ink-dim)" }}>
+                  ۱۲ ماه اخیر
+                </span>
+              </div>
+              <div className="overflow-x-auto pb-1">
+                <div className="flex h-36 min-w-[480px] items-end gap-1.5">
+                  {revenue.map((m) => {
+                    const maxRev = Math.max(...revenue.map((r) => r.revenue), 1);
+                    const h = (m.revenue / maxRev) * 100;
+                    const fullLabel = toFaStr(m.label);
+                    const monthName = fullLabel.split(" ")[0];
+                    return (
+                      <div
+                        key={m.month}
+                        title={fullLabel}
+                        className="flex h-full min-w-0 flex-1 flex-col items-center gap-1.5"
+                      >
+                        <span className="text-[10px] tabular-nums text-ink-dim">
+                          {toFa(m.revenue / 1000000)}M
+                        </span>
+                        {/* ناحیه‌ی میله با ارتفاعِ قطعی (`flex-1`): ارتفاعِ میله
+                            «درصد» است و درصد فقط با والدِ قطعی حساب می‌شود —
+                            بدونِ این لایه، هر ۱۲ میله صفر پیکسل می‌شدند (همان
+                            ایرادی که در نمودارِ ۱۴ روزِ داشبورد بود). */}
+                        <div className="flex w-full flex-1 items-end">
+                          <div
+                            className="w-full rounded-t-md transition-all min-h-[2px]"
+                            style={{
+                              height: `${Math.max(h, 2)}%`,
+                              background: "var(--color-teal)",
+                            }}
+                          />
+                        </div>
+                        <span className="whitespace-nowrap text-[10px] font-semibold text-ink-soft">
+                          {monthName}
+                        </span>
                       </div>
-                      <span className="text-[9px] text-ink-dim rotate-45 origin-right">{toFaStr(m.label)}</span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

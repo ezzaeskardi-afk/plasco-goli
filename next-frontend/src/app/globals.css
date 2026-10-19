@@ -1124,6 +1124,109 @@
   transform: translateY(0);
 }
 
+/* ---------- گالریِ شناورِ هیرو — همتای `.basin-stack` در Express ---------- */
+.basin-stack {
+  position: relative;
+  height: 440px;
+}
+.basin-stack::before {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -2%;
+  height: 44px;
+  background: radial-gradient(50% 100% at 50% 50%, rgba(37, 214, 176, 0.35), transparent 70%);
+  filter: blur(20px);
+}
+.hg-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  grid-template-rows: 1.25fr 1fr;
+  gap: 16px;
+  padding: 8px;
+}
+.hg-item {
+  margin: 0;
+  border-radius: 22px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid var(--color-line-strong);
+  box-shadow: 0 26px 50px -22px rgba(0, 0, 0, 0.65);
+  animation: floaty 7s ease-in-out infinite;
+}
+.hg-item::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 60%, rgba(4, 9, 7, 0.38));
+  pointer-events: none;
+}
+.hg-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.hg-a {
+  grid-row: 1 / 3;
+}
+.hg-b {
+  animation-delay: 0.9s;
+}
+.hg-c {
+  animation-delay: 1.7s;
+}
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+.float-tag {
+  position: absolute;
+  z-index: 2;
+  background: rgba(18, 31, 26, 0.86);
+  border: 1px solid var(--color-line-strong);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--color-ink);
+}
+.float-tag.tag-1 {
+  top: 6%;
+  left: -4%;
+  animation: floaty 5.6s ease-in-out 0.6s infinite;
+}
+.float-tag.tag-2 {
+  bottom: 8%;
+  right: -3%;
+  animation: floaty 6.4s ease-in-out 1.2s infinite;
+}
+@media (max-width: 767px) {
+  .basin-stack {
+    height: 320px;
+  }
+  .float-tag.tag-1 {
+    left: 0;
+  }
+  .float-tag.tag-2 {
+    right: 0;
+  }
+}
+
 /* ---------- باکس‌های کدِ یک‌بارمصرف — فوکوسِ فیروزه‌ای به‌جای حلقهٔ طلایی ---------- */
 /* قاعدهٔ سراسریِ `:focus-visible` حلقهٔ طلایی می‌گذارد؛ روی باکس‌های کد آن
    حلقه با هویتِ فیروزه‌ایِ خودِ فرم نمی‌خواند (کاربر دید: «زردِ غلط»).
@@ -1185,6 +1288,10 @@
     transition: none;
   }
   .marquee-track {
+    animation: none;
+  }
+  .hg-item,
+  .float-tag {
     animation: none;
   }
   /* پالایشِ همین دور: این‌ها هم حرکتِ تزئینی‌اند و باید ساکن شوند */
