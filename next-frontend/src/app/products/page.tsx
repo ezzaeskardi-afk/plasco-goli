@@ -102,10 +102,23 @@ export async function generateMetadata({
   const title =
     lp.page > 1 ? `${base} — صفحه ${lp.page}` : base;
 
+  // توضیحِ متا: صفحهٔ پایه عیناً همان متنِ قبلی می‌ماند، ولی صفحهٔ دسته و
+  // صفحه‌های ۲ به بعد متنِ یکتای خودشان را می‌گیرند. چرا لازم است: با فیلتر،
+  // عنوان قبلاً یکتا می‌شد ولی توضیح برای همهٔ دسته‌ها و همهٔ صفحه‌ها یکی بود؛
+  // گوگل توضیحِ تکراری را یا بازنویسی می‌کند یا نادیده می‌گیرد. جستجو (`q`)
+  // و فیلترهای عمیق اصلاً ایندکس نمی‌شوند (بالاتر)، پس فقط دو حالتِ
+  // ایندکس‌شدنیِ این صفحه این‌جا معنا دارند: دسته، و صفحه‌بندی.
+  const baseDescription =
+    "فهرست کامل محصولات پلاسکو گلی؛ ظروف نگهداری، لوازم آشپزخانه، سبد، صندلی، تشت و لوازم نظافت. فیلتر بر اساس دسته، قیمت و موجودی.";
+  const description = lp.category
+    ? `خرید آنلاین ${lp.category} از پلاسکو گلی؛ جنس اصل، قیمت روز و ارسال سریع به سراسر کشور${lp.page > 1 ? ` — صفحهٔ ${lp.page}` : ""}.`
+    : lp.page > 1
+      ? baseDescription.replace(/\.$/, ` — صفحهٔ ${lp.page}.`)
+      : baseDescription;
+
   return {
     title,
-    description:
-      "فهرست کامل محصولات پلاسکو گلی؛ ظروف نگهداری، لوازم آشپزخانه، سبد، صندلی، تشت و لوازم نظافت. فیلتر بر اساس دسته، قیمت و موجودی.",
+    description,
     alternates: { canonical },
     // متنِ اشتراک‌گذاری عیناً از `products.html` (که ثابت بود): عنوانِ صفحه با
     // نامِ برند در og/twitter، و توضیحی که فقط جمله‌ی اولِ توضیحِ متاست
@@ -307,32 +320,62 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const total = meta?.total || 0;
   const categories = facets?.categories || [];
 
+  // همان کانونیکالی که `generateMetadata` اعلام می‌کند — تا مسیرِ راه و
+  // CollectionPage به همان آدرسی اشاره کنند که خودِ صفحه مرجع اعلام کرده،
+  // نه به آدرسی بی‌فیلتر. (منطقش عیناً تکرارِ همان دو خطِ متادیتاست؛ عمداً
+  // همراستا نگه داشته شده.)
+  const qs = canonicalListingQuery(lp);
+  const canonical = qs ? `/products?${qs}` : "/products";
+
   return (
     <>
       <CollectionPageJsonLd
-        name="محصولات پلاسکو گلی"
-        description="فهرست کامل محصولات پلاستیکی — لوازم خانه، آشپزخانه، نظافت و بیشتر"
+        name={lp.category ? `${lp.category} | پلاسکو گلی` : "محصولات پلاسکو گلی"}
+        description={
+          lp.category
+            ? `دستهٔ ${lp.category} — فهرست محصولات پلاسکو گلی`
+            : "فهرست کامل محصولات پلاستیکی — لوازم خانه، آشپزخانه، نظافت و بیشتر"
+        }
+        // برای صفحهٔ بی‌فیلتر همان `/products` می‌ماند (برابری با Express)؛
+        // صفحهٔ دسته/صفحه‌بندی باید `url`ِ اسکیمایش با canonical خودش یکی باشد.
+        path={canonical}
       />
       {/* مسیرِ راه (BreadcrumbList) — در `products.html` نسخه‌ی Express این
           قلم بود (`CollectionPage` + `BreadcrumbList`) و در Next جا افتاده بود:
           یعنی یک واگراییِ **اعلام‌نشده** در داده‌ی ساختاریافته که هیچ نگهبانی
           نمی‌گرفت (سنجشِ زنده‌ی برابری فقط متادیتا را مقایسه می‌کند). قلمِ دوم
           عیناً همان واژه‌ی خودِ این صفحه است (`allProducts` در تیتر و متادیتا)
-          و آدرسش هم مثل Express آدرسِ *بی‌فیلترِ* مجموعه است. */}
+          و آدرسش هم مثل Express آدرسِ *بی‌فیلترِ* مجموعه است.
+          پلهٔ سوم فقط روی صفحهٔ دسته می‌آید: گوگل می‌خواهد مسیرِ راه
+          جایگاهِ واقعیِ صفحه را بگوید، و «تشت و لگن» زیرِ «همه‌ی محصولات»
+          می‌نشیند، نه هم‌سطحش. برای صفحهٔ بی‌فیلتر خروجی عیناً دوتایی می‌ماند. */}
       <BreadcrumbJsonLd
         items={[
           { name: "خانه", url: "/" },
           { name: "همه‌ی محصولات", url: "/products" },
+          ...(lp.category ? [{ name: lp.category, url: canonical }] : []),
         ]}
       />
       <div className="mx-auto max-w-[1180px] px-6 py-8">
-        {/* breadcrumb */}
+        {/* breadcrumb — روی صفحهٔ دسته، پلهٔ سوم هم می‌آید و «محصولات» به
+            فهرستِ بی‌فیلتر لینک می‌شود: هم هم‌راستا با BreadcrumbListِ
+            JSON-LD بالا، هم یک لینکِ درون‌سایتِ مفید برای خزنده. */}
         <div className="flex items-center gap-2 text-xs text-ink-dim mb-6">
           <Link href="/" className="hover:text-teal transition-colors">
             خانه
           </Link>
           <span>/</span>
-          <span className="text-ink-soft">محصولات</span>
+          {lp.category ? (
+            <>
+              <Link href="/products" className="hover:text-teal transition-colors">
+                محصولات
+              </Link>
+              <span>/</span>
+              <span className="text-ink-soft">{lp.category}</span>
+            </>
+          ) : (
+            <span className="text-ink-soft">محصولات</span>
+          )}
         </div>
 
         {/* عنوان + جستجو */}

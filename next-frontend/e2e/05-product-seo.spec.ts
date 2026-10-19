@@ -1,5 +1,5 @@
 // ============================================================
-// سناریو ۵ — سئوی صفحهٔ محصول، **زنده**
+// سناریو ۵ — سئوی صفحهٔ محصول و صفحهٔ دسته، **زنده**
 // ============================================================
 // نگهبانِ آفلاینِ همین ادعاها `src/app/productSeo.test.ts` است و متنِ سورس را
 // می‌سنجد. آن‌جا سه چیز را *نمی‌شود* سنجید، و همین سه چیز این‌جاست:
@@ -169,4 +169,48 @@ test("محصولِ ناموجود ۴۱۰ می‌دهد و هیچ سیگنالِ 
   expect(types.filter((t) => t.includes('content="product"')), "صفحهٔ ۴۱۰ کارتِ محصول می‌دهد")
     .toHaveLength(0);
   for (const tag of types) expect(tag).toContain('content="website"');
+});
+
+test("صفحهٔ دسته سئوی یکتای خودش را دارد (متا، canonical، مسیرِ راه و CollectionPage)", async ({
+  request,
+}) => {
+  // دسته از خودِ صفحهٔ خانه خوانده می‌شود، نه هاردکد — همان الگویی که
+  // `firstProductId` از API می‌خواند. چیپ‌های صفحهٔ خانه دقیقاً به همین
+  // آدرس‌ها لینک می‌دهند، پس این سناریو همان مسیرِ واقعیِ مشتری/خزنده است.
+  const home = await request.get("/");
+  expect(home.ok()).toBe(true);
+  const href = /href="\/products\?category=([^"&]+)"/.exec(await home.text());
+  expect(href, "روی صفحهٔ خانه هیچ لینکِ دسته‌ای نبود — سنجش بی‌معنا می‌شود").toBeTruthy();
+  const category = decodeURIComponent(href![1]);
+
+  const res = await request.get(`/products?category=${encodeURIComponent(category)}`);
+  expect(res.status(), "صفحهٔ دسته باید ۲۰۰ بدهد").toBe(200);
+  const html = await res.text();
+
+  // ۱) توضیحِ متا نامِ همین دسته را دارد — نه متنِ عمومیِ فهرست.
+  const desc = /<meta name="description" content="([^"]*)"/i.exec(html);
+  expect(desc, "صفحهٔ دسته هیچ توضیحِ متایی ندارد").toBeTruthy();
+  expect(desc![1], "توضیحِ متای صفحهٔ دسته نامِ دسته را ندارد").toContain(category);
+
+  // ۲) canonical همان دسته را نگه می‌دارد (مقایسه با پارسِ URL، تا به شکلِ
+  //    کدگذاری گره نخوریم).
+  const canonical = /<link rel="canonical" href="([^"]+)"/i.exec(html);
+  expect(canonical, "صفحهٔ دسته هیچ canonical ندارد").toBeTruthy();
+  expect(new URL(canonical![1]).searchParams.get("category")).toBe(category);
+
+  // ۳) مسیرِ راه سه‌پله است و پلهٔ سوم خودِ دسته با آدرسِ کانونیکال است.
+  const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+    .map((m) => JSON.parse(m[1]));
+  const crumbs = blocks.find((b) => b["@type"] === "BreadcrumbList");
+  expect(crumbs, "BreadcrumbList در HTMLِ سروشدهٔ صفحهٔ دسته نیست").toBeTruthy();
+  expect(crumbs!.itemListElement, "پله‌های مسیرِ راهِ صفحهٔ دسته").toHaveLength(3);
+  expect(crumbs!.itemListElement[2].name).toBe(category);
+  expect(new URL(crumbs!.itemListElement[2].item).searchParams.get("category")).toBe(category);
+
+  // ۴) و CollectionPage به همان آدرسِ کانونیکالِ فیلترشده اشاره می‌کند.
+  const collection = blocks.find((b) => b["@type"] === "CollectionPage");
+  expect(collection, "CollectionPage در HTMLِ سروشدهٔ صفحهٔ دسته نیست").toBeTruthy();
+  expect(new URL(collection!.url).searchParams.get("category")).toBe(category);
+
+  console.log(`[سئوی دسته] «${category}» — متا، canonical، مسیرِ راهِ سه‌پله و CollectionPage سنجیده شد`);
 });

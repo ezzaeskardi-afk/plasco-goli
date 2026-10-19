@@ -2140,7 +2140,7 @@ const GUARDS = [
   {
     name: 'productSeo',
     scope: 'frontend',
-    title: 'سئوی صفحهٔ محصول: canonical، og:type=product و ردیفِ اعتمادِ یکی‌شده با Express',
+    title: 'سئوی صفحهٔ محصول و دسته: canonical، og:type=product، ردیفِ اعتماد و متای یکتای دسته',
     // چرا لنگر می‌خواهد: هر سه ادعای این نگهبان از آن جنس‌اند که *اگر بروند
     // هیچ خطایی نمی‌دهند* — صفحه بالا می‌آید و فقط رفتار گوگل و پیام‌رسان‌ها
     // عوض می‌شود. و هر سه یک بار واقعاً افتاده بودند: نگهبانِ کنارش
@@ -2207,6 +2207,24 @@ const GUARDS = [
         find: 'telephone: shopPhone?.trim() || SHOP_PHONE,',
         replace: 'telephone: SHOP_PHONE,',
         failedTest: 'Store',
+      },
+      // دو قراردادِ سئوی صفحهٔ دسته (موجِ «پالایش نوار و سئو»): توضیحِ متای
+      // یکتا و پلهٔ سومِ مسیرِ راه. هر دو از جنسِ «اگر برود هیچ خطایی
+      // نمی‌دهد»اند — فقط دهها آدرسِ دسته با یک توضیحِ تکراری در گوگل
+      // می‌نشینند و Breadcrumb جایگاهِ غلط می‌گوید.
+      {
+        label: 'توضیحِ متای صفحهٔ دسته به متنِ عمومی برگردد',
+        file: 'next-frontend/src/app/products/page.tsx',
+        find: '    ? `خرید آنلاین ${lp.category} از پلاسکو گلی؛ جنس اصل، قیمت روز و ارسال سریع به سراسر کشور${lp.page > 1 ? ` — صفحهٔ ${lp.page}` : ""}.`',
+        replace: '    ? baseDescription',
+        failedTest: 'متای صفحهٔ دسته',
+      },
+      {
+        label: 'پلهٔ سومِ مسیرِ راه از صفحهٔ دسته برداشته شود',
+        file: 'next-frontend/src/app/products/page.tsx',
+        find: '          ...(lp.category ? [{ name: lp.category, url: canonical }] : []),\n',
+        replace: '',
+        failedTest: 'مسیرِ راهِ صفحهٔ دسته',
       },
     ],
   },

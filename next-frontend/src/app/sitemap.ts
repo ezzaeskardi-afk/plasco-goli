@@ -101,6 +101,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const c of categories) {
       entries.push({
         url: `${SITE_URL}/products?category=${encodeURIComponent(c.name)}`,
+        // محتوای صفحهٔ دسته همان کاتالوگِ فیلترشده است، پس «تازه‌ترین تغییرِ
+        // کاتالوگ» صادقانه‌ترین lastmodی است که داریم — دقیقاً همان استدلالی
+        // که برای `/` و `/products` بالا استفاده شد. نبودِ آن یعنی این
+        // آدرس‌ها هیچ سیگنالِ تازگی به گوگل نمی‌دادند.
+        ...(newestAt ? { lastModified: newestAt } : {}),
         changeFrequency: "weekly",
         priority: 0.7,
       });
@@ -116,6 +121,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (let page = 2; page <= totalPages && page <= 50; page++) {
     entries.push({
       url: `${SITE_URL}/products?page=${page}`,
+      // مثلِ دسته‌ها: صفحهٔ صفحه‌بندی هم ویترینِ همان کاتالوگ است.
+      ...(newestAt ? { lastModified: newestAt } : {}),
       changeFrequency: "daily",
       priority: 0.5,
     });

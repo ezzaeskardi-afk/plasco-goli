@@ -190,3 +190,55 @@ describe("ردیفِ اعتماد باید در HTMLِ سروشده باشد، �
     );
   });
 });
+
+// ============================================================
+// سئوی صفحهٔ دسته — توضیحِ متا، مسیرِ راه و CollectionPageِ آگاهِ فیلتر
+// ============================================================
+// هر سه از همان جنسِ «اگر بروند هیچ خطایی نمی‌دهند»اند: صفحه بالا می‌آید و
+// JSON-LD همچنان معتبر است؛ فقط گوگل برای دهها آدرسِ دسته/صفحه‌بندی یک
+// توضیحِ تکراری می‌بیند و دادهٔ ساختاریافته به آدرسِ بی‌فیلتر اشاره می‌کند.
+// صفحهٔ دسته یکی از ورودی‌های اصلی این فروشگاه است — چیپ‌های صفحهٔ خانه
+// دقیقاً به همین آدرس‌ها لینک می‌دهند و سایتمپ هم همه را اعلام می‌کند.
+// صفحهٔ *بی‌فیلتر* عیناً همان خروجیِ قبلی را نگه می‌دارد (برابری با Express)؛
+// این قراردادها فقط روی شاخهٔ فیلترشده‌اند، پس هیچ‌کدام متنِ اوراکل را عوض
+// نمی‌کنند. هر دو جهش در `guard-mutations.js` لنگر دارند.
+describe("سئوی صفحهٔ دسته: متا، مسیرِ راه و CollectionPage آگاهِ فیلتر", () => {
+  it("توضیحِ متای صفحهٔ دسته، نامِ دسته را در متن می‌آورد", () => {
+    const src = stripComments(readSource("app/products/page.tsx"));
+    // صفحهٔ بی‌فیلتر همان متنِ قبلی را نگه می‌دارد ...
+    expect(src).toContain("فهرست کامل محصولات پلاسکو گلی؛");
+    // ... و شاخهٔ دسته متنِ یکتای خودش را از نامِ خودِ دسته می‌سازد.
+    expect(src).toMatch(/`خرید آنلاین \$\{lp\.category\} از پلاسکو گلی/);
+    // صفحه‌های ۲ به بعد هم پسوندِ «صفحهٔ N» می‌گیرند — هم دسته، هم بی‌فیلتر.
+    expect(src).toMatch(/صفحهٔ \$\{lp\.page\}/);
+    expect(src).toMatch(/baseDescription\.replace/);
+  });
+
+  it("مسیرِ راهِ صفحهٔ دسته، پلهٔ سومِ «دسته» را دارد", () => {
+    const src = stripComments(readSource("app/products/page.tsx"));
+    // پلهٔ سومِ JSON-LD مشروط به دسته ساخته می‌شود و به کانونیکالِ خودش
+    // اشاره می‌کند — نه به آدرسی بی‌فیلتر.
+    expect(src).toMatch(
+      /\.\.\.\(lp\.category \? \[\{ name: lp\.category, url: canonical \}\] : \[\]\)/,
+    );
+    // و نسخهٔ دیده‌شدهٔ مسیرِ راه هم همان پله را دارد: «محصولات» روی صفحهٔ
+    // دسته دیگر متنِ خشک نیست، لینک به فهرستِ بی‌فیلتر است.
+    expect(src).toMatch(
+      /<Link href="\/products" className="hover:text-teal transition-colors">/,
+    );
+  });
+
+  it("CollectionPageِ صفحهٔ دسته، url/@id را از canonical می‌گیرد", () => {
+    const src = stripComments(readSource("app/products/page.tsx"));
+    expect(src).toMatch(
+      /const canonical = qs \? `\/products\?\$\{qs\}` : "\/products"/,
+    );
+    expect(src).toMatch(/path=\{canonical\}/);
+    // و سازنده باید همان مسیر را در url/@id بنشاند، نه یک مسیرِ هاردکد —
+    // وگرنه اسکیمای صفحهٔ دسته به آدرسی اشاره می‌کند که canonical نیست.
+    const jsonLd = stripComments(readSource("components/JsonLd.tsx"));
+    expect(jsonLd).toMatch(/path = "\/products"/);
+    expect(jsonLd).toMatch(/`\$\{SITE_URL\}\$\{path\}#collection`/);
+    expect(jsonLd).toMatch(/url: `\$\{SITE_URL\}\$\{path\}`/);
+  });
+});

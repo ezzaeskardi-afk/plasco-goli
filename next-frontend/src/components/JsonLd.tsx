@@ -196,17 +196,25 @@ export function ItemListJsonLd({
 export function CollectionPageJsonLd({
   name,
   description,
+  path = "/products",
 }: {
   name: string;
   description: string;
+  /**
+   * مسیرِ کانونیکالِ همین مجموعه. پیش‌فرض مسیرِ بی‌فیلترِ `/products` است
+   * (همان چیزی که Express می‌فرستاد)؛ صفحهٔ دسته/صفحه‌بندی مسیرِ خودش را
+   * می‌دهد تا `url`/`@id` به آدرسی اشاره کنند که خودِ صفحه canonical
+   * اعلام کرده — نه به آدرسِ بی‌فیلتر.
+   */
+  path?: string;
 }) {
   const ld = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    "@id": `${SITE_URL}/products#collection`,
+    "@id": `${SITE_URL}${path}#collection`,
     name,
     description,
-    url: `${SITE_URL}/products`,
+    url: `${SITE_URL}${path}`,
     inLanguage: "fa-IR",
     isPartOf: { "@id": `${SITE_URL}/#website` },
   };
