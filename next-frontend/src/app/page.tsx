@@ -218,8 +218,11 @@ function CategoryStrip({ categories }: { categories: ShopCategory[] }) {
   if (!categories.length) return null;
 
   return (
-    <section className="mx-auto max-w-[1180px] px-6 pb-12 scroll-mt-28">
-      <div data-reveal="" className="mb-6 max-w-[640px]">
+    // `pt-10` عمدی است: سرتیترِ این بخش دقیقاً زیرِ نوارِ متحرک می‌نشست و
+    // «چسبیده» دیده می‌شد (درخواستِ صریحِ کارفرما با اسکرین‌شات). عنوان و
+    // توضیح هم مثلِ «پرفروش‌ترین‌ها» وسط‌چین‌اند، نه چسبیده به لبهٔ راست.
+    <section className="mx-auto max-w-[1180px] px-6 pt-10 pb-12 scroll-mt-28">
+      <div data-reveal="" className="mx-auto mb-6 max-w-[640px] text-center">
         <Eyebrow>دسته‌بندی‌ها</Eyebrow>
         <h2
           id="cat-title"
