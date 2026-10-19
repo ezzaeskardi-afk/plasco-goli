@@ -443,6 +443,12 @@ export function Header() {
             {/* علاقه‌مندی‌ها — همتای قلبِ هدر در نسخه‌ی Express (common.js:668) */}
             <Link
               href="/account#wishlist"
+              onClick={(event) => {
+                if (pathname === "/account") {
+                  event.preventDefault();
+                  window.location.hash = "wishlist";
+                }
+              }}
               className="relative rounded-full p-2 transition-colors"
               style={{ color: "var(--color-ink-soft)" }}
               aria-label={`علاقه‌مندی‌ها ${wishCount > 0 ? `(${toFa(wishCount)})` : ""}`}

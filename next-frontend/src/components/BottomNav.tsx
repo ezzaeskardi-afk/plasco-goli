@@ -154,7 +154,16 @@ export function BottomNav() {
         <span>سبد خرید</span>
       </Link>
 
-      <Link href="/account#wishlist" className={cls("wishlist")}>
+      <Link
+        href="/account#wishlist"
+        className={cls("wishlist")}
+        onClick={(event) => {
+          if (pathname.startsWith("/account")) {
+            event.preventDefault();
+            window.location.hash = "wishlist";
+          }
+        }}
+      >
         <span className="bn-badge-wrap">
           <Icon path="M12 20.5S4 15.2 4 9.6A4.4 4.4 0 0 1 8.4 5.2c1.6 0 3 .9 3.6 2.1.6-1.2 2-2.1 3.6-2.1A4.4 4.4 0 0 1 20 9.6c0 5.6-8 10.9-8 10.9z" />
           <Badge n={wishIds?.length ?? 0} />

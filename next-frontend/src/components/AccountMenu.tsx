@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { useLogout } from "@/lib/useLogout";
@@ -13,10 +14,18 @@ export function AccountMenu({ user }: { user: User }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const pathname = usePathname();
   const { logout, busy } = useLogout();
 
   const isAdmin = user.isAdmin || user.isStaff;
   const initial = (user.fullName || "").trim().charAt(0);
+
+  function goToTab(event: React.MouseEvent<HTMLAnchorElement>, tab: "orders" | "wishlist") {
+    setOpen(false);
+    if (pathname !== "/account") return;
+    event.preventDefault();
+    if (window.location.hash !== `#${tab}`) window.location.hash = tab;
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -94,18 +103,6 @@ export function AccountMenu({ user }: { user: User }) {
             <span className="block truncate text-[13px] font-extrabold text-ink">
               {user.fullName || "کاربر پلاسکو"}
             </span>
-            <span className="block truncate text-[10.5px] text-ink-dim" dir="ltr">
-              {user.phone || ""}
-            </span>
-          </span>
-          <span
-            className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold"
-            style={{
-              background: isAdmin ? "var(--color-gold-tint)" : "var(--color-surface-2)",
-              color: isAdmin ? "var(--color-gold)" : "var(--color-ink-dim)",
-            }}
-          >
-            {user.isAdmin ? "مدیر" : user.isStaff ? "کارمند" : "مشتری"}
           </span>
         </div>
 
@@ -114,7 +111,7 @@ export function AccountMenu({ user }: { user: User }) {
         <Link
           role="menuitem"
           href="/account"
-          onClick={() => setOpen(false)}
+          onClick={(event) => goToTab(event, "orders")}
           className={`${ITEM} text-ink-soft hover:bg-surface-2 hover:text-ink`}
         >
           <Icon name="user" size={16} />
@@ -123,7 +120,7 @@ export function AccountMenu({ user }: { user: User }) {
         <Link
           role="menuitem"
           href="/account#orders"
-          onClick={() => setOpen(false)}
+          onClick={(event) => goToTab(event, "orders")}
           className={`${ITEM} text-ink-soft hover:bg-surface-2 hover:text-ink`}
         >
           <Icon name="cart" size={16} />
@@ -132,7 +129,7 @@ export function AccountMenu({ user }: { user: User }) {
         <Link
           role="menuitem"
           href="/account#wishlist"
-          onClick={() => setOpen(false)}
+          onClick={(event) => goToTab(event, "wishlist")}
           className={`${ITEM} text-ink-soft hover:bg-surface-2 hover:text-ink`}
         >
           <Icon name="heart" size={16} />
