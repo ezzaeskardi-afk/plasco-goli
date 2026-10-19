@@ -17,6 +17,7 @@
     "cutover:rehearsal": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/cutover-rehearsal.mjs",
     "static-paths:live": "node scripts/static-paths-live.mjs",
     "e2e": "node scripts/e2e.mjs",
+    "loadtest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/loadtest.mjs",
     "e2e:install": "playwright install chromium"
   },
   "dependencies": {
