@@ -77,6 +77,12 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M8 11V7a4 4 0 0 1 8 0v4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </>
   ),
+  logout: (
+    <>
+      <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 8l-4 4 4 4M6 12h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
   // ---------- آیکون‌های پنلِ مدیریت ----------
   // همان مسیرهای `i-dashboard`/`i-chart`/`i-settings`/`i-alert`/`i-history`
   // در `public/assets/icons.svg` — نویسه‌به‌نویسه، فقط با نام‌گذاریِ camelCase

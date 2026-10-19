@@ -10,6 +10,7 @@ import { Eyebrow } from "@/components/Eyebrow";
 import { Marquee } from "@/components/Marquee";
 import { ContactFab } from "@/components/ContactFab";
 import { HomeFilterBar } from "@/components/home/HomeFilterBar";
+import { HeroAuthCta } from "@/components/HeroAuthCta";
 import { HOME_FAQ } from "@/lib/faq";
 import { pageSocial } from "@/lib/social";
 import { RecentlyViewed } from "@/components/home/RecentlyViewed";
@@ -150,19 +151,9 @@ function HeroSection() {
               در `index.html:229-231`: آیکونِ کاربر + «ورود / ثبت‌نام». پیش از
               این «خرید عمده» بود که در هیروی Express وجود ندارد (فقط در
               ناوبری) و چون همان متن روی همین صفحه جای دیگری هم می‌آمد، از
-              چشمِ نگهبانِ پوشش پنهان می‌ماند؛ حالا `copyParity` قفلش می‌کند. */}
-          <Link
-            href="/login"
-            className="hero-cta-outline inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
-            style={{
-              background: "transparent",
-              color: "var(--color-ink)",
-              border: "1.5px solid var(--color-line-control)",
-            }}
-          >
-            <Icon name="user" size={18} />
-            ورود / ثبت‌نام
-          </Link>
+              چشمِ نگهبانِ پوشش پنهان می‌ماند؛ حالا `copyParity` قفلش می‌کند.
+              برای کاربرِ واردشده، همین دکمه به حساب/پنل تبدیل می‌شود. */}
+          <HeroAuthCta guestLabel="ورود / ثبت‌نام" />
         </div>
 
         {/* چیپ‌های اعتماد — چهار قلمِ `index.html:477-482` */}

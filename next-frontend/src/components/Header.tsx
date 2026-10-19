@@ -9,6 +9,7 @@ import { getCart, getCategories, getMe, getProducts } from "@/lib/api";
 import { useShopInfo } from "@/lib/useShopInfo";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
 import { MobileDrawer } from "@/components/MobileDrawer";
+import { AccountMenu } from "@/components/AccountMenu";
 import { Icon, SpriteIcon } from "@/components/Icon";
 import { useWishlistIds } from "@/lib/useWishlist";
 import { HEADER_SCROLLED_AT } from "@/lib/scrollFx";
@@ -484,16 +485,7 @@ export function Header() {
             </Link>
 
             {user ? (
-              <Link
-                href={user.isAdmin || user.isStaff ? "/admin" : "/account"}
-                className="rounded-full px-4 py-2 text-sm font-semibold transition-colors"
-                style={{
-                  background: "var(--color-teal)",
-                  color: "#04211B",
-                }}
-              >
-                {user.fullName || "حساب من"}
-              </Link>
+              <AccountMenu user={user} />
             ) : (
               <Link
                 href="/login"
