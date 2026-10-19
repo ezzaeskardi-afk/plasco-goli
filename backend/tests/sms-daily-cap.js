@@ -87,15 +87,40 @@ console.log(`\n[sms-daily-cap] سندباکس: ${SANDBOX} (cap=${CAP})\n`);
 }
 
 // ---------- ۵) چهار پروسهٔ هم‌زمان: مجموع رزروها از سقف رد نمی‌شود ----------
-// این همان چیزی است که نسخه‌ی «بخوان، بعد بنویس» نمی‌گرفت. هر فرزند ۲۵ بار
-// با کمی فاصله رزرو می‌کند تا پنجره‌ی مسابقه واقعاً باز بماند.
+// این همان چیزی است که نسخه‌ی «بخوان، بعد بنویس» نمی‌گیرد. دو درسِ گران از CI
+// و از اجرای محلی (پوش ۱۴۰۵/۰۷):
+//
+//  ۱) اسپاونِ خام کافی نیست — در CI راه‌اندازیِ پروسه‌ها پله‌ای است و فرزندها
+//     عملاً سریال می‌شدند؛ جهشِ «غیرِاتمیک» بی‌صدا رد می‌شد (جهش ۱/۲). سدِ
+//     زمانیِ ساعت‌محور هم درست کار نمی‌کرد.
+//  ۲) سدِ کانال‌محورِ stdin مسئله را حل می‌کند: هر فرزند بعد از require
+//     می‌گوید READY و روی stdin منتظر می‌ماند؛ والد وقتی هر چهار READY را
+//     دید، در یک حلقه به همه خطِ شلیک می‌فرستد (اختلاف در حدِ میکروثانیه،
+//     مستقل از ساعت و از کندیِ راه‌اندازی).
+//  ۳) ولی هم‌زمانیِ شلیک هم کافی نبود: با ظرفیتِ کوچک، فرزندِ اول کلِ سقف را
+//     در ~۱۰ms تنهایی پر می‌کرد و دیررسیِ چند-میلی‌ثانیه‌ایِ برنامه‌ریزِ OS
+//     کافی بود بقیه پنجره‌ی پر‌شدن را از دست بدهند (ویندوز: 40+0+0+0). حالا
+//     ظرفیت عمداً **بزرگ‌تر از سهمِ هر فرزند** است (۱۵۰۰ > ۸۰۰): هیچ فرزندی
+//     نمی‌تواند تنها پرش کند، پس «پر شدن» مجبوراً چندپروسهای می‌شود و
+//     پنجرهٔ get→bump زیرِ رگبارِ ۳۲۰۰ تقاضایی حتماً هم‌پوشانی می‌کند.
+//
+// هر فرزند ۸۰۰ تقاضای بدونِ وقفه می‌زند؛ ظرفیتِ این مرحله ۱۵۰۰ است و شمارنده
+// پیش از آن ریست می‌شود (مستقل از سقفِ ۴۰ مرحله‌های بالاتر). اگر این سدها را
+// برداری یا ظرفیت را کوچک کنی، نگهبان دوباره غیرِقطعی می‌شود و روی CI خاموش
+// می‌ماند.
+const RACE_CAP = 1500;
 const CHILD_SRC = `
 const db = require(process.env.PG_LIB_DB);
 (async () => {
+  process.stdout.write('READY\\n');
+  await new Promise((resolve) => {
+    process.stdin.setEncoding('utf8');
+    process.stdin.once('data', resolve);
+    process.stdin.resume();
+  });
   let ok = 0;
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 800; i++) {
     if (db.reserveSmsSlot(Number(process.env.SMS_CAP)).ok) ok++;
-    await new Promise(r => setTimeout(r, 3));
   }
   console.log('RESERVED:' + ok);
   process.exit(0);
@@ -103,36 +128,50 @@ const db = require(process.env.PG_LIB_DB);
 `;
 
 function runChild() {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, ['-e', CHILD_SRC], {
-      cwd: BACKEND_DIR,
-      env: {
-        ...process.env,
-        PG_DATA_DIR: SANDBOX,
-        PG_LIB_DB: path.join(BACKEND_DIR, 'lib', 'db.js'),
-        SMS_CAP: String(CAP),
-      },
-    });
-    let out = '';
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', d => { out += d; });
-    child.on('exit', (code) => resolve({ code, out }));
+  const child = spawn(process.execPath, ['-e', CHILD_SRC], {
+    cwd: BACKEND_DIR,
+    env: {
+      ...process.env,
+      PG_DATA_DIR: SANDBOX,
+      PG_LIB_DB: path.join(BACKEND_DIR, 'lib', 'db.js'),
+      SMS_CAP: String(RACE_CAP),
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
+  let out = '';
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', d => { out += d; });
+  const ready = new Promise((resolve) => {
+    let settled = false;
+    const settle = () => { if (!settled) { settled = true; clearInterval(timer); resolve(); } };
+    // اگر فرزند پیش از READY بمیرد، منتظر نمی‌مانیم؛ کدِ خروجِ غیرِصفرش
+    // را بررسیِ «همه سالم» می‌گیرد و آزمون با گزارشِ روشن تمام می‌شود.
+    const timer = setInterval(() => { if (out.includes('READY')) settle(); }, 5);
+    child.on('exit', settle);
+  });
+  const done = new Promise((resolve) => child.on('exit', (code) => resolve(code)));
+  return { child, ready, done, out: () => out };
 }
 
 (async () => {
   resetCounter();
-  const kids = await Promise.all([runChild(), runChild(), runChild(), runChild()]);
-  const reserved = kids.map(k => Number((k.out.match(/RESERVED:(\d+)/) || [])[1] || -1));
+  const kids = [runChild(), runChild(), runChild(), runChild()];
+  // تا هر چهار فرزند پشتِ سد نرسند شلیک نمی‌شود؛ بعد خطِ شلیک در یک حلقه
+  // به همه‌شان می‌رود — نزدیک‌ترین چیز به «هم‌زمانِ واقعی» که از بیرونِ
+  // پروسه‌ها قابلِ ساخت است.
+  await Promise.all(kids.map(k => k.ready));
+  for (const k of kids) k.child.stdin.write('\n');
+  const codes = await Promise.all(kids.map(k => k.done));
+  const reserved = kids.map(k => Number((k.out().match(/RESERVED:(\d+)/) || [])[1] || -1));
   const total = reserved.reduce((a, b) => a + b, 0);
   check('چهار پروسهٔ هم‌زمان: همه سالم تمام شدند',
-    kids.every(k => k.code === 0), JSON.stringify(kids.map(k => k.code)));
+    codes.every(c => c === 0), JSON.stringify(codes));
   check('چهار پروسهٔ هم‌زمان: مجموعِ رزروها از سقف رد نمی‌شود (اتمیک)',
-    total <= CAP, `مجموع=${total} (${reserved.join('+')})`);
-  check('چهار پروسهٔ هم‌زمان: سقف عملاً پر شد (۱۵۰ تقاضا برای ۴۰ ظرفیت)',
-    total === CAP, `مجموع=${total}`);
+    total <= RACE_CAP, `مجموع=${total} (${reserved.join('+')})`);
+  check('چهار پروسهٔ هم‌زمان: سقف عملاً پر شد (۳۲۰۰ تقاضا برای ۱۵۰۰ ظرفیت)',
+    total === RACE_CAP, `مجموع=${total}`);
   check('چهار پروسهٔ هم‌زمان: شمارندهٔ نهایی روی سقف نشسته است',
-    smsCount() === CAP, `count=${smsCount()}`);
+    smsCount() === RACE_CAP, `count=${smsCount()}`);
 
   // ---------- ۶) مسیرِ واقعیِ sendOtpSms: موفق می‌سوزاند، ناموفق برمی‌گرداند ----------
   resetCounter();
