@@ -92,13 +92,13 @@ const HERO_CHIPS: { icon: IconName; label: string }[] = [
 // دو برچسبِ شناورِ روی قابِ تصاویرِ هیرو در Express (float-tag) — همان دو
 // جمله در متنِ صفحهٔ Express هست و باید در Next هم باشد.
 const HERO_FLOAT_TAGS: { icon: IconName; label: string }[] = [
-  { icon: "checkCircle", label: "کیفیت مطمئن" },
+  { icon: "shield", label: "کیفیت مطمئن" },
   { icon: "truck", label: "ارسال همون‌روز" },
 ];
 
 function HeroSection() {
   return (
-    <section id="home" className="relative overflow-hidden py-16 md:py-24">
+    <section id="home" className="relative overflow-hidden pt-8 pb-16 min-[900px]:py-24">
       {/* پس‌زمینهٔ هیرو */}
       <div
         className="absolute inset-0 opacity-30"
@@ -112,7 +112,7 @@ function HeroSection() {
           `ScrollFx` است؛ بدونِ آن این بخش نامرئی می‌ماند (globals.css). */}
       <div
         data-reveal=""
-        className="relative mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-10 px-6 text-center md:grid-cols-[1.1fr_.9fr] md:gap-16 md:text-right"
+        className="relative mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-10 px-6 text-center min-[900px]:grid-cols-[1.1fr_.9fr] min-[900px]:gap-16 min-[900px]:text-right"
       >
         <div>
           {/* عیناً همان متنِ هیروی `index.html:210-218` — eyebrow، سرتیتر، لید،
@@ -122,7 +122,7 @@ function HeroSection() {
           <Eyebrow>فروشگاه محله‌ای، با اعتماد چند نسل</Eyebrow>
           <h1
             id="hero-title"
-            className="text-3xl md:text-5xl font-extrabold leading-tight mb-4"
+            className="text-[clamp(30px,4.8vw,58px)] font-extrabold leading-tight mb-4"
           >
             هر چی خانه‌ی شما لازم داره،{" "}
             <em className="not-italic" style={{ color: "var(--color-gold)" }}>
@@ -130,7 +130,7 @@ function HeroSection() {
             </em>
             ، همین‌جاست
           </h1>
-          <p className="text-sm md:text-base text-ink-soft max-w-xl mx-auto mb-6 leading-relaxed md:mx-0">
+          <p className="text-base min-[900px]:text-lg text-ink-soft max-w-[480px] mx-auto mb-6 leading-relaxed min-[900px]:mx-0">
             پلاسکو گلی سال‌هاست کنار خانواده‌های همین محله ایستاده؛ از تشت و صندلی
             گرفته تا ظرف نگهداری، سبد و هر وسیله‌ی پلاستیکی که یک خانه برای زندگی
             روزمره لازم دارد. جنس اصل، قیمت منصفانه، خرید آنلاین راحت.
@@ -138,7 +138,7 @@ function HeroSection() {
 
           {/* دکمه‌های CTA — هر دو عیناً همان‌های هیروی Express (`index.html:222-232`):
               «مشاهده محصولات» (primary) و «ورود / ثبت‌نام» (outline). */}
-          <div className="flex flex-wrap items-center justify-center gap-3 md:justify-start">
+          <div className="flex flex-wrap items-center justify-center gap-3 min-[900px]:justify-start">
             <Link
               href="/products"
               className="hero-cta inline-flex items-center gap-2 rounded-full px-6 py-3 text-base font-bold transition-all"
@@ -161,7 +161,7 @@ function HeroSection() {
           </div>
 
           {/* چیپ‌های اعتماد — چهار قلمِ `index.html:477-482` */}
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5 md:justify-start">
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5 min-[900px]:justify-start">
             {HERO_CHIPS.map((c) => (
               <span
                 key={c.label}
@@ -186,7 +186,7 @@ function HeroSection() {
         <div
           data-reveal=""
           aria-hidden="true"
-          className="basin-stack hero-gallery order-first md:order-none"
+          className="basin-stack hero-gallery order-first min-[900px]:order-none"
         >
           <div className="hg-grid">
             <figure className="hg-item hg-a">
@@ -196,7 +196,7 @@ function HeroSection() {
                 width={938}
                 height={760}
                 priority
-                sizes="(max-width: 767px) 100vw, 300px"
+                sizes="(max-width: 899px) 50vw, (max-width: 1100px) 200px, 260px"
               />
             </figure>
             <figure className="hg-item hg-b">
@@ -206,7 +206,7 @@ function HeroSection() {
                 width={921}
                 height={682}
                 loading="eager"
-                sizes="(max-width: 767px) 100vw, 240px"
+                sizes="(max-width: 899px) 40vw, (max-width: 1100px) 160px, 200px"
               />
             </figure>
             <figure className="hg-item hg-c">
@@ -215,7 +215,7 @@ function HeroSection() {
                 alt=""
                 width={963}
                 height={746}
-                sizes="(max-width: 767px) 100vw, 240px"
+                sizes="(max-width: 899px) 40vw, (max-width: 1100px) 160px, 200px"
               />
             </figure>
           </div>

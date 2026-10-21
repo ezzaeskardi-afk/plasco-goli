@@ -85,6 +85,7 @@ export function CrmContent() {
   const [advanced, setAdvanced] = useState<CrmAdvancedSummary | null>(null);
   const [segments, setSegments] = useState<CrmSegmentStat[]>([]);
   const [revenue, setRevenue] = useState<CrmRevenueMonth[]>([]);
+  const revenueScrollRef = useRef<HTMLDivElement>(null);
   const [topCustomers, setTopCustomers] = useState<CrmTopCustomer[]>([]);
 
   // ============ مشتری‌ها ============
@@ -304,6 +305,33 @@ export function CrmContent() {
   // صفر می‌شد — یعنی همه‌ی میله‌ها فقط همان کفِ ۲٪ می‌شدند و کارت می‌گفت
   // «همه یک‌اندازه»، که دروغ است. `summary` همیشه هست.
   const segmentTotal = advanced?.totalCustomers || summary?.totalCustomers || 0;
+  const maxRev = Math.max(...revenue.map((m) => m.revenue), 1);
+  const revenueRange = revenue.length
+    ? `${toFaStr(revenue[0].label)} – ${toFaStr(revenue[revenue.length - 1].label)}`
+    : "۱۲ ماه اخیر";
+
+  // نمودارِ ۱۲ماهه در کارتِ باریک اسکرولِ افقی می‌گیرد و اسکرولِ RTL از سمتِ
+  // راست (قدیمی‌ترین ماه) شروع می‌شود؛ نتیجه این بود که در ۱۰۲۴px فقط ماه‌های
+  // بی‌فروش دیده می‌شد و ماه‌های تازه بیرونِ کادر می‌ماندند. بعد از داده، تا
+  // انتهای ردیف می‌رویم تا تازه‌ترین ماه در دید باشد. مدلِ علامتِ scrollLeft در
+  // RTL بین مرورگرها یکی نیست، پس هر دو مدل پشتیبانی می‌شود.
+  useEffect(() => {
+    const el = revenueScrollRef.current;
+    if (!el) return;
+    const scrollToNewest = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      if (max <= 0) return;
+      // در RTLِ کروم `scrollLeft` منفی است و مقدارِ مثبت به لبه‌ی راست (قدیمی‌ترین
+      // ماه) می‌چسبد؛ سافاری مدلِ مثبت دارد. اول منفی را امتحان می‌کنیم و اگر
+      // مرورگر نپذیرفت (صفر ماند)، مثبت را می‌گذاریم.
+      el.scrollLeft = -max;
+      if (Math.abs(el.scrollLeft) < 1) el.scrollLeft = max;
+    };
+    scrollToNewest();
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(scrollToNewest) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [revenue]);
 
   // ==================== رندر ====================
   return (
@@ -361,7 +389,7 @@ export function CrmContent() {
           </div>
 
           {/* سگمنت‌ها + نمودار درآمد */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 min-[1440px]:grid-cols-2 gap-4">
             {/* سگمنت‌ها */}
             <div className="rounded-2xl p-4" style={{ background: "var(--color-surface)" }}>
               <h3 className="text-sm font-bold mb-3" style={{ color: "var(--color-ink)" }}>
@@ -430,23 +458,23 @@ export function CrmContent() {
                 <h3 className="text-sm font-bold" style={{ color: "var(--color-ink)" }}>
                   درآمد ماهانه
                 </h3>
-                <span className="text-[10px] font-medium" style={{ color: "var(--color-ink-dim)" }}>
-                  ۱۲ ماه اخیر
+                <span className="whitespace-nowrap text-[10px] font-medium" style={{ color: "var(--color-ink-dim)" }}>
+                  {revenueRange}
                 </span>
               </div>
-              <div className="overflow-x-auto pb-1">
+              <div ref={revenueScrollRef} className="overflow-x-auto pb-1">
                 <div className="flex h-36 min-w-[480px] items-end gap-1.5">
                   {revenue.map((m) => {
-                    const maxRev = Math.max(...revenue.map((r) => r.revenue), 1);
                     const h = (m.revenue / maxRev) * 100;
                     const fullLabel = toFaStr(m.label);
-                    const monthName = fullLabel.split(" ")[0];
+                    const [monthName = fullLabel] = fullLabel.split(/\s+/);
                     return (
                       <div
                         key={m.month}
                         title={fullLabel}
                         className="flex h-full min-w-0 flex-1 flex-col items-center gap-1.5"
                       >
+                        <span className="sr-only">{fullLabel}</span>
                         <span className="text-[10px] tabular-nums text-ink-dim">
                           {toFa(m.revenue / 1000000)}M
                         </span>

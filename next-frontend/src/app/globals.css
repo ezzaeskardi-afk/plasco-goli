@@ -1215,7 +1215,7 @@
   right: -3%;
   animation: floaty 6.4s ease-in-out 1.2s infinite;
 }
-@media (max-width: 767px) {
+@media (max-width: 899px) {
   .basin-stack {
     height: 320px;
   }

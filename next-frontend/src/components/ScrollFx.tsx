@@ -88,6 +88,7 @@ export function ScrollFx() {
       const i = seen.get(key) ?? 0;
       seen.set(key, i + 1);
       if (i > 0) el.style.setProperty("--rd", `${staggerDelayMs(i)}ms`);
+      else el.style.removeProperty("--rd");
       io.observe(el);
     };
 

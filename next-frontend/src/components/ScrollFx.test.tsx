@@ -172,6 +172,21 @@ describe("ScrollFx — ناظرِ واقعی", () => {
     expect(wrap.querySelectorAll("[data-reveal].is-visible")).toHaveLength(3);
   });
 
+  it("تأخیرِ کهنه روی المانِ بازاستفاده‌شده پاک می‌شود", async () => {
+    vi.stubGlobal("IntersectionObserver", FakeIO);
+    const wrap = addReveal(`<p data-reveal=""></p>`);
+    await mount();
+    const el = wrap.querySelector<HTMLElement>("p")!;
+    el.style.setProperty("--rd", "999ms");
+
+    pathname = "/products";
+    await act(async () => {
+      root.render(<ScrollFx />);
+    });
+
+    expect(el.style.getPropertyValue("--rd")).toBe("");
+  });
+
   it("هر نشانه فقط یک بار به ناظر داده می‌شود", async () => {
     vi.stubGlobal("IntersectionObserver", FakeIO);
     addReveal(`<p data-reveal=""></p>`);
